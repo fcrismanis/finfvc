@@ -6,8 +6,6 @@ import { BudgetComparison } from '../components/dashboard/BudgetComparison'
 import { AlertsPanel } from '../components/dashboard/AlertsPanel'
 import { MonthlyTrendChart } from '../components/dashboard/MonthlyTrendChart'
 import { TopExpenses } from '../components/dashboard/TopExpenses'
-import { QuickActions } from '../components/dashboard/QuickActions'
-import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 
 interface Props {
@@ -17,22 +15,27 @@ interface Props {
 
 export function Dashboard({ selectedMonth, onNavigate }: Props) {
   const { summary, expenseBreakdown, budgetComparison, alerts, trend, topExpenses, isDemo } = useDashboard(selectedMonth)
-  const { transactions } = useData()
-  const totalTxns = transactions.length
+  const trendValues = trend.map(t => t.operationalResult)
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-5 space-y-4 max-w-[1280px] mx-auto w-full">
+      <div className="p-5 max-w-[1280px] mx-auto w-full" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-        {/* Demo mode banner */}
+        {/* a. Demo banner */}
         {isDemo && (
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700">
             <FlaskConical size={13} />
-            <span>Usando dados demonstrativos — <button className="underline font-medium" onClick={() => onNavigate('/conectar')}>importe seu extrato</button> para ver dados reais.</span>
+            <span>
+              Usando dados demonstrativos —{' '}
+              <button className="underline font-medium" onClick={() => onNavigate('/conectar')}>
+                importe seu extrato
+              </button>{' '}
+              para ver dados reais.
+            </span>
           </div>
         )}
 
-        {/* Distortion banner */}
+        {/* b. Atypical / distortion banner */}
         {(summary.hasRedemption || summary.isAtypicalMonth) && (
           <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800">
             <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
@@ -43,32 +46,23 @@ export function Dashboard({ selectedMonth, onNavigate }: Props) {
           </div>
         )}
 
-        {/* Summary cards */}
-        <SummaryCards data={summary} />
+        {/* c. KPI hero cards + sparkline */}
+        <SummaryCards data={summary} trendValues={trendValues} />
 
-        {/* Mid row: breakdown + budget */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* d. Donut + budget */}
+        <div className="grid grid-cols-2 gap-[18px]">
           <ExpenseBreakdown data={expenseBreakdown} totalExpenses={summary.totalExpenses} />
-          <BudgetComparison data={budgetComparison} />
+          <BudgetComparison data={budgetComparison} onNavigate={onNavigate} />
         </div>
 
-        {/* Alerts */}
-        <AlertsPanel alerts={alerts} />
-
-        {/* Trend chart */}
-        <MonthlyTrendChart data={trend} />
-
-        {/* Bottom row: top expenses + quick actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <TopExpenses data={topExpenses} />
-          <QuickActions
-            totalTransactions={totalTxns}
-            monthIsClosed={false}
-            pendingReviewCount={0}
-            lastImportDate="10/06/2026"
-            onNavigate={onNavigate}
-          />
+        {/* e. Trend (wider) + alerts */}
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 18 }}>
+          <MonthlyTrendChart data={trend} />
+          <AlertsPanel alerts={alerts} onNavigate={onNavigate} />
         </div>
+
+        {/* f. Top expenses — full width */}
+        <TopExpenses data={topExpenses} />
 
       </div>
     </div>
