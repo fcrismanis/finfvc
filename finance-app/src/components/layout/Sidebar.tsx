@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, List, Target, Flag, Lock,
-  Plug, Calculator, Bot, Settings, TrendingUp, ClipboardCheck,
+  Plug, Calculator, Bot, Settings, ClipboardCheck,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -33,19 +33,16 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
       {/* Logo */}
       <div
         className="flex items-center gap-2.5 px-5 py-[17px]"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        style={{ borderBottom: '1px solid var(--sidebar-border)' }}
       >
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0 font-extrabold text-base text-white"
           style={{ background: 'var(--sidebar-active)' }}
         >
-          <TrendingUp size={14} color="white" />
+          m
         </div>
         <div>
-          <p className="text-white font-semibold text-[14px] tracking-tight leading-none">Finance</p>
-          <p className="text-[10px] leading-none mt-[3px]" style={{ color: 'var(--sidebar-text)', opacity: 0.65 }}>
-            Família
-          </p>
+          <p className="font-extrabold text-[17px] tracking-tight leading-none" style={{ color: 'var(--sidebar-ink)', letterSpacing: '-0.02em' }}>monera</p>
         </div>
       </div>
 
@@ -63,18 +60,18 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
 
       {/* User */}
       <div
-        className="px-4 py-3 flex items-center gap-2.5"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+        className="mx-3 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+        style={{ background: 'var(--bg-page)', borderTop: 'none' }}
       >
         <div
-          className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
-          style={{ background: 'var(--sidebar-active)' }}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
+          style={{ background: '#D7E2F8', color: 'var(--sidebar-active)' }}
         >
           FC
         </div>
         <div className="min-w-0">
-          <p className="text-[13px] text-white font-medium leading-none truncate">Fabio C.</p>
-          <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--sidebar-text)' }}>Personal</p>
+          <p className="text-[13px] font-bold leading-none truncate" style={{ color: 'var(--sidebar-ink)' }}>Fabio C.</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--sidebar-text)' }}>Conta pessoal</p>
         </div>
       </div>
     </aside>
@@ -84,8 +81,8 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
 function GroupLabel({ label }: { label: string }) {
   return (
     <p
-      className="px-[18px] pt-4 pb-1 text-[10px] font-semibold uppercase"
-      style={{ color: 'var(--sidebar-text)', opacity: 0.45, letterSpacing: '0.07em' }}
+      className="px-[18px] pt-4 pb-1 text-[11px] font-bold uppercase"
+      style={{ color: '#98A2B3', letterSpacing: '0.06em' }}
     >
       {label}
     </p>

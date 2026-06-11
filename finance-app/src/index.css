@@ -1,12 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --sidebar-bg: #1a1d2e;
-  --sidebar-active: #4F46E5;
-  --sidebar-text: #8892ac;
-  --bg-page: #F2F4F8;
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: #E9EDF3;
+  --sidebar-active: #1D5FE0;
+  --sidebar-active-soft: #EAF1FE;
+  --sidebar-text: #667085;
+  --sidebar-ink: #101828;
+  --bg-page: #F4F6FA;
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
-  --border-card: #E5E9F2;
+  --border-card: #E9EDF3;
+  --accent: #1D5FE0;
+  --accent-soft: #EAF1FE;
+  --color-pos: #0E9E6E;
+  --color-neg: #C9603F;
+  --color-over: #DC4E41;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,13 +34,13 @@ body {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
   margin: 1px 8px;
   width: calc(100% - 16px);
-  padding: 7px 11px;
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 400;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
   text-align: left;
   color: var(--sidebar-text);
   background: transparent;
@@ -44,14 +52,14 @@ body {
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.88);
+  background: #F4F6FA;
+  color: var(--sidebar-ink);
 }
 
 .nav-item.active {
-  background: var(--sidebar-active);
-  color: white;
-  font-weight: 500;
+  background: var(--sidebar-active-soft);
+  color: var(--sidebar-active);
+  font-weight: 600;
 }
 
 /* Card shell */
