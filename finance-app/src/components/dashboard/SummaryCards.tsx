@@ -1,136 +1,112 @@
-import { AlertTriangle, ArrowUpRight, ArrowDownRight, Activity, Percent } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import type { MonthSummaryData } from '../../types'
-import { formatBRL, formatPct } from '../../utils/currency'
+import { formatBRL } from '../../utils/currency'
 
 interface Props {
   data: MonthSummaryData
+  trendValues?: number[]
 }
 
-export function SummaryCards({ data }: Props) {
+export function SummaryCards({ data, trendValues }: Props) {
   const {
     operationalIncome, totalExpenses, operationalResult,
     savingsRate, pendingAmount, isAtypicalMonth, hasRedemption, redemptionAmount,
   } = data
-  const resultPositive = operationalResult >= 0
 
   return (
-    <div className="grid grid-cols-4 gap-4">
-      <SummaryCard
-        label="Receita operacional"
-        value={formatBRL(operationalIncome)}
-        valueColor="#059669"
-        iconEl={<ArrowUpRight size={14} color="#059669" />}
-        iconBg="#ECFDF5"
-        sub={isAtypicalMonth ? (
-          <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 rounded-full px-2 py-0.5 mt-1.5">
-            <AlertTriangle size={9} /> Mês atípico
-          </span>
-        ) : undefined}
-      />
+    <div className="grid grid-cols-3 gap-[18px]">
 
-      <SummaryCard
-        label="Despesas realizadas"
-        value={formatBRL(totalExpenses)}
-        valueColor="#DC2626"
-        iconEl={<ArrowDownRight size={14} color="#DC2626" />}
-        iconBg="#FEF2F2"
-        sub={pendingAmount > 0 ? (
-          <span className="block text-[10px] text-amber-600 mt-1.5">
-            + {formatBRL(pendingAmount)} pendente
-          </span>
-        ) : undefined}
-      />
-
-      <SummaryCard
-        label="Resultado operacional"
-        value={formatBRL(operationalResult)}
-        valueColor={resultPositive ? '#059669' : '#B91C1C'}
-        iconEl={<Activity size={14} color={resultPositive ? '#059669' : '#B91C1C'} />}
-        iconBg={resultPositive ? '#ECFDF5' : '#FEF2F2'}
-        highlight
-        sub={
-          <span className={`inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 mt-1.5 ${resultPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-            <span className="w-1 h-1 rounded-full inline-block" style={{ background: resultPositive ? '#16A34A' : '#DC2626' }} />
-            {resultPositive ? 'Positivo' : 'Negativo'}
-          </span>
-        }
-        warning={hasRedemption ? `⚠ ${formatBRL(redemptionAmount)} em resgates` : undefined}
-      />
-
-      <SavingsCard rate={savingsRate} />
-    </div>
-  )
-}
-
-function SummaryCard({ label, value, valueColor, iconEl, iconBg, sub, highlight, warning }: {
-  label: string
-  value: string
-  valueColor: string
-  iconEl: React.ReactNode
-  iconBg: string
-  sub?: React.ReactNode
-  highlight?: boolean
-  warning?: string
-}) {
-  return (
-    <div
-      className="card p-5"
-      style={highlight ? { borderColor: 'transparent', boxShadow: '0 0 0 1.5px rgba(79,70,229,0.15), var(--shadow-card)' } : undefined}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight max-w-[120px]">
-          {label}
-        </p>
+      {/* Entrou */}
+      <div className="card p-[22px]">
+        <div className="flex items-center gap-2 mb-[14px]">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--color-pos)' }} />
+          <span className="text-[13px] font-semibold" style={{ color: '#667085' }}>Entrou</span>
+          {isAtypicalMonth && (
+            <span className="ml-auto inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 rounded-full px-2 py-0.5 whitespace-nowrap">
+              <AlertTriangle size={9} /> Atípico
+            </span>
+          )}
+        </div>
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: iconBg }}
+          className="text-[32px] font-extrabold tracking-[-0.03em] leading-none num"
+          style={{ color: 'var(--color-pos)' }}
         >
-          {iconEl}
+          {formatBRL(operationalIncome)}
+        </div>
+        <div className="mt-3 text-[12.5px] font-semibold" style={{ color: '#98A2B3' }}>
+          {hasRedemption
+            ? <span className="text-amber-600">⚠ {formatBRL(redemptionAmount)} em resgates</span>
+            : 'Receita operacional'}
         </div>
       </div>
-      <p
-        className="text-[23px] font-bold tracking-tight tabular-nums leading-none num"
-        style={{ color: valueColor }}
+
+      {/* Saiu */}
+      <div className="card p-[22px]">
+        <div className="flex items-center gap-2 mb-[14px]">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--color-neg)' }} />
+          <span className="text-[13px] font-semibold" style={{ color: '#667085' }}>Saiu</span>
+          {pendingAmount > 0 && (
+            <span className="ml-auto text-[10px] font-semibold text-amber-600 whitespace-nowrap">
+              +{formatBRL(pendingAmount)} pendente
+            </span>
+          )}
+        </div>
+        <div
+          className="text-[32px] font-extrabold tracking-[-0.03em] leading-none num"
+          style={{ color: 'var(--color-neg)' }}
+        >
+          {formatBRL(totalExpenses)}
+        </div>
+        <div className="mt-3 text-[12.5px] font-semibold" style={{ color: '#98A2B3' }}>
+          Despesas realizadas
+        </div>
+      </div>
+
+      {/* Sobrou — hero azul */}
+      <div
+        className="rounded-[12px] p-[22px]"
+        style={{ background: 'var(--accent)', border: '1px solid var(--accent)', boxShadow: 'var(--shadow-card)' }}
       >
-        {value}
-      </p>
-      {sub}
-      {warning && (
-        <p className="text-[10px] text-amber-700 bg-amber-50 rounded-md px-2 py-1 mt-2 leading-snug">
-          {warning}
-        </p>
-      )}
+        <div className="flex items-center gap-2 mb-[14px]">
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-white opacity-90" />
+          <span className="text-[13px] font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>Sobrou</span>
+        </div>
+        <div className="text-[32px] font-extrabold tracking-[-0.03em] leading-none num text-white">
+          {formatBRL(operationalResult)}
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-[12.5px] font-semibold whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            {(savingsRate * 100).toFixed(0)}% de sobra
+          </span>
+          {trendValues && <Spark values={trendValues} />}
+        </div>
+      </div>
+
     </div>
   )
 }
 
-function SavingsCard({ rate }: { rate: number }) {
-  const pct = rate * 100
-  const barWidth = Math.min(Math.abs(pct), 100)
-  const barColor = pct < 0 ? '#DC2626' : pct < 10 ? '#D97706' : pct < 20 ? '#65A30D' : '#059669'
-  const textColor = pct < 0 ? '#B91C1C' : pct < 10 ? '#B45309' : '#059669'
-
+function Spark({ values }: { values: number[] }) {
+  if (values.length < 2) return null
+  const mn = Math.min(...values)
+  const mx = Math.max(...values)
+  const range = mx - mn || 1
+  const W = 78, H = 26
+  const pts = values
+    .map((v, i) => `${(i / (values.length - 1)) * W},${H - ((v - mn) / range) * H}`)
+    .join(' ')
+  const ly = H - ((values[values.length - 1] - mn) / range) * H
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Taxa de sobra</p>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-indigo-50 flex-shrink-0">
-          <Percent size={13} color="#4F46E5" />
-        </div>
-      </div>
-      <p className="text-[23px] font-bold tracking-tight tabular-nums leading-none num" style={{ color: textColor }}>
-        {formatPct(pct)}
-      </p>
-      <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${barWidth}%`, background: barColor }}
-        />
-      </div>
-      <div className="flex justify-between mt-1.5">
-        <p className="text-[10px] text-gray-300">0%</p>
-        <p className="text-[10px] text-gray-400">Meta: 20%</p>
-      </div>
-    </div>
+    <svg width={W} height={H} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}>
+      <polyline
+        points={pts}
+        fill="none"
+        stroke="rgba(255,255,255,0.9)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={W} cy={ly} r="2.6" fill="white" />
+    </svg>
   )
 }
