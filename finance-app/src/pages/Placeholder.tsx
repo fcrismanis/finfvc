@@ -7,14 +7,25 @@ interface Props {
 
 export function Placeholder({ title, description }: Props) {
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
-      <div className="text-center">
-        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-          <Construction size={22} className="text-gray-400" />
+    <div className="page-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ textAlign: 'center', maxWidth: 340 }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 14,
+          background: 'var(--accent-soft)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 16px',
+        }}>
+          <Construction size={24} color="var(--accent)" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-700 mb-1">{title}</h2>
-        <p className="text-sm text-gray-400 max-w-xs">{description}</p>
-        <p className="mt-3 text-xs text-gray-300">Fase 2</p>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#101828', marginBottom: 6 }}>{title}</h2>
+        <p style={{ fontSize: 13, color: '#98A2B3', lineHeight: 1.6, marginBottom: 20 }}>{description}</p>
+        <span style={{
+          display: 'inline-block', fontSize: 11, fontWeight: 600,
+          padding: '3px 10px', borderRadius: 6,
+          color: 'var(--accent)', background: 'var(--accent-soft)',
+        }}>
+          Em breve — Fase 2
+        </span>
       </div>
     </div>
   )
