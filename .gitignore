@@ -37,8 +37,9 @@ yarn-error.log*
 *.qif
 *.ods
 
-# SQL dumps and backups
+# SQL dumps and backups (migrations in supabase/migrations/ are versioned)
 *.sql
+!supabase/migrations/*.sql
 *.dump
 *.bak
 *.backup
