@@ -46,6 +46,11 @@ yarn-error.log*
 backups/
 dumps/
 
+# Deploy artifacts (built zips and extracted dist folders)
+*.tar.gz
+*.zip
+deploy-fin/
+
 # OS / editor
 .DS_Store
 Thumbs.db
