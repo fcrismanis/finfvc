@@ -1,20 +1,69 @@
 @import "tailwindcss";
 
 :root {
-  --sidebar-bg: #1E2235;
-  --sidebar-active: #3B4A8C;
-  --sidebar-text: #A8B4D0;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+  --sidebar-bg: #1a1d2e;
+  --sidebar-active: #4F46E5;
+  --sidebar-text: #8892ac;
+  --bg-page: #F2F4F8;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --border-card: #E5E9F2;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #F8F9FB;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: var(--bg-page);
   color: #111827;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root { height: 100vh; display: flex; flex-direction: column; }
+
+/* Sidebar nav */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 1px 8px;
+  width: calc(100% - 16px);
+  padding: 7px 11px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  color: var(--sidebar-text);
+  background: transparent;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.nav-item.active {
+  background: var(--sidebar-active);
+  color: white;
+  font-weight: 500;
+}
+
+/* Card shell */
+.card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Tabular numbers everywhere */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}

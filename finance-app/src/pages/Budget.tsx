@@ -88,52 +88,92 @@ export function Budget({ selectedMonth }: Props) {
   }
 
   return (
-    <main className="flex-1 overflow-y-auto bg-gray-50 p-5">
+    <main className="flex-1 overflow-y-auto p-5" style={{ background: 'var(--bg-page)' }}>
       <div className="max-w-[860px] mx-auto space-y-4">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-50">
-            <Target size={20} color="#4F46E5" />
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <Target size={18} color="var(--sidebar-active)" />
           </div>
-          <h1 className="text-lg font-bold text-gray-900">Orçamento</h1>
+          <div>
+            <h1 className="text-base font-bold text-gray-900">Orçamento</h1>
+            <p className="text-xs text-gray-400">{formatMonthFull(month)}</p>
+          </div>
           <div className="ml-auto flex items-center gap-1">
-            <button onClick={() => setMonth(prevMonth(month))} className="p-1 rounded hover:bg-white"><ChevronLeft size={16} color="#6B7280" /></button>
-            <span className="text-sm font-semibold text-gray-700 min-w-[120px] text-center">{formatMonthFull(month)}</span>
-            <button onClick={() => setMonth(nextMonth(month))} disabled={month >= currentYearMonth()} className="p-1 rounded hover:bg-white disabled:opacity-40"><ChevronRight size={16} color="#6B7280" /></button>
+            <button
+              onClick={() => setMonth(prevMonth(month))}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="text-sm font-semibold text-gray-700 min-w-[130px] text-center">
+              {formatMonthFull(month)}
+            </span>
+            <button
+              onClick={() => setMonth(nextMonth(month))}
+              disabled={month >= currentYearMonth()}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white disabled:opacity-30 transition-colors"
+            >
+              <ChevronRight size={15} />
+            </button>
           </div>
         </div>
 
         {/* Summary totals */}
         <div className="grid grid-cols-3 gap-3">
-          <Card label="Planejado" value={formatBRL(totalPlanned)} color="#4F46E5" />
-          <Card label="Realizado" value={formatBRL(totalRealized)} color={totalRealized > totalPlanned ? '#DC2626' : '#16A34A'} />
-          <Card label="Desvio" value={`${totalDev >= 0 ? '+' : ''}${formatBRL(totalDev)}`} color={totalDev > 0 ? '#DC2626' : '#16A34A'} />
+          <SummaryCard label="Planejado" value={formatBRL(totalPlanned)} color="var(--sidebar-active)" />
+          <SummaryCard
+            label="Realizado"
+            value={formatBRL(totalRealized)}
+            color={totalRealized > totalPlanned ? '#DC2626' : '#059669'}
+          />
+          <SummaryCard
+            label="Desvio total"
+            value={`${totalDev >= 0 ? '+' : ''}${formatBRL(totalDev)}`}
+            color={totalDev > 0 ? '#DC2626' : '#059669'}
+          />
         </div>
 
         {/* Actions */}
         <div className="flex gap-2">
-          <button onClick={handleCopyPrev} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+          <button
+            onClick={handleCopyPrev}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-50 transition-colors"
+            style={{ border: '1px solid var(--border-card)' }}
+          >
             <Copy size={12} /> Copiar do mês anterior
           </button>
-          <button onClick={handleSuggest} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+          <button
+            onClick={handleSuggest}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-50 transition-colors"
+            style={{ border: '1px solid var(--border-card)' }}
+          >
             <Lightbulb size={12} /> Sugerir pela média
           </button>
         </div>
 
         {/* Budget table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="card overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
-                <th className="text-left px-3 py-2.5 font-medium">Categoria</th>
-                <th className="text-right px-3 py-2.5 font-medium">Planejado</th>
-                <th className="text-right px-3 py-2.5 font-medium">Realizado</th>
-                <th className="text-right px-3 py-2.5 font-medium">Desvio</th>
-                <th className="px-3 py-2.5" />
+              <tr style={{ borderBottom: '1px solid var(--border-card)', background: '#F8FAFC' }}>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                  Categoria
+                </th>
+                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                  Planejado
+                </th>
+                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                  Realizado
+                </th>
+                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                  Desvio
+                </th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {expenseMacros.map(macro => {
                 const row = rowForMacro(macro.id)
                 const barPct = row.plannedAmount > 0
@@ -141,58 +181,82 @@ export function Budget({ selectedMonth }: Props) {
                   : row.realizedAmount > 0 ? 100 : 0
 
                 return (
-                  <tr key={macro.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2.5">
+                  <tr
+                    key={macro.id}
+                    className="transition-colors hover:bg-gray-50"
+                    style={{ borderBottom: '1px solid #F7F8FA' }}
+                  >
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: macro.color }} />
+                        <div
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ background: macro.color }}
+                        />
                         <span className="font-medium text-gray-800">{macro.name}</span>
                       </div>
                       {row.realizedAmount > 0 && (
-                        <div className="mt-1 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div className="mt-1.5 h-1.5 w-full rounded-full overflow-hidden" style={{ background: '#EDF0F7' }}>
                           <div
                             className="h-full rounded-full transition-all"
                             style={{
                               width: `${barPct}%`,
-                              background: row.status === 'critical' ? '#DC2626' : row.status === 'warning' ? '#D97706' : macro.color,
+                              background: row.status === 'critical' ? '#DC2626'
+                                : row.status === 'warning' ? '#D97706'
+                                : macro.color,
                             }}
                           />
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-4 py-3 text-right">
                       {row.isEditing ? (
                         <input
                           autoFocus
                           value={editValue}
                           onChange={e => setEditValue(e.target.value)}
                           onBlur={() => saveEdit(macro.id)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveEdit(macro.id); if (e.key === 'Escape') setEditingId(null) }}
-                          className="w-28 text-right border border-indigo-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') saveEdit(macro.id)
+                            if (e.key === 'Escape') setEditingId(null)
+                          }}
+                          className="w-28 text-right border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1"
+                          style={{ borderColor: 'var(--sidebar-active)' }}
                           placeholder="0,00"
                         />
                       ) : (
                         <button
                           onClick={() => startEdit(macro.id)}
-                          className="text-gray-700 hover:text-indigo-600 font-medium tabular-nums"
+                          className="font-medium tabular-nums num text-gray-700 hover:text-indigo-600 transition-colors"
                           title="Clique para editar"
                         >
-                          {row.plannedAmount > 0 ? formatBRL(row.plannedAmount) : <span className="text-gray-300">—</span>}
+                          {row.plannedAmount > 0
+                            ? formatBRL(row.plannedAmount)
+                            : <span className="text-gray-300">—</span>}
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-medium tabular-nums" style={{ color: macro.color }}>
+                    <td
+                      className="px-4 py-3 text-right font-semibold tabular-nums num"
+                      style={{ color: macro.color }}
+                    >
                       {row.realizedAmount > 0 ? formatBRL(row.realizedAmount) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">
+                    <td className="px-4 py-3 text-right tabular-nums num">
                       {row.plannedAmount > 0 && row.realizedAmount > 0 ? (
-                        <div className={`font-medium ${row.status === 'critical' ? 'text-red-600' : row.status === 'warning' ? 'text-amber-600' : 'text-green-600'}`}>
+                        <div className={`font-semibold ${
+                          row.status === 'critical' ? 'text-red-600'
+                          : row.status === 'warning' ? 'text-amber-600'
+                          : 'text-green-600'
+                        }`}>
                           {row.dev > 0 ? '+' : ''}{formatBRL(row.dev)}
-                          <span className="text-gray-400 font-normal ml-1">({row.devPct > 0 ? '+' : ''}{row.devPct.toFixed(0)}%)</span>
+                          <span className="text-gray-400 font-normal ml-1 text-[10px]">
+                            ({row.devPct > 0 ? '+' : ''}{row.devPct.toFixed(0)}%)
+                          </span>
                         </div>
                       ) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-3 py-2.5">
-                      {row.status === 'critical' && <TrendingDown size={12} color="#DC2626" />}
+                    <td className="px-4 py-3 w-6">
+                      {row.status === 'critical' && <TrendingDown size={13} color="#DC2626" />}
                     </td>
                   </tr>
                 )
@@ -201,17 +265,19 @@ export function Budget({ selectedMonth }: Props) {
           </table>
         </div>
 
-        <p className="text-xs text-gray-400 pb-4">Clique no valor planejado para editar. Enter para confirmar, Esc para cancelar.</p>
+        <p className="text-[11px] text-gray-400 pb-4">
+          Clique no valor planejado para editar — Enter para confirmar, Esc para cancelar.
+        </p>
       </div>
     </main>
   )
 }
 
-function Card({ label, value, color }: { label: string; value: string; color: string }) {
+function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-3">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="text-lg font-bold tabular-nums" style={{ color }}>{value}</p>
+    <div className="card p-4">
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{label}</p>
+      <p className="text-xl font-bold tabular-nums num tracking-tight" style={{ color }}>{value}</p>
     </div>
   )
 }

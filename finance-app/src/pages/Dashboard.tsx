@@ -22,7 +22,7 @@ export function Dashboard({ selectedMonth, onNavigate }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-5 space-y-4 max-w-[1280px]">
+      <div className="p-5 space-y-4 max-w-[1280px] mx-auto w-full">
 
         {/* Demo mode banner */}
         {isDemo && (

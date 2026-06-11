@@ -30,17 +30,27 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
       className="flex flex-col w-[220px] min-w-[220px] h-full"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      <div className="flex items-center gap-2 px-4 py-5 border-b border-white/10">
+      {/* Logo */}
+      <div
+        className="flex items-center gap-2.5 px-5 py-[17px]"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+      >
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: 'var(--sidebar-active)' }}
         >
           <TrendingUp size={14} color="white" />
         </div>
-        <span className="text-white font-semibold text-[15px] tracking-tight">Finance</span>
+        <div>
+          <p className="text-white font-semibold text-[14px] tracking-tight leading-none">Finance</p>
+          <p className="text-[10px] leading-none mt-[3px]" style={{ color: 'var(--sidebar-text)', opacity: 0.65 }}>
+            Família
+          </p>
+        </div>
       </div>
 
-      <nav className="flex-1 py-3">
+      {/* Nav */}
+      <nav className="flex-1 py-2 overflow-y-auto">
         <GroupLabel label="Principal" />
         {primary.map(item => (
           <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
@@ -51,14 +61,21 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2">
+      {/* User */}
+      <div
+        className="px-4 py-3 flex items-center gap-2.5"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+      >
         <div
-          className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
           style={{ background: 'var(--sidebar-active)' }}
         >
           FC
         </div>
-        <span className="text-sm" style={{ color: 'var(--sidebar-text)' }}>Fabio C.</span>
+        <div className="min-w-0">
+          <p className="text-[13px] text-white font-medium leading-none truncate">Fabio C.</p>
+          <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--sidebar-text)' }}>Personal</p>
+        </div>
       </div>
     </aside>
   )
@@ -66,31 +83,24 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
 
 function GroupLabel({ label }: { label: string }) {
   return (
-    <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-widest"
-      style={{ color: 'var(--sidebar-text)', opacity: 0.6 }}>
+    <p
+      className="px-[18px] pt-4 pb-1 text-[10px] font-semibold uppercase"
+      style={{ color: 'var(--sidebar-text)', opacity: 0.45, letterSpacing: '0.07em' }}
+    >
       {label}
     </p>
   )
 }
 
 function NavItem({ route, label, icon: Icon, active, onNavigate }: {
-  route: string; label: string; icon: React.ComponentType<{ size?: number; color?: string }>;
-  active: boolean; onNavigate: (r: string) => void
+  route: string
+  label: string
+  icon: React.ComponentType<{ size?: number; color?: string }>
+  active: boolean
+  onNavigate: (r: string) => void
 }) {
   return (
-    <button
-      onClick={() => onNavigate(route)}
-      className={`w-full flex items-center gap-2.5 text-sm text-left transition-colors ${
-        active ? 'text-white mx-2 px-2 rounded-lg' : 'px-4 hover:opacity-80'
-      }`}
-      style={{
-        padding: active ? '7px 8px' : '7px 16px',
-        background: active ? 'var(--sidebar-active)' : 'transparent',
-        color: active ? 'white' : 'var(--sidebar-text)',
-        width: active ? 'calc(100% - 16px)' : '100%',
-        margin: active ? '0 8px' : '0',
-      }}
-    >
+    <button onClick={() => onNavigate(route)} className={`nav-item${active ? ' active' : ''}`}>
       <Icon size={15} />
       {label}
     </button>
