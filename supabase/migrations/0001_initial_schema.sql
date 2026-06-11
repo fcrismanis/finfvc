@@ -286,6 +286,13 @@ alter table monthly_closings     enable row level security;
 alter table classification_rules enable row level security;
 
 -- families
+-- Any authenticated user can create a family where they are the owner.
+-- Adding them to family_members as owner must be done via a SECURITY DEFINER function
+-- (or trigger) at auth-flow time — not enforced here by RLS alone.
+create policy "authenticated can create family"
+  on families for insert
+  with check (auth.uid() = owner_id);
+
 create policy "family member can view"
   on families for select
   using (is_family_member(id));
@@ -302,6 +309,10 @@ create policy "member can view roster"
 create policy "owner/admin can insert members"
   on family_members for insert
   with check (has_family_role(family_id, array['owner','admin']::member_role[]));
+
+create policy "owner/admin can update members"
+  on family_members for update
+  using (has_family_role(family_id, array['owner','admin']::member_role[]));
 
 create policy "owner/admin can delete members"
   on family_members for delete
@@ -359,9 +370,18 @@ create policy "owner/admin can delete transactions"
 create policy "member can view budgets"
   on budgets for select using (is_family_member(family_id));
 
-create policy "member can manage budgets"
-  on budgets for all
+create policy "member can insert/update budgets"
+  on budgets for insert
+  with check (has_family_role(family_id, array['owner','admin','member']::member_role[]));
+
+create policy "member can update budgets"
+  on budgets for update
   using (has_family_role(family_id, array['owner','admin','member']::member_role[]));
+
+-- DELETE restricted to owner/admin — member cannot erase budget targets
+create policy "owner/admin can delete budgets"
+  on budgets for delete
+  using (has_family_role(family_id, array['owner','admin']::member_role[]));
 
 -- import_batches
 create policy "member can view import_batches"
@@ -370,6 +390,10 @@ create policy "member can view import_batches"
 create policy "member can insert import_batches"
   on import_batches for insert
   with check (has_family_role(family_id, array['owner','admin','member']::member_role[]));
+
+create policy "owner/admin can delete import_batches"
+  on import_batches for delete
+  using (has_family_role(family_id, array['owner','admin']::member_role[]));
 
 -- monthly_closings
 create policy "member can view closings"
