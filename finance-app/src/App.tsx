@@ -52,6 +52,7 @@ function AppShell() {
           activeView={activeView}
           onMonthChange={setSelectedMonth}
           onViewChange={setActiveView}
+          onNavigate={setActiveRoute}
         />
         {loading
           ? <LoadingState fullPage message="Carregando dados financeiros…" />

@@ -7,9 +7,10 @@ interface HeaderProps {
   activeView: ViewMode
   onMonthChange: (m: string) => void
   onViewChange: (v: ViewMode) => void
+  onNavigate: (route: string) => void
 }
 
-export function Header({ selectedMonth, activeView, onMonthChange, onViewChange }: HeaderProps) {
+export function Header({ selectedMonth, activeView, onMonthChange, onViewChange, onNavigate }: HeaderProps) {
   const canGoNext = selectedMonth < currentYearMonth()
 
   return (
@@ -50,6 +51,7 @@ export function Header({ selectedMonth, activeView, onMonthChange, onViewChange 
       <div className="flex items-center gap-3">
         <ViewToggle activeView={activeView} onChange={onViewChange} />
         <button
+          onClick={() => onNavigate('/lancamentos')}
           className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-[7px] rounded-lg transition-opacity hover:opacity-90"
           style={{ background: 'var(--sidebar-active)' }}
         >
