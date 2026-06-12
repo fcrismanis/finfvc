@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { Menu } from 'lucide-react'
 import './index.css'
 import { DataProvider, useData } from './context/DataContext'
 import { Sidebar } from './components/layout/Sidebar'
-import { Header } from './components/layout/Header'
 import { LoadingState, ErrorState } from './components/ui/LoadingState'
 import { currentYearMonth } from './utils/date'
-import type { ViewMode } from './types'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard    = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -17,16 +16,13 @@ const Closing      = lazy(() => import('./pages/Closing').then(m => ({ default: 
 const Placeholder  = lazy(() => import('./pages/Placeholder').then(m => ({ default: m.Placeholder })))
 
 const PLACEHOLDER_PAGES: Record<string, { title: string; description: string }> = {
-  '/metas':         { title: 'Metas financeiras',  description: 'Defina e acompanhe objetivos de longo prazo.' },
-  '/simulacoes':    { title: 'Simulações',          description: 'Simule cenários de gastos, poupança e investimento.' },
-  '/consultor':     { title: 'Consultor IA',        description: 'Análise inteligente das suas finanças com recomendações personalizadas.' },
-  '/configuracoes': { title: 'Configurações',       description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
+  '/consultor':     { title: 'Consultor IA',  description: 'Análise inteligente das suas finanças com recomendações personalizadas.' },
+  '/configuracoes': { title: 'Configurações', description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
 }
 
 function AppShell() {
   const [activeRoute, setActiveRoute] = useState('/')
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
-  const [activeView, setActiveView] = useState<ViewMode>('operational')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { loading, error, reload, transactions } = useData()
   const didInitMonth = useRef(false)
@@ -52,7 +48,7 @@ function AppShell() {
 
   function renderPage() {
     switch (activeRoute) {
-      case '/':            return <Dashboard selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/':            return <Dashboard selectedMonth={selectedMonth} onNavigate={navigate} onMonthChange={setSelectedMonth} />
       case '/conectar':    return <Import onNavigate={navigate} />
       case '/lancamentos': return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} />
@@ -67,10 +63,7 @@ function AppShell() {
 
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar — fixed on mobile, static on desktop */}
@@ -83,14 +76,21 @@ function AppShell() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <Header
-          selectedMonth={selectedMonth}
-          activeView={activeView}
-          onMonthChange={setSelectedMonth}
-          onViewChange={setActiveView}
-          onNavigate={navigate}
-          onMenuToggle={() => setSidebarOpen(o => !o)}
-        />
+        {/* Mobile-only top bar with hamburger */}
+        <div
+          className="md:hidden flex items-center gap-3 px-4 py-3 bg-white flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border-card)' }}
+        >
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="Menu"
+          >
+            <Menu size={18} />
+          </button>
+          <span className="font-extrabold text-[15px]" style={{ color: '#101828' }}>FIN</span>
+        </div>
+
         <Suspense fallback={<LoadingState fullPage message="Carregando…" />}>
           {loading
             ? <LoadingState fullPage message="Carregando dados financeiros…" />

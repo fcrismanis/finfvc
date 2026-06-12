@@ -1,6 +1,6 @@
 import {
-  LayoutDashboard, List, Target, Flag, Lock,
-  Plug, Calculator, Bot, Settings, ClipboardCheck, X,
+  LayoutDashboard, List, Target, Lock,
+  Link2, Bot, Settings, ClipboardCheck, X,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -12,15 +12,13 @@ interface SidebarProps {
 const primary = [
   { route: '/', label: 'Visão geral', icon: LayoutDashboard },
   { route: '/lancamentos', label: 'Lançamentos', icon: List },
-  { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
-  { route: '/metas', label: 'Metas', icon: Flag },
+  { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/fechamento', label: 'Fechamento', icon: Lock },
+  { route: '/conectar', label: 'Importação', icon: Link2 },
 ]
 
 const tools = [
-  { route: '/conectar', label: 'Conectar dados', icon: Plug },
-  { route: '/simulacoes', label: 'Simulações', icon: Calculator },
   { route: '/consultor', label: 'Consultor IA', icon: Bot },
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
@@ -61,12 +59,11 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="sidebar-dark flex-1 py-2 overflow-y-auto">
-        <GroupLabel label="Principal" />
+      <nav className="sidebar-dark flex-1 py-3 overflow-y-auto">
         {primary.map(item => (
           <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
         ))}
-        <GroupLabel label="Ferramentas" />
+        <div className="mx-5 my-3 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
         {tools.map(item => (
           <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
         ))}
@@ -84,22 +81,11 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
           FC
         </div>
         <div className="min-w-0">
-          <p className="text-[13px] font-bold leading-none truncate text-white">Fabio C.</p>
-          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>Conta pessoal</p>
+          <p className="text-[13px] font-bold leading-none truncate text-white">Família Crivo</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>Plano familiar</p>
         </div>
       </div>
     </aside>
-  )
-}
-
-function GroupLabel({ label }: { label: string }) {
-  return (
-    <p
-      className="px-[18px] pt-4 pb-1 text-[11px] font-bold uppercase"
-      style={{ color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em' }}
-    >
-      {label}
-    </p>
   )
 }
 
