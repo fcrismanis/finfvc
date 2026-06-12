@@ -166,6 +166,34 @@ body {
 .page-content { margin: 0 auto; }
 .section-gap  { display: flex; flex-direction: column; gap: 16px; }
 
+/* ── Responsive sidebar ─────────────────────────────────────── */
+.sidebar-shell {
+  flex-shrink: 0;
+}
+.sidebar-overlay {
+  display: none;
+}
+@media (max-width: 767px) {
+  .sidebar-shell {
+    position: fixed;
+    top: 0;
+    left: -220px;
+    height: 100%;
+    z-index: 50;
+    transition: left 0.22s ease;
+  }
+  .sidebar-shell.open {
+    left: 0;
+  }
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 49;
+  }
+}
+
 /* ── Loading spinner ────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-fade { 0%,100% { opacity:.4 } 50% { opacity:1 } }

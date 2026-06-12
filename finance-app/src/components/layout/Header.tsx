@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Menu } from 'lucide-react'
 import { formatMonthFull, prevMonth, nextMonth, getGreeting, currentYearMonth } from '../../utils/date'
 import type { ViewMode } from '../../types'
 
@@ -8,17 +8,27 @@ interface HeaderProps {
   onMonthChange: (m: string) => void
   onViewChange: (v: ViewMode) => void
   onNavigate: (route: string) => void
+  onMenuToggle: () => void
 }
 
-export function Header({ selectedMonth, activeView, onMonthChange, onViewChange, onNavigate }: HeaderProps) {
+export function Header({ selectedMonth, activeView, onMonthChange, onViewChange, onNavigate, onMenuToggle }: HeaderProps) {
   const canGoNext = selectedMonth < currentYearMonth()
 
   return (
     <header
-      className="bg-white px-6 py-3 flex items-center justify-between flex-shrink-0"
+      className="bg-white px-4 md:px-6 py-3 flex items-center gap-3 flex-shrink-0"
       style={{ borderBottom: '1px solid var(--border-card)' }}
     >
-      <p className="text-[15px] font-semibold text-gray-800">
+      {/* Hamburger — mobile only */}
+      <button
+        onClick={onMenuToggle}
+        className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+        aria-label="Menu"
+      >
+        <Menu size={18} />
+      </button>
+
+      <p className="text-[15px] font-semibold text-gray-800 flex-1 md:flex-none hidden sm:block">
         {getGreeting()}, Fabio
       </p>
 
@@ -48,8 +58,10 @@ export function Header({ selectedMonth, activeView, onMonthChange, onViewChange,
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <ViewToggle activeView={activeView} onChange={onViewChange} />
+      <div className="flex items-center gap-2 ml-auto">
+        <div className="hidden md:block">
+          <ViewToggle activeView={activeView} onChange={onViewChange} />
+        </div>
         <button
           onClick={() => onNavigate('/lancamentos')}
           className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-[7px] rounded-lg transition-opacity hover:opacity-90"

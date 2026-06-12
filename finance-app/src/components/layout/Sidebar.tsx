@@ -1,11 +1,12 @@
 import {
   LayoutDashboard, List, Target, Flag, Lock,
-  Plug, Calculator, Bot, Settings, ClipboardCheck,
+  Plug, Calculator, Bot, Settings, ClipboardCheck, X,
 } from 'lucide-react'
 
 interface SidebarProps {
   activeRoute: string
   onNavigate: (route: string) => void
+  onClose?: () => void
 }
 
 const primary = [
@@ -27,7 +28,7 @@ const tools = [
 const DARK = '#151C2E'
 const DARK_BORDER = 'rgba(255,255,255,0.08)'
 
-export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
+export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   return (
     <aside
       className="flex flex-col w-[220px] min-w-[220px] h-full"
@@ -47,6 +48,16 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
         <div>
           <p className="font-extrabold text-[17px] tracking-tight leading-none text-white" style={{ letterSpacing: '-0.02em' }}>FIN</p>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden ml-auto w-7 h-7 flex items-center justify-center rounded-lg"
+            style={{ color: 'rgba(255,255,255,0.5)' }}
+            aria-label="Fechar menu"
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       {/* Nav */}
