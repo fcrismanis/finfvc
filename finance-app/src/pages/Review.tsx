@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { AlertTriangle, CheckCircle, ChevronDown, ClipboardCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -135,19 +135,18 @@ export function Review({ onNavigate }: Props) {
   const macroOptions = MACRO_CATEGORIES
 
   return (
-    <main className="flex-1 overflow-y-auto p-5" style={{ background: 'var(--bg-page)' }}>
-      <div className="max-w-[900px] mx-auto space-y-4">
+    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
+      <div className="p-5 md:p-7 max-w-[940px] mx-auto w-full flex flex-col gap-5">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-            <ClipboardCheck size={18} color="#D97706" />
-          </div>
+        <div className="flex items-start gap-3 flex-wrap">
           <div>
-            <h1 className="text-base font-bold text-gray-900">Revisão financeira</h1>
-            <p className="text-xs text-gray-400">Lançamentos que precisam de atenção</p>
+            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Revisão</h1>
+            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>Lançamentos que precisam de atenção</p>
           </div>
-          <span className="ml-auto text-sm font-semibold text-gray-500">{allItems.length} para revisar</span>
+          <span className="ml-auto self-center text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: '#D97706', background: '#FFFBEB' }}>
+            {allItems.length} para revisar
+          </span>
         </div>
 
         {isDemo && (

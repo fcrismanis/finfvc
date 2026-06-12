@@ -75,29 +75,25 @@ export function Closing({ selectedMonth }: Props) {
   const topDeviations = comparison.filter(c => Math.abs(c.deviationPct) > 5).slice(0, 5)
 
   return (
-    <main className="flex-1 overflow-y-auto p-5" style={{ background: 'var(--bg-page)' }}>
-      <div className="max-w-[860px] mx-auto space-y-4">
+    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
+      <div className="p-5 md:p-7 max-w-[920px] mx-auto w-full flex flex-col gap-5">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${closing.isClosed ? 'bg-green-50' : 'bg-indigo-50'}`}
-          >
-            {closing.isClosed
-              ? <Lock size={18} color="#16A34A" />
-              : <Unlock size={18} color="var(--sidebar-active)" />
-            }
-          </div>
+        <div className="flex items-start gap-3 flex-wrap">
           <div>
-            <h1 className="text-base font-bold text-gray-900">Fechamento mensal</h1>
-            <p className="text-xs text-gray-400">
+            <h1 className="text-[26px] font-extrabold tracking-tight flex items-center gap-2.5" style={{ color: '#101828' }}>
+              {closing.isClosed
+                ? <Lock size={22} color="#16A34A" />
+                : <Unlock size={22} color="var(--sidebar-active)" />}
+              Fechamento
+            </h1>
+            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
               {closing.isClosed
                 ? `Fechado em ${new Date(closing.closedAt!).toLocaleDateString('pt-BR')}`
-                : 'Em andamento'
-              }
+                : 'Em andamento · ' + formatMonthFull(month)}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-1 bg-white rounded-xl px-2 py-1.5" style={{ border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-card)' }}>
             <button
               onClick={() => changeMonth(prevMonth(month))}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"

@@ -106,28 +106,41 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
   const resultColor = summary.income - summary.expense >= 0 ? '#059669' : '#DC2626'
 
   return (
-    <main className="flex-1 overflow-y-auto p-5" style={{ background: 'var(--bg-page)' }}>
-      <div className="max-w-[1280px] mx-auto space-y-4">
+    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
+      <div className="p-5 md:p-7 max-w-[1320px] mx-auto w-full flex flex-col gap-5">
 
-        {isDemo && (
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-            <FlaskConical size={12} />
-            <span>Dados demonstrativos — <button className="underline font-medium" onClick={() => onNavigate('/conectar')}>importe seu extrato</button></span>
+        {/* ── Page header ── */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Lançamentos</h1>
+            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
+              {summary.total} {summary.total === 1 ? 'lançamento' : 'lançamentos'} no filtro atual
+            </p>
           </div>
-        )}
-
-        {/* Summary bar */}
-        <div className="card px-4 py-3 flex flex-wrap gap-5 items-center text-sm">
-          <span className="text-gray-400 text-xs font-medium">{summary.total} lançamentos</span>
-          <span className="text-green-700 font-bold num">+{formatBRL(summary.income)}</span>
-          <span className="text-red-700 font-bold num">−{formatBRL(summary.expense)}</span>
-          <span className="text-gray-400 text-xs">{summary.neutral} neutros</span>
-          {summary.pending > 0 && (
-            <span className="text-amber-600 text-xs font-medium">{summary.pending} pendentes</span>
+          {isDemo && (
+            <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700" style={{ border: '1px solid #BFDBFE' }}>
+              <FlaskConical size={12} />
+              <span>Dados demonstrativos — <button className="underline font-medium" onClick={() => onNavigate('/conectar')}>importe seu extrato</button></span>
+            </div>
           )}
-          <span className="ml-auto font-bold text-base num" style={{ color: resultColor }}>
-            {formatBRL(summary.income - summary.expense)}
-          </span>
+        </div>
+
+        {/* ── Summary stat cards ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="#0E9E6E" />
+          <StatCard label="Despesas" value={`−${formatBRL(summary.expense)}`} color="#C9603F" />
+          <StatCard
+            label="Resultado"
+            value={formatBRL(summary.income - summary.expense)}
+            color={resultColor}
+            soft
+          />
+          <StatCard
+            label="Pendentes"
+            value={`${summary.pending}`}
+            sub={`${summary.neutral} neutros`}
+            color={summary.pending > 0 ? '#D97706' : '#98A2B3'}
+          />
         </div>
 
         {/* Filters */}
@@ -353,6 +366,16 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
         )}
       </div>
     </main>
+  )
+}
+
+function StatCard({ label, value, color, sub, soft }: { label: string; value: string; color: string; sub?: string; soft?: boolean }) {
+  return (
+    <div className="card p-4" style={soft ? { background: 'var(--accent-soft)' } : undefined}>
+      <p className="text-[10.5px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#98A2B3' }}>{label}</p>
+      <p className="text-[20px] font-extrabold num tracking-tight" style={{ color }}>{value}</p>
+      {sub && <p className="text-[11px] mt-0.5" style={{ color: '#98A2B3' }}>{sub}</p>}
+    </div>
   )
 }
 

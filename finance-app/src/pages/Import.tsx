@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { FileSpreadsheet } from 'lucide-react'
 import { ImportDropzone } from '../components/import/ImportDropzone'
 import { ImportPreview } from '../components/import/ImportPreview'
 import { ImportSummary } from '../components/import/ImportSummary'
@@ -53,17 +52,14 @@ export function Import({ onNavigate }: Props) {
   }
 
   return (
-    <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
+    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
+      <div className="p-5 md:p-7 max-w-4xl mx-auto w-full">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-xl" style={{ background: '#EEF2FF' }}>
-            <FileSpreadsheet size={20} color="#4F46E5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">Importar extrato</h1>
-            <p className="text-xs text-gray-500">XLSX, XLS ou CSV — colunas detectadas automaticamente</p>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Importação</h1>
+          <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
+            XLSX, XLS ou CSV — colunas detectadas automaticamente
+          </p>
         </div>
 
         {/* Steps indicator */}

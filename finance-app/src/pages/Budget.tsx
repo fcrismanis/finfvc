@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Target, TrendingDown, Copy, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingDown, Copy, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -88,19 +88,16 @@ export function Budget({ selectedMonth }: Props) {
   }
 
   return (
-    <main className="flex-1 overflow-y-auto p-5" style={{ background: 'var(--bg-page)' }}>
-      <div className="max-w-[860px] mx-auto space-y-4">
+    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
+      <div className="p-5 md:p-7 max-w-[920px] mx-auto w-full flex flex-col gap-5">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-            <Target size={18} color="var(--sidebar-active)" />
-          </div>
+        <div className="flex items-start gap-3 flex-wrap">
           <div>
-            <h1 className="text-base font-bold text-gray-900">Orçamento</h1>
-            <p className="text-xs text-gray-400">{formatMonthFull(month)}</p>
+            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Orçamento</h1>
+            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>Planejado × realizado · {formatMonthFull(month)}</p>
           </div>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-1 bg-white rounded-xl px-2 py-1.5" style={{ border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-card)' }}>
             <button
               onClick={() => setMonth(prevMonth(month))}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
