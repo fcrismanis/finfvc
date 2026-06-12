@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import './index.css'
 import { DataProvider, useData } from './context/DataContext'
 import { Sidebar } from './components/layout/Sidebar'
@@ -28,7 +28,20 @@ function AppShell() {
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
   const [activeView, setActiveView] = useState<ViewMode>('operational')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { loading, error, reload } = useData()
+  const { loading, error, reload, transactions } = useData()
+  const didInitMonth = useRef(false)
+
+  // On first data load, land on the latest month that actually has data
+  // (mock/demo runs jan–mai; today's month is empty → avoids blank screen)
+  useEffect(() => {
+    if (didInitMonth.current || transactions.length === 0) return
+    const months = transactions.map(t => t.competenceDate.slice(0, 7)).filter(Boolean)
+    if (months.length === 0) return
+    if (!months.includes(selectedMonth)) {
+      setSelectedMonth(months.sort()[months.length - 1])
+    }
+    didInitMonth.current = true
+  }, [transactions, selectedMonth])
 
   const placeholder = PLACEHOLDER_PAGES[activeRoute]
 
