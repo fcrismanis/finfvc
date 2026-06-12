@@ -47,7 +47,8 @@ echo
 
 echo "4) Criando pacote temporário..."
 rm -f finance-dist.tar.gz
-tar -czf finance-dist.tar.gz -C "$DIST_DIR" .
+# COPYFILE_DISABLE=1 impede o tar do macOS de injetar AppleDouble ._* no pacote
+COPYFILE_DISABLE=1 tar -czf finance-dist.tar.gz -C "$DIST_DIR" .
 ls -lh finance-dist.tar.gz
 echo
 
@@ -177,7 +178,6 @@ docker service create \
   --mount type=bind,src="$REMOTE_APP_ROOT",dst=/usr/share/nginx/html,readonly \
   --mount type=bind,src="$REMOTE_NGINX_DIR/default.conf",dst=/etc/nginx/conf.d/default.conf,readonly \
   --label "traefik.enable=true" \
-  --label "traefik.docker.network=$TRAEFIK_NETWORK" \
   --label "traefik.swarm.network=$TRAEFIK_NETWORK" \
   --label "traefik.http.services.finance-finance.loadbalancer.server.port=80" \
   --label "traefik.http.routers.finance-finance.service=finance-finance" \
@@ -185,11 +185,11 @@ docker service create \
   --label "traefik.http.routers.finance-finance.entrypoints=websecure" \
   --label "traefik.http.routers.finance-finance.tls=true" \
   --label "traefik.http.routers.finance-finance.tls.certresolver=$RESOLVER" \
-  --label "traefik.http.routers.finance-finance-http.rule=$HOST_RULE" \
-  --label "traefik.http.routers.finance-finance-http.entrypoints=web" \
-  --label "traefik.http.routers.finance-finance-http.middlewares=finance-finance-https" \
-  --label "traefik.http.middlewares.finance-finance-https.redirectscheme.scheme=https" \
   "$IMAGE"
+# NOTE: traefik.docker.network removido — em swarm provider essa key (do provider
+# docker) quebra a resolução do backend → router dropado → 404. Use só traefik.swarm.network.
+# http-router/middleware redundantes removidos — entrypoints.web.http.redirections (global)
+# já faz web→https.
 
 echo
 
