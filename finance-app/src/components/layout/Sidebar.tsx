@@ -42,7 +42,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
           m
         </div>
         <div>
-          <p className="font-extrabold text-[17px] tracking-tight leading-none" style={{ color: 'var(--sidebar-ink)', letterSpacing: '-0.02em' }}>monera</p>
+          <p className="font-extrabold text-[17px] tracking-tight leading-none" style={{ color: 'var(--sidebar-ink)', letterSpacing: '-0.02em' }}>FIN</p>
         </div>
       </div>
 

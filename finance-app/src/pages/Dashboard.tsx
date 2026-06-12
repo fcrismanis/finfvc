@@ -2,10 +2,8 @@ import { AlertTriangle, FlaskConical } from 'lucide-react'
 import { useDashboard } from '../hooks/useDashboard'
 import { SummaryCards } from '../components/dashboard/SummaryCards'
 import { ClarityFunnel } from '../components/dashboard/ClarityFunnel'
-import { ExpenseBreakdown } from '../components/dashboard/ExpenseBreakdown'
 import { BudgetComparison } from '../components/dashboard/BudgetComparison'
 import { AlertsPanel } from '../components/dashboard/AlertsPanel'
-import { MonthlyTrendChart } from '../components/dashboard/MonthlyTrendChart'
 import { TopExpenses } from '../components/dashboard/TopExpenses'
 import { formatBRL } from '../utils/currency'
 
@@ -15,8 +13,7 @@ interface Props {
 }
 
 export function Dashboard({ selectedMonth, onNavigate }: Props) {
-  const { summary, expenseBreakdown, funnelSteps, budgetComparison, alerts, trend, topExpenses, isDemo } = useDashboard(selectedMonth)
-  const trendValues = trend.map(t => t.operationalResult)
+  const { summary, funnelSteps, budgetComparison, alerts, topExpenses, isDemo } = useDashboard(selectedMonth)
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -48,7 +45,7 @@ export function Dashboard({ selectedMonth, onNavigate }: Props) {
         )}
 
         {/* KPI hero cards */}
-        <SummaryCards data={summary} trendValues={trendValues} />
+        <SummaryCards data={summary} trendValues={[]} />
 
         {/* ── Funil da Clareza ── central element */}
         <ClarityFunnel income={summary.operationalIncome} steps={funnelSteps} />
@@ -62,15 +59,9 @@ export function Dashboard({ selectedMonth, onNavigate }: Props) {
           <div className="h-px flex-1" style={{ background: 'var(--border-card)' }} />
         </div>
 
-        {/* Donut + budget */}
-        <div className="grid grid-cols-2 gap-[18px]">
-          <ExpenseBreakdown data={expenseBreakdown} totalExpenses={summary.totalExpenses} />
+        {/* Budget + alerts */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }}>
           <BudgetComparison data={budgetComparison} onNavigate={onNavigate} />
-        </div>
-
-        {/* Trend + alerts */}
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 18 }}>
-          <MonthlyTrendChart data={trend} />
           <AlertsPanel alerts={alerts} onNavigate={onNavigate} />
         </div>
 
