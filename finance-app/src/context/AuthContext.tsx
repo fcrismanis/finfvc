@@ -6,42 +6,79 @@ import { supabase } from '../lib/supabase'
 interface AuthContextValue {
   user: User | null
   session: Session | null
+  familyId: string | null
   loading: boolean
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+async function resolveFamilyId(userId: string): Promise<string | null> {
+  // Try existing membership first
+  const { data, error } = await supabase
+    .from('family_members')
+    .select('family_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!error && data) return data.family_id as string
+
+  // No membership — bootstrap via SECURITY DEFINER RPC
+  const { data: newId, error: rpcError } = await supabase
+    .rpc('create_family_for_user', { p_name: 'Minha Família' })
+
+  if (rpcError) {
+    console.error('[AuthContext] create_family_for_user failed:', rpcError.message)
+    return null
+  }
+
+  return newId as string
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // In local mode loading starts false — no Supabase calls ever made
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [familyId, setFamilyId] = useState<string | null>(null)
+  // loading=true only in supabase mode — local mode is instantly ready
   const [loading, setLoading] = useState(DATA_PROVIDER === 'supabase')
 
   useEffect(() => {
     if (DATA_PROVIDER !== 'supabase') return
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
+    async function handleSession(sess: Session | null) {
+      const u = sess?.user ?? null
+      setUser(u)
+      setSession(sess)
+      if (u) {
+        const fid = await resolveFamilyId(u.id)
+        setFamilyId(fid)
+      } else {
+        setFamilyId(null)
+      }
       setLoading(false)
-    })
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
+    // Initial session check
+    supabase.auth.getSession().then(({ data }) => handleSession(data.session))
+
+    // Subscribe to subsequent auth events (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+      void handleSession(sess)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
   async function signOut() {
-    if (DATA_PROVIDER === 'supabase') await supabase.auth.signOut()
+    if (DATA_PROVIDER === 'supabase') {
+      await supabase.auth.signOut()
+      setFamilyId(null)
+    }
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session, familyId, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

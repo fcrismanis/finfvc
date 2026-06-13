@@ -3,13 +3,11 @@ import type { IDataProvider } from '../providers/data.provider'
 import { LocalDataProvider } from '../providers/local.data.provider'
 import { SupabaseDataProvider } from '../providers/supabase.data.provider'
 
-export function createDataProvider(): IDataProvider {
+// NOTE: adapter.factory.ts is a misnomer — it creates IDataProvider, not IDataAdapter.
+// Rename deferred to avoid churn; tracked as tech-debt.
+export function createDataProvider(familyId?: string): IDataProvider {
   if (DATA_PROVIDER === 'supabase') {
-    // familyId is injected here once auth is implemented
-    return new SupabaseDataProvider()
+    return new SupabaseDataProvider(familyId)
   }
   return new LocalDataProvider()
 }
-
-// Singleton — created once at module init, shared across the app
-export const dataProvider: IDataProvider = createDataProvider()

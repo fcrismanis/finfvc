@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import type { Transaction, Budget } from '../types'
-import { dataProvider } from '../adapters/adapter.factory'
+import { useAuth } from './AuthContext'
+import { createDataProvider } from '../adapters/adapter.factory'
 
 interface DataContextValue {
   transactions: Transaction[]
@@ -17,6 +18,11 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null)
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { familyId } = useAuth()
+
+  // Provider instance recreated when familyId changes (login/logout in supabase mode)
+  const provider = useMemo(() => createDataProvider(familyId ?? undefined), [familyId])
+
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [isDemo, setIsDemo] = useState(false)
@@ -27,7 +33,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const result = await dataProvider.load()
+      const result = await provider.load()
       setTransactions(result.transactions)
       setBudgets(result.budgets)
       setIsDemo(result.isDemo)
@@ -36,25 +42,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [provider])
 
-  // Initial load on mount
+  // Re-load whenever provider changes (covers initial mount + familyId resolution)
   useEffect(() => { void loadData() }, [loadData])
 
   const reload = useCallback(() => { void loadData() }, [loadData])
 
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
-    void dataProvider.updateTransaction(id, patch).then(() => loadData())
-  }, [loadData])
+    void provider.updateTransaction(id, patch).then(() => loadData())
+  }, [provider, loadData])
 
   const saveBudget = useCallback((budget: Budget) => {
-    void dataProvider.saveBudget(budget).then(() => loadData())
-  }, [loadData])
+    void provider.saveBudget(budget).then(() => loadData())
+  }, [provider, loadData])
 
   const appendTransactions = useCallback(async (txns: Transaction[]) => {
-    await dataProvider.appendTransactions(txns)
+    await provider.appendTransactions(txns)
     void loadData()
-  }, [loadData])
+  }, [provider, loadData])
 
   return (
     <DataContext.Provider value={{

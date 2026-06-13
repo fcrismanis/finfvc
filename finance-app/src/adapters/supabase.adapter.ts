@@ -71,6 +71,12 @@ function toTransaction(row: DbTransaction): Transaction {
   }
 }
 
+// SQL enum lacks 'reimbursement' — map to 'neutral' until migration 0004 adds it.
+// TODO: remove this shim after 0004_add_reimbursement_enum.sql is applied.
+function safeClassificationType(ct: string): string {
+  return ct === 'reimbursement' ? 'neutral' : ct
+}
+
 function toDbRow(t: Transaction, familyId: string): Omit<DbTransaction, 'created_at' | 'updated_at'> {
   return {
     id: t.id,
@@ -79,7 +85,7 @@ function toDbRow(t: Transaction, familyId: string): Omit<DbTransaction, 'created
     original_description: t.originalDescription,
     amount: t.amount,
     transaction_type: t.type,
-    classification_type: t.classificationType,
+    classification_type: safeClassificationType(t.classificationType),
     transaction_date: t.transactionDate,
     competence_date: t.competenceDate,
     payment_date: t.paymentDate ?? null,
