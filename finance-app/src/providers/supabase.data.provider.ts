@@ -37,17 +37,6 @@ function fromDbBudget(row: DbBudget): Budget {
   }
 }
 
-function toDbBudget(b: Budget, familyId: string): Omit<DbBudget, 'id'> & { id: string } {
-  return {
-    id: b.id,
-    family_id: familyId,
-    macro_category_id: b.macroCategoryId ?? null,
-    category_id: b.categoryId ?? null,
-    month: b.referenceMonth,
-    amount: b.plannedAmount,
-  }
-}
-
 function fromDbClosing(row: DbClosing): MonthClosing {
   const meta = (row.checklist ?? {}) as Record<string, unknown>
   return {
@@ -133,12 +122,44 @@ export class SupabaseDataProvider implements IDataProvider {
   async saveBudget(budget: Budget): Promise<void> {
     if (!this.familyId) return
 
-    const row = toDbBudget(budget, this.familyId)
-    const { error } = await supabase
-      .from('budgets')
-      .upsert(row, { onConflict: 'family_id,macro_category_id,category_id,month', ignoreDuplicates: false })
+    // budgets.id is a DB-generated uuid — the app's string id (e.g. 'bud_2026-06_mac_x')
+    // is NOT a valid uuid, so we never send it. We match on the natural key instead.
+    // uq_budget = (family_id, macro_category_id, category_id, month). Postgres treats a
+    // NULL category_id as distinct, so an onConflict upsert can't reliably target macro-level
+    // rows (category_id IS NULL) and would create duplicates. Hence: explicit find → update/insert.
+    const macroId = budget.macroCategoryId ?? null
+    const categoryId = budget.categoryId ?? null
 
-    if (error) throw new Error(`[SupabaseDataProvider] saveBudget: ${error.message}`)
+    let lookup = supabase
+      .from('budgets')
+      .select('id')
+      .eq('family_id', this.familyId)
+      .eq('month', budget.referenceMonth)
+    lookup = macroId === null ? lookup.is('macro_category_id', null) : lookup.eq('macro_category_id', macroId)
+    lookup = categoryId === null ? lookup.is('category_id', null) : lookup.eq('category_id', categoryId)
+
+    const { data: existing, error: selErr } = await lookup.maybeSingle()
+    if (selErr) throw new Error(`[SupabaseDataProvider] saveBudget lookup: ${selErr.message}`)
+
+    if (existing) {
+      const { error } = await supabase
+        .from('budgets')
+        .update({ amount: budget.plannedAmount, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .eq('family_id', this.familyId)
+      if (error) throw new Error(`[SupabaseDataProvider] saveBudget update: ${error.message}`)
+    } else {
+      const { error } = await supabase
+        .from('budgets')
+        .insert({
+          family_id: this.familyId,
+          macro_category_id: macroId,
+          category_id: categoryId,
+          month: budget.referenceMonth,
+          amount: budget.plannedAmount,
+        })
+      if (error) throw new Error(`[SupabaseDataProvider] saveBudget insert: ${error.message}`)
+    }
   }
 
   async appendTransactions(txns: Transaction[]): Promise<void> {

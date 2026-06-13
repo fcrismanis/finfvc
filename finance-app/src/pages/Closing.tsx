@@ -1,32 +1,32 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Lock, Unlock, CheckSquare, Square, AlertTriangle, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL, formatPct } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMonthSummary, getBudgetComparison, getRedemptionTotal } from '../engine/calculate'
-import { getClosing, saveClosing, closeMonth, reopenMonth, CHECKLIST_ITEMS } from '../services/closing.service'
+import { emptyClosing, CHECKLIST_ITEMS } from '../services/closing.service'
 
 interface Props {
   selectedMonth: string
 }
 
 export function Closing({ selectedMonth }: Props) {
-  const { transactions, budgets } = useData()
+  const { transactions, budgets, closings, saveClosing } = useData()
   const [month, setMonth] = useState(selectedMonth)
-  const [closing, setClosing] = useState(() => getClosing(month))
-  const [notes, setNotes] = useState(() => getClosing(month).notes)
+  const [closing, setClosing] = useState(() => closings.find(c => c.month === month) ?? emptyClosing(month))
+  const [notes, setNotes] = useState(closing.notes)
   const [notesEdited, setNotesEdited] = useState(false)
 
-  function loadClosing(m: string) {
-    const c = getClosing(m)
+  // Sync local state when closings load from provider or the month changes
+  useEffect(() => {
+    const c = closings.find(c => c.month === month) ?? emptyClosing(month)
     setClosing(c)
     setNotes(c.notes)
     setNotesEdited(false)
-  }
+  }, [closings, month])
 
   function changeMonth(m: string) {
     setMonth(m)
-    loadClosing(m)
   }
 
   const summary = useMemo(() => getMonthSummary(transactions, month, budgets), [transactions, month, budgets])
@@ -52,13 +52,15 @@ export function Closing({ selectedMonth }: Props) {
   }
 
   function handleClose() {
-    closeMonth(month)
-    loadClosing(month)
+    const updated = { ...closing, isClosed: true, closedAt: new Date().toISOString() }
+    setClosing(updated)
+    saveClosing(updated)
   }
 
   function handleReopen() {
-    reopenMonth(month)
-    loadClosing(month)
+    const updated = { ...closing, isClosed: false, reopenedAt: new Date().toISOString() }
+    setClosing(updated)
+    saveClosing(updated)
   }
 
   function saveNotes() {

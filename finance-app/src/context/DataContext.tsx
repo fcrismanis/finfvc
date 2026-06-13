@@ -1,17 +1,19 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
-import type { Transaction, Budget } from '../types'
+import type { Transaction, Budget, MonthClosing } from '../types'
 import { useAuth } from './AuthContext'
 import { createDataProvider } from '../adapters/adapter.factory'
 
 interface DataContextValue {
   transactions: Transaction[]
   budgets: Budget[]
+  closings: MonthClosing[]
   isDemo: boolean
   loading: boolean
   error: string | null
   reload: () => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
   saveBudget: (budget: Budget) => void
+  saveClosing: (closing: MonthClosing) => void
   appendTransactions: (txns: Transaction[]) => Promise<void>
 }
 
@@ -25,6 +27,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
+  const [closings, setClosings] = useState<MonthClosing[]>([])
   const [isDemo, setIsDemo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +40,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTransactions(result.transactions)
       setBudgets(result.budgets)
       setIsDemo(result.isDemo)
+      const cl = await provider.getMonthlyClosings()
+      setClosings(cl)
     } catch (e) {
       setError((e as Error).message ?? 'Erro ao carregar dados')
     } finally {
@@ -54,7 +59,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [provider, loadData])
 
   const saveBudget = useCallback((budget: Budget) => {
-    void provider.saveBudget(budget).then(() => loadData())
+    void provider.saveBudget(budget).then(() => loadData(false))
+  }, [provider, loadData])
+
+  const saveClosing = useCallback((closing: MonthClosing) => {
+    void provider.saveMonthlyClosing(closing).then(() => loadData(false))
   }, [provider, loadData])
 
   const appendTransactions = useCallback(async (txns: Transaction[]) => {
@@ -64,8 +73,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      transactions, budgets, isDemo, loading, error,
-      reload, updateTransaction, saveBudget, appendTransactions,
+      transactions, budgets, closings, isDemo, loading, error,
+      reload, updateTransaction, saveBudget, saveClosing, appendTransactions,
     }}>
       {children}
     </DataContext.Provider>

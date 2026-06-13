@@ -5,16 +5,14 @@ import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMacroCategoryTotals } from '../engine/calculate'
-import {
-  upsertMacroBudget, copyBudgetFromMonth, suggestBudgets, getPrevMonthBudgets,
-} from '../services/budget.service'
+import { suggestBudgets } from '../services/budget.service'
 
 interface Props {
   selectedMonth: string
 }
 
 export function Budget({ selectedMonth }: Props) {
-  const { transactions, budgets, reload, saveBudget } = useData()
+  const { transactions, budgets, saveBudget } = useData()
   const [month, setMonth] = useState(selectedMonth)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -43,30 +41,49 @@ export function Budget({ selectedMonth }: Props) {
     setEditValue(existing ? String(existing.plannedAmount) : '')
   }
 
+  // Reuse the id of an existing budget for the same month + macro/category so that
+  // saveBudget upserts (both LocalProvider findIndex-by-id and Supabase natural-key)
+  // instead of creating duplicates.
+  function budgetIdFor(macroCategoryId: string | undefined, categoryId: string | undefined): string {
+    const existing = budgets.find(b =>
+      b.referenceMonth === month && b.macroCategoryId === macroCategoryId && b.categoryId === categoryId
+    )
+    return existing?.id ?? `bud_${month}_${macroCategoryId ?? categoryId ?? Date.now()}`
+  }
+
   function saveEdit(macroCategoryId: string) {
     const val = parseFloat(editValue.replace(',', '.'))
     if (!isNaN(val) && val >= 0) {
-      upsertMacroBudget(month, macroCategoryId, val)
-      reload()
+      saveBudget({
+        id: budgetIdFor(macroCategoryId, undefined),
+        referenceMonth: month,
+        macroCategoryId,
+        plannedAmount: val,
+      })
     }
     setEditingId(null)
   }
 
   function handleCopyPrev() {
     const prev = prevMonth(month)
-    const prevBudgets = getPrevMonthBudgets(month)
+    const prevBudgets = budgets.filter(b => b.referenceMonth === prev)
     if (prevBudgets.length === 0) {
       alert(`Nenhum orçamento salvo em ${prev} para copiar.`)
       return
     }
-    copyBudgetFromMonth(prev, month)
-    reload()
+    for (const b of prevBudgets) {
+      saveBudget({
+        ...b,
+        id: budgetIdFor(b.macroCategoryId, b.categoryId),
+        referenceMonth: month,
+      })
+    }
   }
 
   function handleSuggest() {
     const suggestions = suggestBudgets(transactions, month)
     for (const s of suggestions) {
-      saveBudget(s)
+      saveBudget({ ...s, id: budgetIdFor(s.macroCategoryId, s.categoryId) })
     }
   }
 
