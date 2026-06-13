@@ -24,15 +24,23 @@ const PLACEHOLDER_PAGES: Record<string, { title: string; description: string }> 
   '/configuracoes': { title: 'Configurações', description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
 }
 
+const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
+
 function MigrationBanner({ onNavigate }: { onNavigate: (route: string) => void }) {
   const { familyId } = useAuth()
   const [show, setShow] = useState(false)
 
   useEffect(() => {
     if (DATA_PROVIDER !== 'supabase' || !familyId) return
+    if (localStorage.getItem(MIGRATION_BANNER_DISMISSED_KEY)) return
     const raw = localStorage.getItem('finance_transactions')
     setShow(!!raw && raw !== '[]' && raw !== 'null')
   }, [familyId])
+
+  function dismiss() {
+    localStorage.setItem(MIGRATION_BANNER_DISMISSED_KEY, '1')
+    setShow(false)
+  }
 
   if (!show) return null
 
@@ -45,16 +53,29 @@ function MigrationBanner({ onNavigate }: { onNavigate: (route: string) => void }
       <span style={{ fontSize: '0.83rem', color: '#92400e' }}>
         Dados locais detectados no navegador.
       </span>
-      <button
-        onClick={() => onNavigate('/migrar')}
-        style={{
-          background: 'var(--accent)', color: '#fff', border: 'none',
-          borderRadius: 6, padding: '0.3rem 0.85rem',
-          fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-        }}
-      >
-        Migrar →
-      </button>
+      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+        <button
+          onClick={() => onNavigate('/migrar')}
+          style={{
+            background: 'var(--accent)', color: '#fff', border: 'none',
+            borderRadius: 6, padding: '0.3rem 0.85rem',
+            fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Migrar →
+        </button>
+        <button
+          onClick={dismiss}
+          aria-label="Fechar aviso"
+          style={{
+            background: 'transparent', color: '#92400e', border: '1px solid #fde68a',
+            borderRadius: 6, padding: '0.3rem 0.6rem',
+            fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+      </div>
     </div>
   )
 }
