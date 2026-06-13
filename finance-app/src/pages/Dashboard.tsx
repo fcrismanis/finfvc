@@ -62,7 +62,10 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
         {/* ── Status + KPIs ── */}
         <div className="card flex flex-col xl:flex-row overflow-hidden">
           <div className="flex-1 p-5 lg:p-[22px] min-w-0">
-            <div className="inline-flex items-center gap-2 mb-3">
+            <div
+              className="inline-flex items-center gap-2 mb-3 rounded-full px-3 py-1.5"
+              style={{ background: 'var(--accent-soft)' }}
+            >
               <span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
               <span className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>
                 {isCurrent ? 'Em andamento' : 'Mês fechado'}
@@ -117,7 +120,7 @@ function Kpi({ label, value, color, soft }: { label: string; value: number; colo
       style={{ background: soft ? 'var(--accent-soft)' : undefined }}
     >
       <span className="text-[10.5px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#98A2B3' }}>{label}</span>
-      <span className="text-[19px] sm:text-[18px] lg:text-[22px] font-extrabold num tracking-tight truncate" style={{ color }}>{formatBRL(value)}</span>
+      <span className="text-[20px] sm:text-[19px] lg:text-[25px] font-extrabold num tracking-tight truncate" style={{ color }}>{formatBRL(value)}</span>
     </div>
   )
 }

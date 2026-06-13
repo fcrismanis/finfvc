@@ -9,8 +9,16 @@ interface Props {
   partialTotal?: number
 }
 
-const ENTRY_GREEN = '#0E9E6E'
-const SALDO_GREEN = '#0E9E6E'
+const ENTRY_GREEN = '#15803D'
+const SALDO_GREEN = '#15803D'
+const CRITICAL_RED = '#BB3E36'
+// Rampa índigo do padrão Home B — grupos de despesa sempre nessa escala,
+// vermelho reservado pra Dívidas (isCritical)
+const INDIGO_RAMP = ['#4F46E5', '#6366F1', '#818CF8', '#A5B4FC', '#C7D2FE', '#818CF8', '#6366F1']
+
+function stepColor(index: number, isCritical: boolean): string {
+  return isCritical ? CRITICAL_RED : INDIGO_RAMP[index % INDIGO_RAMP.length]
+}
 
 function compactBRL(v: number): string {
   const abs = Math.abs(v)
@@ -48,7 +56,7 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
     color: ENTRY_GREEN, top: 0, height: H,
   })
 
-  for (const s of stepsWithData) {
+  stepsWithData.forEach((s, idx) => {
     const before = s.runningBalance + s.amount
     const top = (income - before) * scale
     const height = Math.max(s.amount * scale, 2)
@@ -56,12 +64,12 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
       key: s.id,
       label: s.label.split(' ')[0],
       topLabel: `− ${compactBRL(s.amount)}`,
-      color: s.color,
+      color: stepColor(idx, s.isCritical),
       top,
       height,
       isCritical: s.isCritical,
     })
-  }
+  })
 
   const saldoTop = (income - finalBalance) * scale
   cols.push({
@@ -90,7 +98,7 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
             <div
               key={c.key}
               className="flex-1 text-center text-[12.5px] font-bold num"
-              style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? '#DC2626' : '#475569' }}
+              style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? CRITICAL_RED : '#3D478F' }}
             >
               {c.topLabel}
             </div>
@@ -106,9 +114,9 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
               <div key={c.key} className="flex-1" style={{ position: 'relative' }}>
                 <div
                   style={{
-                    position: 'absolute', left: '14%', right: '14%',
+                    position: 'absolute', left: '9%', right: '9%',
                     top: c.top, height: c.height, background: c.color,
-                    borderRadius: 6, transition: 'top 0.4s ease, height 0.4s ease',
+                    borderRadius: 10, transition: 'top 0.4s ease, height 0.4s ease',
                   }}
                 />
                 {showConnector && (
@@ -133,19 +141,19 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
         </div>
 
         <p className="text-[12px] mt-5" style={{ color: '#98A2B3' }}>
-          A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra.
+          A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra. Clique em um grupo para ver as categorias.
         </p>
       </div>
 
       {/* ── Mobile: fluxo vertical empilhado (<900px) ── */}
       <div className="min-[900px]:hidden flex flex-col gap-2">
         <FunnelRow label="Entrou" amount={income} color={ENTRY_GREEN} bold income />
-        {stepsWithData.map(s => (
+        {stepsWithData.map((s, idx) => (
           <FunnelRow
             key={s.id}
             label={s.label}
             amount={-s.amount}
-            color={s.isCritical ? '#DC2626' : s.color}
+            color={stepColor(idx, s.isCritical)}
             running={s.runningBalance}
           />
         ))}
@@ -182,7 +190,7 @@ function FunnelHeader() {
     <div className="mb-4">
       <h3 className="text-[15px] font-bold" style={{ color: '#101828' }}>Funil da Clareza</h3>
       <p className="text-[12px] mt-0.5" style={{ color: '#98A2B3' }}>
-        entrada → saídas por grupo → sobra
+        entrada → saídas por grupo → sobra · clique para detalhar
       </p>
     </div>
   )

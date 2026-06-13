@@ -23,13 +23,13 @@ const tools = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-const DARK = '#151C2E'
+const DARK = '#262B4D'
 const DARK_BORDER = 'rgba(255,255,255,0.08)'
 
 export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   return (
     <aside
-      className="flex flex-col w-[220px] min-w-[220px] h-full"
+      className="flex flex-col w-[240px] min-w-[240px] h-full"
       style={{ background: DARK }}
     >
       {/* Logo */}
@@ -72,11 +72,11 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       {/* User */}
       <div
         className="mx-3 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
-        style={{ background: 'rgba(255,255,255,0.05)', borderTop: 'none' }}
+        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 text-white"
-          style={{ background: 'rgba(29,95,224,0.5)' }}
+          style={{ background: 'rgba(99,102,241,0.55)' }}
         >
           FC
         </div>

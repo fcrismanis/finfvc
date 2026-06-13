@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --sidebar-bg: #FFFFFF;
-  --sidebar-border: #E9EDF3;
-  --sidebar-active: #1D5FE0;
-  --sidebar-active-soft: #EAF1FE;
+  --sidebar-bg: #262B4D;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-active: #4F46E5;
+  --sidebar-active-soft: #EEF0FF;
   --sidebar-text: #667085;
   --sidebar-ink: #101828;
-  --bg-page: #F5F6F8;
+  --bg-page: #F4F3F0;
   --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.03);
   --border-card: #ECEEF2;
-  --radius-card: 16px;
-  --accent: #1D5FE0;
-  --accent-soft: #EAF1FE;
-  --color-pos: #0E9E6E;
+  --radius-card: 18px;
+  --accent: #4F46E5;
+  --accent-soft: #EEF0FF;
+  --color-pos: #15803D;
   --color-neg: #C9603F;
   --color-over: #DC4E41;
 }
@@ -73,7 +73,8 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 .sidebar-dark .nav-item.active {
-  background: rgba(29, 95, 224, 0.3);
+  background: rgba(99, 102, 241, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   color: #fff;
   font-weight: 600;
 }
@@ -183,7 +184,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .sidebar-shell {
     position: fixed;
     top: 0;
-    left: -220px;
+    left: -240px;
     height: 100%;
     z-index: 50;
     transition: left 0.22s ease;
