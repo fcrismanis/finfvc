@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
 import { Menu } from 'lucide-react'
 import './index.css'
 import { DataProvider, useData } from './context/DataContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import { Sidebar } from './components/layout/Sidebar'
 import { LoadingState, ErrorState } from './components/ui/LoadingState'
+import { Login } from './pages/Login'
 import { currentYearMonth } from './utils/date'
+import { DATA_PROVIDER } from './config/env'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard    = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -104,10 +107,22 @@ function AppShell() {
   )
 }
 
+function AuthGate({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth()
+  if (DATA_PROVIDER !== 'supabase') return <>{children}</>
+  if (loading) return <LoadingState fullPage message="Verificando autenticação…" />
+  if (!user) return <Login />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
-    <DataProvider>
-      <AppShell />
-    </DataProvider>
+    <AuthProvider>
+      <AuthGate>
+        <DataProvider>
+          <AppShell />
+        </DataProvider>
+      </AuthGate>
+    </AuthProvider>
   )
 }
