@@ -24,17 +24,17 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
 
   return (
     <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
-      <div className="p-5 md:p-7 max-w-[1320px] mx-auto w-full flex flex-col gap-5">
+      <div className="px-4 sm:px-5 lg:px-7 py-5 max-w-[1320px] mx-auto w-full flex flex-col gap-4 lg:gap-5">
 
         {/* ── Page header ── */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Visão geral</h1>
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[24px] sm:text-[26px] lg:text-[30px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Visão geral</h1>
             <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
               Resultado do mês e jornada do dinheiro · {formatMonthFull(selectedMonth)}
             </p>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <div
               className="flex items-center gap-1 rounded-xl px-2 py-1.5 bg-white"
               style={{ border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-card)' }}
@@ -42,7 +42,7 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
               <button onClick={() => onMonthChange(prevMonth(selectedMonth))} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors">
                 <ChevronLeft size={15} />
               </button>
-              <span className="text-[13.5px] font-bold text-gray-800 min-w-[110px] text-center select-none">
+              <span className="text-[13.5px] font-bold text-gray-800 min-w-[96px] sm:min-w-[110px] text-center select-none">
                 {formatMonthFull(selectedMonth)}
               </span>
               <button onClick={() => canGoNext && onMonthChange(nextMonth(selectedMonth))} disabled={!canGoNext} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition-colors">
@@ -51,7 +51,7 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
             </div>
             <button
               onClick={() => onNavigate('/lancamentos')}
-              className="flex items-center gap-1.5 text-[13px] font-bold text-white px-4 py-2.5 rounded-xl transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 text-[13px] font-bold text-white px-4 py-2.5 rounded-xl transition-opacity hover:opacity-90 whitespace-nowrap"
               style={{ background: 'var(--accent)', boxShadow: 'var(--shadow-card)' }}
             >
               <Plus size={15} /> Lançar
@@ -60,35 +60,34 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
         </div>
 
         {/* ── Status + KPIs ── */}
-        <div className="card flex flex-col lg:flex-row overflow-hidden">
-          <div className="flex-1 p-[22px]">
+        <div className="card flex flex-col xl:flex-row overflow-hidden">
+          <div className="flex-1 p-5 lg:p-[22px] min-w-0">
             <div className="inline-flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
               <span className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>
                 {isCurrent ? 'Em andamento' : 'Mês fechado'}
               </span>
             </div>
-            <p className="text-[15px] leading-relaxed" style={{ color: '#475569' }}>
+            <p className="text-[14px] lg:text-[15px] leading-relaxed" style={{ color: '#475569' }}>
               {isCurrent
                 ? <>Mês em andamento — dia {day} de {totalDays}. Os fixos já saíram; a leitura completa fecha no fim do mês.</>
                 : <>Leitura completa do mês. Entradas, saídas e sobra consolidados.</>}
             </p>
           </div>
-          <div className="flex" style={{ borderTop: '1px solid var(--border-card)' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 xl:flex divide-y sm:divide-y-0 sm:divide-x xl:divide-y-0 divide-[#ECEEF2] border-t xl:border-t-0 xl:border-l border-[#ECEEF2]">
             <Kpi label="Entrou" value={summary.operationalIncome} color="#0E9E6E" />
-            <Kpi label="Saiu" value={summary.totalExpenses} color="#101828" border />
+            <Kpi label="Saiu" value={summary.totalExpenses} color="#101828" />
             <Kpi
               label={isCurrent ? 'Saldo parcial' : 'Saldo do mês'}
               value={summary.operationalResult}
               color="var(--accent)"
-              border
               soft
             />
           </div>
         </div>
 
-        {/* ── Funil + Planejado ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-5">
+        {/* ── Funil + Planejado ── (lado a lado só ≥1280) */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4 lg:gap-5">
           <ClarityFunnel
             income={summary.operationalIncome}
             steps={funnelSteps}
@@ -100,7 +99,7 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
         </div>
 
         {/* ── Bottom row ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
           <VillainsCard data={budgetComparison} />
           <AlertsCard alerts={alerts} isPartial={isCurrent} daysLeft={daysLeft} />
           <TopCard data={topExpenses} onNavigate={onNavigate} />
@@ -111,14 +110,14 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
   )
 }
 
-function Kpi({ label, value, color, border, soft }: { label: string; value: number; color: string; border?: boolean; soft?: boolean }) {
+function Kpi({ label, value, color, soft }: { label: string; value: number; color: string; soft?: boolean }) {
   return (
     <div
-      className="px-6 py-[22px] flex flex-col justify-center min-w-[140px]"
-      style={{ borderLeft: border ? '1px solid var(--border-card)' : undefined, background: soft ? 'var(--accent-soft)' : undefined }}
+      className="px-5 lg:px-6 py-4 lg:py-[22px] flex flex-col justify-center min-w-0 xl:min-w-[150px]"
+      style={{ background: soft ? 'var(--accent-soft)' : undefined }}
     >
       <span className="text-[10.5px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#98A2B3' }}>{label}</span>
-      <span className="text-[24px] font-extrabold num tracking-tight" style={{ color }}>{formatBRL(value)}</span>
+      <span className="text-[19px] sm:text-[18px] lg:text-[22px] font-extrabold num tracking-tight truncate" style={{ color }}>{formatBRL(value)}</span>
     </div>
   )
 }

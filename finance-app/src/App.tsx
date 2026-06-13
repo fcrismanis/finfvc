@@ -76,9 +76,9 @@ function AppShell() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Mobile-only top bar with hamburger */}
+        {/* Mobile/tablet top bar with hamburger — shown below 1024px */}
         <div
-          className="md:hidden flex items-center gap-3 px-4 py-3 bg-white flex-shrink-0"
+          className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border-card)' }}
         >
           <button

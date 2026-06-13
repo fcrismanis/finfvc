@@ -82,72 +82,97 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
         </div>
       )}
 
-      {/* Top value labels */}
-      <div className="flex items-end gap-2" style={{ marginBottom: 6 }}>
-        {cols.map(c => (
-          <div
-            key={c.key}
-            className="flex-1 text-center text-[12.5px] font-bold num"
-            style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? '#DC2626' : '#475569' }}
-          >
-            {c.topLabel}
-          </div>
-        ))}
-      </div>
+      {/* ── Desktop: waterfall horizontal (≥900px) ── */}
+      <div className="hidden min-[900px]:block">
+        {/* Top value labels */}
+        <div className="flex items-end gap-2" style={{ marginBottom: 6 }}>
+          {cols.map(c => (
+            <div
+              key={c.key}
+              className="flex-1 text-center text-[12.5px] font-bold num"
+              style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? '#DC2626' : '#475569' }}
+            >
+              {c.topLabel}
+            </div>
+          ))}
+        </div>
 
-      {/* Bars */}
-      <div className="flex items-stretch" style={{ height: H, position: 'relative' }}>
-        {cols.map((c, i) => {
-          const next = cols[i + 1]
-          // connector: thin line from this bar's bottom to the next bar's top (shared running-balance level)
-          const showConnector = next && c.key !== 'entry'
-          return (
-            <div key={c.key} className="flex-1" style={{ position: 'relative' }}>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '14%',
-                  right: '14%',
-                  top: c.top,
-                  height: c.height,
-                  background: c.color,
-                  borderRadius: 6,
-                  transition: 'top 0.4s ease, height 0.4s ease',
-                }}
-              />
-              {showConnector && (
+        {/* Bars */}
+        <div className="flex items-stretch" style={{ height: H, position: 'relative' }}>
+          {cols.map((c, i) => {
+            const next = cols[i + 1]
+            const showConnector = next && c.key !== 'entry'
+            return (
+              <div key={c.key} className="flex-1" style={{ position: 'relative' }}>
                 <div
                   style={{
-                    position: 'absolute',
-                    left: '86%',
-                    width: '28%',
-                    top: c.top + c.height,
-                    height: 1.5,
-                    background: '#D7DCE5',
+                    position: 'absolute', left: '14%', right: '14%',
+                    top: c.top, height: c.height, background: c.color,
+                    borderRadius: 6, transition: 'top 0.4s ease, height 0.4s ease',
                   }}
                 />
-              )}
+                {showConnector && (
+                  <div style={{ position: 'absolute', left: '86%', width: '28%', top: c.top + c.height, height: 1.5, background: '#D7DCE5' }} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Bottom labels */}
+        <div className="flex gap-2" style={{ marginTop: 8 }}>
+          {cols.map(c => (
+            <div
+              key={c.key}
+              className="flex-1 text-center text-[12px] font-semibold"
+              style={{ color: c.key === 'entry' || c.key === 'saldo' || c.label === 'Alimentação' ? '#101828' : '#667085' }}
+            >
+              {c.label}
             </div>
-          )
-        })}
+          ))}
+        </div>
+
+        <p className="text-[12px] mt-5" style={{ color: '#98A2B3' }}>
+          A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra.
+        </p>
       </div>
 
-      {/* Bottom labels */}
-      <div className="flex gap-2" style={{ marginTop: 8 }}>
-        {cols.map(c => (
-          <div
-            key={c.key}
-            className="flex-1 text-center text-[12px] font-semibold"
-            style={{ color: c.key === 'entry' || c.key === 'saldo' || c.label === 'Alimentação' ? '#101828' : '#667085' }}
-          >
-            {c.label}
-          </div>
+      {/* ── Mobile: fluxo vertical empilhado (<900px) ── */}
+      <div className="min-[900px]:hidden flex flex-col gap-2">
+        <FunnelRow label="Entrou" amount={income} color={ENTRY_GREEN} bold income />
+        {stepsWithData.map(s => (
+          <FunnelRow
+            key={s.id}
+            label={s.label}
+            amount={-s.amount}
+            color={s.isCritical ? '#DC2626' : s.color}
+            running={s.runningBalance}
+          />
         ))}
+        <FunnelRow label="Saldo" amount={finalBalance} color={SALDO_GREEN} bold saldo />
       </div>
+    </div>
+  )
+}
 
-      <p className="text-[12px] mt-5" style={{ color: '#98A2B3' }}>
-        A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra.
-      </p>
+function FunnelRow({ label, amount, color, running, bold, income, saldo }: {
+  label: string; amount: number; color: string; running?: number; bold?: boolean; income?: boolean; saldo?: boolean
+}) {
+  const bg = income ? '#F0FDF4' : saldo ? '#F0FDF4' : '#F8FAFC'
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5" style={{ background: bg }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className={`text-[13px] truncate ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color: '#101828' }}>{label}</span>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <span className="text-[14px] font-bold num" style={{ color: amount < 0 ? '#475569' : color }}>
+          {amount < 0 ? '−' : ''}{formatBRL(Math.abs(amount))}
+        </span>
+        {running != null && (
+          <span className="block text-[10.5px] num" style={{ color: '#98A2B3' }}>saldo {formatBRL(running)}</span>
+        )}
+      </div>
     </div>
   )
 }

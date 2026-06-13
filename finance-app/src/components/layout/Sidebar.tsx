@@ -49,7 +49,7 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
         {onClose && (
           <button
             onClick={onClose}
-            className="md:hidden ml-auto w-7 h-7 flex items-center justify-center rounded-lg"
+            className="lg:hidden ml-auto w-7 h-7 flex items-center justify-center rounded-lg"
             style={{ color: 'rgba(255,255,255,0.5)' }}
             aria-label="Fechar menu"
           >

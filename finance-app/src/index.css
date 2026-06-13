@@ -168,6 +168,9 @@ body {
 .page-content { margin: 0 auto; }
 .section-gap  { display: flex; flex-direction: column; gap: 16px; }
 
+/* ── Global overflow guard — nunca scroll horizontal indevido ── */
+html, body { overflow-x: hidden; max-width: 100%; }
+
 /* ── Responsive sidebar ─────────────────────────────────────── */
 .sidebar-shell {
   flex-shrink: 0;
@@ -175,7 +178,8 @@ body {
 .sidebar-overlay {
   display: none;
 }
-@media (max-width: 767px) {
+/* sidebar fixa visível até 1023px; vira drawer abaixo disso */
+@media (max-width: 1023px) {
   .sidebar-shell {
     position: fixed;
     top: 0;
