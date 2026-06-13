@@ -3,7 +3,6 @@ import { normalizeAmount, normalizeDate, normalizeDescription } from '../importe
 import { classifyByDescription } from '../importers/classifier'
 import { computeImportHash, markDuplicates } from '../importers/deduplicator'
 import { toTransaction } from '../importers/transformer'
-import { localAdapter } from '../adapters/local.adapter'
 import type { ParsedImportItem, ImportSummaryData } from '../importers/types'
 import type { Transaction } from '../types'
 
@@ -11,11 +10,9 @@ function generateBatchId(): string {
   return `batch_${Date.now().toString(36)}`
 }
 
-export async function parseAndPreview(file: File): Promise<ParsedImportItem[]> {
+export async function parseAndPreview(file: File, existingTransactions: Transaction[]): Promise<ParsedImportItem[]> {
   const rawRows = await parseFile(file)
   const { valid } = validateParsedRows(rawRows)
-
-  const existing = localAdapter.getTransactions()
 
   const items: ParsedImportItem[] = valid.map(raw => {
     const amount = normalizeAmount(raw.rawAmount)
@@ -40,16 +37,15 @@ export async function parseAndPreview(file: File): Promise<ParsedImportItem[]> {
     }
   })
 
-  return markDuplicates(items, existing)
+  return markDuplicates(items, existingTransactions)
 }
 
+// Pure transformer — does NOT persist. Caller must save via dataProvider.appendTransactions().
 export function confirmImport(items: ParsedImportItem[]): { transactions: Transaction[]; summary: ImportSummaryData } {
   const selected = items.filter(i => i.selected && !i.isDuplicate)
   const batchId = generateBatchId()
 
   const transactions = selected.map(item => toTransaction(item, batchId))
-
-  localAdapter.addTransactions(transactions)
 
   const incomeItems = transactions.filter(t => t.type === 'income')
   const expenseItems = transactions.filter(t => t.type === 'expense')
@@ -74,6 +70,3 @@ export function confirmImport(items: ParsedImportItem[]): { transactions: Transa
   return { transactions, summary }
 }
 
-export function getStoredTransactions(): Transaction[] {
-  return localAdapter.getTransactions()
-}

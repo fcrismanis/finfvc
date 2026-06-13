@@ -11,6 +11,7 @@ interface DataContextValue {
   reload: () => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
   saveBudget: (budget: Budget) => void
+  appendTransactions: (txns: Transaction[]) => Promise<void>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -50,10 +51,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     void dataProvider.saveBudget(budget).then(() => loadData())
   }, [loadData])
 
+  const appendTransactions = useCallback(async (txns: Transaction[]) => {
+    await dataProvider.appendTransactions(txns)
+    void loadData()
+  }, [loadData])
+
   return (
     <DataContext.Provider value={{
       transactions, budgets, isDemo, loading, error,
-      reload, updateTransaction, saveBudget,
+      reload, updateTransaction, saveBudget, appendTransactions,
     }}>
       {children}
     </DataContext.Provider>

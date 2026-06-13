@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function Import({ onNavigate }: Props) {
-  const { reload } = useData()
+  const { transactions, appendTransactions } = useData()
   const [stage, setStage] = useState<Stage>('idle')
   const [items, setItems] = useState<ParsedImportItem[]>([])
   const [summary, setSummary] = useState<ImportSummaryData | null>(null)
@@ -23,7 +23,7 @@ export function Import({ onNavigate }: Props) {
     setError(null)
     setStage('parsing')
     try {
-      const parsed = await parseAndPreview(file)
+      const parsed = await parseAndPreview(file, transactions)
       if (parsed.length === 0) {
         setError('Nenhum lançamento encontrado. Verifique se o arquivo tem o formato esperado.')
         setStage('idle')
@@ -37,11 +37,11 @@ export function Import({ onNavigate }: Props) {
     }
   }
 
-  function handleConfirm() {
-    const { summary: s } = confirmImport(items)
+  async function handleConfirm() {
+    const { transactions: imported, summary: s } = confirmImport(items)
+    await appendTransactions(imported)
     setSummary(s)
     setStage('complete')
-    reload()
   }
 
   function handleNewImport() {
