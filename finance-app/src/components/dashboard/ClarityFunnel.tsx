@@ -96,23 +96,40 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
       </div>
 
       {/* Bars */}
-      <div className="flex items-stretch gap-2" style={{ height: H, position: 'relative' }}>
-        {cols.map(c => (
-          <div key={c.key} className="flex-1" style={{ position: 'relative' }}>
-            <div
-              style={{
-                position: 'absolute',
-                left: '12%',
-                right: '12%',
-                top: c.top,
-                height: c.height,
-                background: c.color,
-                borderRadius: 8,
-                transition: 'top 0.4s ease, height 0.4s ease',
-              }}
-            />
-          </div>
-        ))}
+      <div className="flex items-stretch" style={{ height: H, position: 'relative' }}>
+        {cols.map((c, i) => {
+          const next = cols[i + 1]
+          // connector: thin line from this bar's bottom to the next bar's top (shared running-balance level)
+          const showConnector = next && c.key !== 'entry'
+          return (
+            <div key={c.key} className="flex-1" style={{ position: 'relative' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '14%',
+                  right: '14%',
+                  top: c.top,
+                  height: c.height,
+                  background: c.color,
+                  borderRadius: 6,
+                  transition: 'top 0.4s ease, height 0.4s ease',
+                }}
+              />
+              {showConnector && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '86%',
+                    width: '28%',
+                    top: c.top + c.height,
+                    height: 1.5,
+                    background: '#D7DCE5',
+                  }}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Bottom labels */}

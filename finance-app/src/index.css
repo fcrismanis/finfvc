@@ -7,9 +7,10 @@
   --sidebar-active-soft: #EAF1FE;
   --sidebar-text: #667085;
   --sidebar-ink: #101828;
-  --bg-page: #F4F6FA;
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
-  --border-card: #E9EDF3;
+  --bg-page: #F5F6F8;
+  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.03);
+  --border-card: #ECEEF2;
+  --radius-card: 16px;
   --accent: #1D5FE0;
   --accent-soft: #EAF1FE;
   --color-pos: #0E9E6E;
@@ -20,9 +21,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-page);
   color: #111827;
+  letter-spacing: -0.011em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -79,7 +81,7 @@ body {
 /* Card shell */
 .card {
   background: white;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   border: 1px solid var(--border-card);
   box-shadow: var(--shadow-card);
 }
