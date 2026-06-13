@@ -29,8 +29,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
+  const loadData = useCallback(async (showLoadingUI = true) => {
+    if (showLoadingUI) setLoading(true)
     setError(null)
     try {
       const result = await provider.load()
@@ -40,7 +40,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setError((e as Error).message ?? 'Erro ao carregar dados')
     } finally {
-      setLoading(false)
+      if (showLoadingUI) setLoading(false)
     }
   }, [provider])
 
@@ -59,7 +59,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const appendTransactions = useCallback(async (txns: Transaction[]) => {
     await provider.appendTransactions(txns)
-    void loadData()
+    await loadData(false)  // silent reload — don't unmount the migration page mid-flight
   }, [provider, loadData])
 
   return (

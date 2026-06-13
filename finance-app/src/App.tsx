@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { MigrationPage } from './pages/MigrationPage'
 import { Menu } from 'lucide-react'
 import './index.css'
 import { DataProvider, useData } from './context/DataContext'
@@ -21,6 +22,41 @@ const Placeholder  = lazy(() => import('./pages/Placeholder').then(m => ({ defau
 const PLACEHOLDER_PAGES: Record<string, { title: string; description: string }> = {
   '/consultor':     { title: 'Consultor IA',  description: 'Análise inteligente das suas finanças com recomendações personalizadas.' },
   '/configuracoes': { title: 'Configurações', description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
+}
+
+function MigrationBanner({ onNavigate }: { onNavigate: (route: string) => void }) {
+  const { familyId } = useAuth()
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (DATA_PROVIDER !== 'supabase' || !familyId) return
+    const raw = localStorage.getItem('finance_transactions')
+    setShow(!!raw && raw !== '[]' && raw !== 'null')
+  }, [familyId])
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      background: '#fffbeb', borderBottom: '1px solid #fde68a',
+      padding: '0.5rem 1rem', display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', flexShrink: 0, gap: '0.5rem',
+    }}>
+      <span style={{ fontSize: '0.83rem', color: '#92400e' }}>
+        Dados locais detectados no navegador.
+      </span>
+      <button
+        onClick={() => onNavigate('/migrar')}
+        style={{
+          background: 'var(--accent)', color: '#fff', border: 'none',
+          borderRadius: 6, padding: '0.3rem 0.85rem',
+          fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+        }}
+      >
+        Migrar →
+      </button>
+    </div>
+  )
 }
 
 function AppShell() {
@@ -57,6 +93,7 @@ function AppShell() {
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} />
       case '/revisao':     return <Review onNavigate={navigate} />
       case '/fechamento':  return <Closing selectedMonth={selectedMonth} />
+      case '/migrar':      return <MigrationPage />
       default:             return placeholder ? <Placeholder title={placeholder.title} description={placeholder.description} /> : null
     }
   }
@@ -93,6 +130,8 @@ function AppShell() {
           </button>
           <span className="font-extrabold text-[15px]" style={{ color: '#101828' }}>FIN</span>
         </div>
+
+        <MigrationBanner onNavigate={navigate} />
 
         <Suspense fallback={<LoadingState fullPage message="Carregando…" />}>
           {loading
