@@ -12,7 +12,7 @@ export const CHECKLIST_ITEMS: { id: string; label: string }[] = [
   { id: 'next_month_planned', label: 'Próximo mês planejado' },
 ]
 
-function emptyClosing(month: string): MonthClosing {
+export function emptyClosing(month: string): MonthClosing {
   return {
     month,
     isClosed: false,

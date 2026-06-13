@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { MigrationPage } from './pages/MigrationPage'
 import { Menu } from 'lucide-react'
 import './index.css'
 import { DataProvider, useData } from './context/DataContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import { Sidebar } from './components/layout/Sidebar'
 import { LoadingState, ErrorState } from './components/ui/LoadingState'
+import { Login } from './pages/Login'
 import { currentYearMonth } from './utils/date'
+import { DATA_PROVIDER } from './config/env'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard    = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -18,6 +22,62 @@ const Placeholder  = lazy(() => import('./pages/Placeholder').then(m => ({ defau
 const PLACEHOLDER_PAGES: Record<string, { title: string; description: string }> = {
   '/consultor':     { title: 'Consultor IA',  description: 'Análise inteligente das suas finanças com recomendações personalizadas.' },
   '/configuracoes': { title: 'Configurações', description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
+}
+
+const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
+
+function MigrationBanner({ onNavigate }: { onNavigate: (route: string) => void }) {
+  const { familyId } = useAuth()
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (DATA_PROVIDER !== 'supabase' || !familyId) return
+    if (localStorage.getItem(MIGRATION_BANNER_DISMISSED_KEY)) return
+    const raw = localStorage.getItem('finance_transactions')
+    setShow(!!raw && raw !== '[]' && raw !== 'null')
+  }, [familyId])
+
+  function dismiss() {
+    localStorage.setItem(MIGRATION_BANNER_DISMISSED_KEY, '1')
+    setShow(false)
+  }
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      background: '#fffbeb', borderBottom: '1px solid #fde68a',
+      padding: '0.5rem 1rem', display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', flexShrink: 0, gap: '0.5rem',
+    }}>
+      <span style={{ fontSize: '0.83rem', color: '#92400e' }}>
+        Dados locais detectados no navegador.
+      </span>
+      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+        <button
+          onClick={() => onNavigate('/migrar')}
+          style={{
+            background: 'var(--accent)', color: '#fff', border: 'none',
+            borderRadius: 6, padding: '0.3rem 0.85rem',
+            fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Migrar →
+        </button>
+        <button
+          onClick={dismiss}
+          aria-label="Fechar aviso"
+          style={{
+            background: 'transparent', color: '#92400e', border: '1px solid #fde68a',
+            borderRadius: 6, padding: '0.3rem 0.6rem',
+            fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function AppShell() {
@@ -54,6 +114,7 @@ function AppShell() {
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} />
       case '/revisao':     return <Review onNavigate={navigate} />
       case '/fechamento':  return <Closing selectedMonth={selectedMonth} />
+      case '/migrar':      return <MigrationPage />
       default:             return placeholder ? <Placeholder title={placeholder.title} description={placeholder.description} /> : null
     }
   }
@@ -91,6 +152,8 @@ function AppShell() {
           <span className="font-extrabold text-[15px]" style={{ color: '#101828' }}>FIN</span>
         </div>
 
+        <MigrationBanner onNavigate={navigate} />
+
         <Suspense fallback={<LoadingState fullPage message="Carregando…" />}>
           {loading
             ? <LoadingState fullPage message="Carregando dados financeiros…" />
@@ -104,10 +167,22 @@ function AppShell() {
   )
 }
 
+function AuthGate({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth()
+  if (DATA_PROVIDER !== 'supabase') return <>{children}</>
+  if (loading) return <LoadingState fullPage message="Verificando autenticação…" />
+  if (!user) return <Login />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
-    <DataProvider>
-      <AppShell />
-    </DataProvider>
+    <AuthProvider>
+      <AuthGate>
+        <DataProvider>
+          <AppShell />
+        </DataProvider>
+      </AuthGate>
+    </AuthProvider>
   )
 }
