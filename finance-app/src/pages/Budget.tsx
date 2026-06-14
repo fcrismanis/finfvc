@@ -41,9 +41,6 @@ export function Budget({ selectedMonth }: Props) {
     setEditValue(existing ? String(existing.plannedAmount) : '')
   }
 
-  // Reuse the id of an existing budget for the same month + macro/category so that
-  // saveBudget upserts (both LocalProvider findIndex-by-id and Supabase natural-key)
-  // instead of creating duplicates.
   function budgetIdFor(macroCategoryId: string | undefined, categoryId: string | undefined): string {
     const existing = budgets.find(b =>
       b.referenceMonth === month && b.macroCategoryId === macroCategoryId && b.categoryId === categoryId
@@ -104,182 +101,152 @@ export function Budget({ selectedMonth }: Props) {
     return { macro, plannedAmount, realizedAmount, dev, devPct, status, isEditing: editingId === macroId }
   }
 
-  return (
-    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
-      <div className="p-5 md:p-7 max-w-[920px] mx-auto w-full flex flex-col gap-5">
+  const devColor = totalDev > 0 ? 'var(--crit)' : 'var(--pos)'
 
-        {/* Header */}
-        <div className="flex items-start gap-3 flex-wrap">
+  return (
+    <main className="page-shell">
+      <div style={{ margin: '0 auto', maxWidth: 960, display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+        {/* ── Page header ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Orçamento</h1>
-            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>Planejado × realizado · {formatMonthFull(month)}</p>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Orçamento</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              Planejado × realizado · {formatMonthFull(month)}
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-1 bg-white rounded-xl px-2 py-1.5" style={{ border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-card)' }}>
-            <button
-              onClick={() => setMonth(prevMonth(month))}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
-            >
-              <ChevronLeft size={15} />
+          <div className="month-nav">
+            <button className="btn-ghost" style={{ width: 26, height: 26 }} onClick={() => setMonth(prevMonth(month))}>
+              <ChevronLeft size={14} />
             </button>
-            <span className="text-sm font-semibold text-gray-700 min-w-[130px] text-center">
-              {formatMonthFull(month)}
-            </span>
+            <span className="m">{formatMonthFull(month)}</span>
             <button
+              className="btn-ghost"
+              style={{ width: 26, height: 26, opacity: month >= currentYearMonth() ? 0.3 : 1 }}
               onClick={() => setMonth(nextMonth(month))}
               disabled={month >= currentYearMonth()}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white disabled:opacity-30 transition-colors"
             >
-              <ChevronRight size={15} />
+              <ChevronRight size={14} />
             </button>
           </div>
         </div>
 
-        {/* Summary totals */}
-        <div className="grid grid-cols-3 gap-3">
-          <SummaryCard label="Planejado" value={formatBRL(totalPlanned)} color="var(--sidebar-active)" />
-          <SummaryCard
+        {/* ── Summary cards ── */}
+        <div className="stats-grid-3">
+          <BudgetSummaryCard label="Planejado" value={formatBRL(totalPlanned)} color="var(--ink)" />
+          <BudgetSummaryCard
             label="Realizado"
             value={formatBRL(totalRealized)}
-            color={totalRealized > totalPlanned ? '#DC2626' : '#059669'}
+            color={totalRealized > totalPlanned ? 'var(--crit)' : 'var(--pos)'}
           />
-          <SummaryCard
+          <BudgetSummaryCard
             label="Desvio total"
             value={`${totalDev >= 0 ? '+' : ''}${formatBRL(totalDev)}`}
-            color={totalDev > 0 ? '#DC2626' : '#059669'}
+            color={devColor}
+            soft={totalDev <= 0}
           />
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleCopyPrev}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-50 transition-colors"
-            style={{ border: '1px solid var(--border-card)' }}
-          >
+        {/* ── Actions ── */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={handleCopyPrev}>
             <Copy size={12} /> Copiar do mês anterior
           </button>
-          <button
-            onClick={handleSuggest}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-50 transition-colors"
-            style={{ border: '1px solid var(--border-card)' }}
-          >
+          <button className="btn btn-secondary btn-sm" onClick={handleSuggest}>
             <Lightbulb size={12} /> Sugerir pela média
           </button>
         </div>
 
-        {/* Budget table */}
-        <div className="card overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-card)', background: '#F8FAFC' }}>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Categoria
-                </th>
-                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Planejado
-                </th>
-                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Realizado
-                </th>
-                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Desvio
-                </th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {expenseMacros.map(macro => {
-                const row = rowForMacro(macro.id)
-                const barPct = row.plannedAmount > 0
-                  ? Math.min((row.realizedAmount / row.plannedAmount) * 100, 130)
-                  : row.realizedAmount > 0 ? 100 : 0
+        {/* ── Budget table ── */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 540 }}>
+              <thead>
+                <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                  <th className="table-th">Categoria</th>
+                  <th className="table-th table-th-right">Planejado</th>
+                  <th className="table-th table-th-right">Realizado</th>
+                  <th className="table-th table-th-right">Desvio</th>
+                  <th style={{ width: 28 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {expenseMacros.map(macro => {
+                  const row = rowForMacro(macro.id)
+                  const barPct = row.plannedAmount > 0
+                    ? Math.min((row.realizedAmount / row.plannedAmount) * 100, 130)
+                    : row.realizedAmount > 0 ? 100 : 0
+                  const barColor = row.status === 'critical' ? 'var(--crit)'
+                    : row.status === 'warning' ? 'var(--warn)'
+                    : macro.color
 
-                return (
-                  <tr
-                    key={macro.id}
-                    className="transition-colors hover:bg-gray-50"
-                    style={{ borderBottom: '1px solid #F7F8FA' }}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          style={{ background: macro.color }}
-                        />
-                        <span className="font-medium text-gray-800">{macro.name}</span>
-                      </div>
-                      {row.realizedAmount > 0 && (
-                        <div className="mt-1.5 h-1.5 w-full rounded-full overflow-hidden" style={{ background: '#EDF0F7' }}>
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${barPct}%`,
-                              background: row.status === 'critical' ? '#DC2626'
-                                : row.status === 'warning' ? '#D97706'
-                                : macro.color,
+                  return (
+                    <tr key={macro.id} className="table-row">
+                      <td className="table-td">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: macro.color }} />
+                          <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{macro.name}</span>
+                        </div>
+                        {row.realizedAmount > 0 && (
+                          <div className="bbar" style={{ marginTop: 6, width: '100%' }}>
+                            <i style={{ width: `${barPct}%`, background: barColor }} />
+                          </div>
+                        )}
+                      </td>
+                      <td className="table-td table-th-right">
+                        {row.isEditing ? (
+                          <input
+                            autoFocus
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onBlur={() => saveEdit(macro.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveEdit(macro.id)
+                              if (e.key === 'Escape') setEditingId(null)
                             }}
+                            style={{ width: 112, textAlign: 'right', border: '1px solid var(--ink)', borderRadius: 6, padding: '3px 7px', fontSize: 12, fontFamily: 'var(--mono)', outline: 'none', background: 'var(--card-bg)', color: 'var(--ink)' }}
+                            placeholder="0,00"
                           />
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {row.isEditing ? (
-                        <input
-                          autoFocus
-                          value={editValue}
-                          onChange={e => setEditValue(e.target.value)}
-                          onBlur={() => saveEdit(macro.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') saveEdit(macro.id)
-                            if (e.key === 'Escape') setEditingId(null)
-                          }}
-                          className="w-28 text-right border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1"
-                          style={{ borderColor: 'var(--sidebar-active)' }}
-                          placeholder="0,00"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => startEdit(macro.id)}
-                          className="font-medium tabular-nums num text-gray-700 hover:text-indigo-600 transition-colors"
-                          title="Clique para editar"
-                        >
-                          {row.plannedAmount > 0
-                            ? formatBRL(row.plannedAmount)
-                            : <span className="text-gray-300">—</span>}
-                        </button>
-                      )}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right font-semibold tabular-nums num"
-                      style={{ color: macro.color }}
-                    >
-                      {row.realizedAmount > 0 ? formatBRL(row.realizedAmount) : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums num">
-                      {row.plannedAmount > 0 && row.realizedAmount > 0 ? (
-                        <div className={`font-semibold ${
-                          row.status === 'critical' ? 'text-red-600'
-                          : row.status === 'warning' ? 'text-amber-600'
-                          : 'text-green-600'
-                        }`}>
-                          {row.dev > 0 ? '+' : ''}{formatBRL(row.dev)}
-                          <span className="text-gray-400 font-normal ml-1 text-[10px]">
-                            ({row.devPct > 0 ? '+' : ''}{row.devPct.toFixed(0)}%)
-                          </span>
-                        </div>
-                      ) : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3 w-6">
-                      {row.status === 'critical' && <TrendingDown size={13} color="#DC2626" />}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                        ) : (
+                          <button
+                            onClick={() => startEdit(macro.id)}
+                            title="Clique para editar"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}
+                          >
+                            {row.plannedAmount > 0
+                              ? formatBRL(row.plannedAmount)
+                              : <span style={{ color: 'var(--line)' }}>—</span>}
+                          </button>
+                        )}
+                      </td>
+                      <td
+                        className="table-td table-th-right"
+                        style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: macro.color, fontFamily: 'var(--mono)', fontSize: 12.5 }}
+                      >
+                        {row.realizedAmount > 0 ? formatBRL(row.realizedAmount) : <span style={{ color: 'var(--line)' }}>—</span>}
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                        {row.plannedAmount > 0 && row.realizedAmount > 0 ? (
+                          <div style={{ fontWeight: 700, color: row.status === 'critical' ? 'var(--crit)' : row.status === 'warning' ? 'var(--warn)' : 'var(--pos)' }}>
+                            {row.dev > 0 ? '+' : ''}{formatBRL(row.dev)}
+                            <span style={{ color: 'var(--faint)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>
+                              ({row.devPct > 0 ? '+' : ''}{row.devPct.toFixed(0)}%)
+                            </span>
+                          </div>
+                        ) : <span style={{ color: 'var(--line)' }}>—</span>}
+                      </td>
+                      <td className="table-td" style={{ textAlign: 'center' }}>
+                        {row.status === 'critical' && <TrendingDown size={13} color="var(--crit)" />}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <p className="text-[11px] text-gray-400 pb-4">
+        <p style={{ fontSize: 11, color: 'var(--faint)', paddingBottom: 16 }}>
           Clique no valor planejado para editar — Enter para confirmar, Esc para cancelar.
         </p>
       </div>
@@ -287,11 +254,11 @@ export function Budget({ selectedMonth }: Props) {
   )
 }
 
-function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
+function BudgetSummaryCard({ label, value, color, soft }: { label: string; value: string; color: string; soft?: boolean }) {
   return (
-    <div className="card p-4">
-      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{label}</p>
-      <p className="text-xl font-bold tabular-nums num tracking-tight" style={{ color }}>{value}</p>
+    <div className="card" style={{ padding: '14px 18px', ...(soft ? { background: 'var(--accent-soft)' } : {}) }}>
+      <span className="eyebrow" style={{ display: 'block', marginBottom: 7 }}>{label}</span>
+      <p className="num" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', color }}>{value}</p>
     </div>
   )
 }

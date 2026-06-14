@@ -12,6 +12,10 @@ interface Props {
   onNavigate: (route: string) => void
 }
 
+const STAGE_ORDER: Record<Stage, number> = { idle: 0, parsing: 0, preview: 1, complete: 2 }
+const STAGE_LABELS = ['Upload', 'Revisão', 'Concluído']
+const STAGES: Array<'idle' | 'preview' | 'complete'> = ['idle', 'preview', 'complete']
+
 export function Import({ onNavigate }: Props) {
   const { transactions, appendTransactions } = useData()
   const [stage, setStage] = useState<Stage>('idle')
@@ -51,49 +55,43 @@ export function Import({ onNavigate }: Props) {
     setStage('idle')
   }
 
+  const current = STAGE_ORDER[stage]
+
   return (
-    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
-      <div className="p-5 md:p-7 max-w-4xl mx-auto w-full">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Importação</h1>
-          <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
+    <main className="page-shell">
+      <div style={{ margin: '0 auto', maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* ── Page header ── */}
+        <div>
+          <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Importação</h1>
+          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
             XLSX, XLS ou CSV — colunas detectadas automaticamente
-          </p>
+          </div>
         </div>
 
-        {/* Steps indicator */}
-        <div className="flex items-center gap-2 mb-6 text-xs">
-          {(['idle', 'preview', 'complete'] as const).map((s, i) => {
-            const labels = ['Upload', 'Revisão', 'Concluído']
-            const stageOrder = { idle: 0, parsing: 0, preview: 1, complete: 2 }
-            const current = stageOrder[stage]
-            const active = current === i
+        {/* ── Steps breadcrumb ── */}
+        <div className="step-row">
+          {STAGES.map((s, i) => {
             const done = current > i
+            const active = current === i
             return (
-              <div key={s} className="flex items-center gap-2">
-                <div
-                  className="flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
-                  style={{
-                    background: done ? '#16A34A' : active ? '#4F46E5' : '#E5E7EB',
-                    color: done || active ? '#fff' : '#9CA3AF',
-                  }}
-                >
+              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className={`step-dot ${done ? 'done' : active ? 'active' : 'idle'}`}>
                   {done ? '✓' : i + 1}
                 </div>
-                <span style={{ color: active ? '#4F46E5' : done ? '#16A34A' : '#9CA3AF', fontWeight: active ? 600 : 400 }}>
-                  {labels[i]}
+                <span className={`step-label ${done ? 'done' : active ? 'active' : ''}`}>
+                  {STAGE_LABELS[i]}
                 </span>
-                {i < 2 && <span className="text-gray-300 mx-1">›</span>}
+                {i < 2 && <span className="step-sep">›</span>}
               </div>
             )
           })}
         </div>
 
-        {/* Content card */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        {/* ── Content card ── */}
+        <div className="card" style={{ padding: '20px 24px' }}>
           {error && (
-            <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--crit-soft)', border: '1px solid var(--crit)', borderRadius: 8, fontSize: 12.5, color: 'var(--crit)' }}>
               {error}
             </div>
           )}
@@ -101,12 +99,12 @@ export function Import({ onNavigate }: Props) {
           {(stage === 'idle' || stage === 'parsing') && (
             <>
               <ImportDropzone onFile={handleFile} loading={stage === 'parsing'} />
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs font-semibold text-gray-600 mb-1">Colunas esperadas no arquivo</p>
-                <p className="text-xs text-gray-400 leading-relaxed">
+              <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--well)', borderRadius: 8, border: '1px solid var(--line)' }}>
+                <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 4 }}>Colunas esperadas no arquivo</p>
+                <p style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6 }}>
                   Tipo · Descrição · Valor · Data · Data Competência · Status · Forma de Pagamento · Conta/Cartão
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
                   Colunas opcionais: Parcela · Recorrente · Tags · Grupo
                 </p>
               </div>

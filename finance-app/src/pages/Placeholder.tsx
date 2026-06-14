@@ -1,5 +1,3 @@
-import { Construction } from 'lucide-react'
-
 interface Props {
   title: string
   description: string
@@ -7,26 +5,25 @@ interface Props {
 
 export function Placeholder({ title, description }: Props) {
   return (
-    <div className="page-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', maxWidth: 340 }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 14,
-          background: 'var(--accent-soft)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 16px',
-        }}>
-          <Construction size={24} color="var(--accent)" />
-        </div>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#101828', marginBottom: 6 }}>{title}</h2>
-        <p style={{ fontSize: 13, color: '#98A2B3', lineHeight: 1.6, marginBottom: 20 }}>{description}</p>
+    <main className="page-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="card" style={{ padding: '48px 40px', textAlign: 'center', maxWidth: 360 }}>
+        <div className="empty-glyph" style={{ margin: '0 auto 18px' }} />
+        <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', marginBottom: 8, letterSpacing: '-.02em' }}>
+          {title}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--faint)', lineHeight: 1.6, marginBottom: 22 }}>
+          {description}
+        </p>
         <span style={{
-          display: 'inline-block', fontSize: 11, fontWeight: 600,
-          padding: '3px 10px', borderRadius: 6,
-          color: 'var(--accent)', background: 'var(--accent-soft)',
+          display: 'inline-block', fontFamily: 'var(--mono)',
+          fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+          padding: '4px 11px', borderRadius: 5,
+          color: 'var(--ink-2)', background: 'var(--well)',
+          border: '1px solid var(--line)',
         }}>
-          Em breve — Fase 2
+          EM BREVE — FASE 2
         </span>
       </div>
-    </div>
+    </main>
   )
 }

@@ -417,3 +417,131 @@ html, body { overflow-x: hidden; max-width: 100%; }
   animation: spin 0.7s linear infinite;
 }
 .spinner-sm { width: 18px; height: 18px; border-width: 2px; }
+
+/* ── Stats grids (responsive) ── */
+.stats-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 860px) { .stats-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 400px) { .stats-grid-4 { grid-template-columns: 1fr; } }
+
+.stats-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) { .stats-grid-3 { grid-template-columns: 1fr; } }
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* ── Ledger select ── */
+.ledger-select {
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  outline: none;
+  font-family: var(--ui);
+}
+.ledger-select:focus { border-color: var(--ink-2); }
+
+/* ── Chip (editorial badge, not rounded-full) ── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.chip-pos  { border: 1px solid var(--pos); color: var(--pos); background: var(--pos-soft); }
+.chip-warn { border: 1px solid var(--warn); color: var(--warn); background: var(--warn-soft); }
+.chip-crit { border: 1px solid var(--crit); color: var(--crit); background: var(--crit-soft); }
+.chip-neutral { border: 1px solid var(--line); color: var(--faint); background: var(--well); }
+
+/* ── Review note (editorial annotation) ── */
+.review-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-left: 2px solid var(--warn);
+  font-style: italic;
+}
+
+/* ── Filter chips (pills) ── */
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--card-bg);
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-family: var(--ui);
+  transition: background 0.1s, color 0.1s;
+}
+.filter-pill:hover { background: var(--well); }
+.filter-pill.active { background: var(--ink); color: var(--card-bg); border-color: var(--ink); }
+
+/* ── Step breadcrumb ── */
+.step-row { display: flex; align-items: center; gap: 8px; }
+.step-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+.step-dot.done { background: var(--pos); color: #fff; }
+.step-dot.active { background: var(--ink); color: var(--card-bg); }
+.step-dot.idle { background: var(--well); color: var(--faint); border: 1px solid var(--line); }
+.step-label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.step-label.active { color: var(--ink); }
+.step-label.done { color: var(--pos); }
+.step-sep { color: var(--line); font-size: 12px; }
+
+/* ── Login card ── */
+.login-field {
+  width: 100%; padding: 9px 12px;
+  border-radius: 9px; border: 1px solid var(--line);
+  font-size: 14px; color: var(--ink);
+  background: var(--paper);
+  outline: none; font-family: var(--ui);
+  box-sizing: border-box;
+  transition: border-color 0.12s;
+}
+.login-field:focus { border-color: var(--ink-2); }
+
+/* ── Checklist item ── */
+.check-item {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12.5px; padding: 9px 8px; border-radius: 8px;
+  text-align: left; width: 100%; cursor: pointer;
+  border: none; background: none; font-family: var(--ui);
+  color: var(--ink-2); transition: background 0.1s;
+}
+.check-item:hover:not(:disabled) { background: var(--well); }
+.check-item.done { color: var(--pos); }
+.check-item:disabled { cursor: default; }

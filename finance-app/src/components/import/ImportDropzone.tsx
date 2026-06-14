@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { Upload, FileSpreadsheet } from 'lucide-react'
 
 interface Props {
   onFile: (file: File) => void
@@ -24,8 +23,14 @@ export function ImportDropzone({ onFile, loading }: Props) {
 
   return (
     <div
-      className="flex flex-col items-center justify-center gap-4 p-10 rounded-xl border-2 border-dashed transition-colors cursor-pointer"
-      style={{ borderColor: dragging ? '#4F46E5' : '#D1D5DB', background: dragging ? '#EEF2FF' : '#F9FAFB' }}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 14, padding: '36px 24px', borderRadius: 11,
+        border: `2px dashed ${dragging ? 'var(--ink)' : 'var(--line)'}`,
+        background: dragging ? 'var(--accent-soft)' : 'var(--paper)',
+        cursor: loading ? 'default' : 'pointer',
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
       onDragOver={e => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
@@ -35,26 +40,40 @@ export function ImportDropzone({ onFile, loading }: Props) {
         ref={inputRef}
         type="file"
         accept=".xlsx,.xls,.csv,.txt"
-        className="hidden"
+        style={{ display: 'none' }}
         onChange={handleChange}
         disabled={loading}
       />
 
       {loading ? (
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Processando arquivo…</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div className="spinner" />
+          <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>Processando arquivo…</p>
         </div>
       ) : (
         <>
-          <div className="p-4 rounded-full" style={{ background: '#EEF2FF' }}>
-            {dragging ? <Upload size={28} color="#4F46E5" /> : <FileSpreadsheet size={28} color="#4F46E5" />}
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: 'var(--well)', border: '1px solid var(--line)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
           </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-gray-800">Arraste seu extrato aqui</p>
-            <p className="text-xs text-gray-500 mt-1">ou clique para selecionar um arquivo</p>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>
+              {dragging ? 'Solte o arquivo aqui' : 'Arraste seu extrato aqui'}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 4 }}>
+              ou clique para selecionar um arquivo
+            </p>
           </div>
-          <p className="text-xs text-gray-400">Suporta: XLSX, XLS, CSV</p>
+          <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--mono)', letterSpacing: '.08em' }}>
+            XLSX · XLS · CSV
+          </span>
         </>
       )}
     </div>

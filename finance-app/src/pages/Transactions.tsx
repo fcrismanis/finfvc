@@ -24,10 +24,10 @@ const CLS_LABELS: Record<ClassificationType, string> = {
 }
 
 function clsColor(cls: ClassificationType): string {
-  if (cls === 'operational_income' || cls === 'extraordinary_income') return '#059669'
-  if (cls === 'debt_cost') return '#DC2626'
-  if (NEUTRAL_TYPES.has(cls)) return '#9CA3AF'
-  return '#EF4444'
+  if (cls === 'operational_income' || cls === 'extraordinary_income') return 'var(--pos)'
+  if (cls === 'debt_cost') return 'var(--crit)'
+  if (NEUTRAL_TYPES.has(cls)) return 'var(--faint)'
+  return 'var(--ink-2)'
 }
 
 export function Transactions({ selectedMonth, onNavigate }: Props) {
@@ -89,8 +89,10 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
   }
 
   function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ChevronDown size={11} color="#D1D5DB" />
-    return sortDir === 'asc' ? <ChevronUp size={11} color="var(--sidebar-active)" /> : <ChevronDown size={11} color="var(--sidebar-active)" />
+    if (sortField !== field) return <ChevronDown size={11} color="var(--line)" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={11} color="var(--ink)" />
+      : <ChevronDown size={11} color="var(--ink)" />
   }
 
   function startEdit(tx: Transaction) {
@@ -103,297 +105,286 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
     setEditingId(null)
   }
 
-  const resultColor = summary.income - summary.expense >= 0 ? '#059669' : '#DC2626'
+  const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterCls)
 
   return (
-    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
-      <div className="p-5 md:p-7 max-w-[1320px] mx-auto w-full flex flex-col gap-5">
+    <main className="page-shell">
+      <div className="page-content section-gap">
 
         {/* ── Page header ── */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Lançamentos</h1>
-            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Lançamentos</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
               {summary.total} {summary.total === 1 ? 'lançamento' : 'lançamentos'} no filtro atual
-            </p>
+            </div>
           </div>
           {isDemo && (
-            <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700" style={{ border: '1px solid #BFDBFE' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-soft)', borderRadius: 9, padding: '7px 13px', fontSize: 12, color: 'var(--ink)' }}>
               <FlaskConical size={12} />
-              <span>Dados demonstrativos — <button className="underline font-medium" onClick={() => onNavigate('/conectar')}>importe seu extrato</button></span>
+              <span>
+                Dados demonstrativos —{' '}
+                <button
+                  style={{ fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)', fontSize: 12, fontFamily: 'var(--ui)' }}
+                  onClick={() => onNavigate('/conectar')}
+                >
+                  importe seu extrato
+                </button>
+              </span>
             </div>
           )}
         </div>
 
-        {/* ── Summary stat cards ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="#0E9E6E" />
-          <StatCard label="Despesas" value={`−${formatBRL(summary.expense)}`} color="#C9603F" />
-          <StatCard
-            label="Resultado"
-            value={formatBRL(summary.income - summary.expense)}
-            color={resultColor}
-            soft
-          />
-          <StatCard
+        {/* ── KPI cards ── */}
+        <div className="stats-grid-4">
+          <TxStatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="var(--pos)" />
+          <TxStatCard label="Despesas" value={`−${formatBRL(summary.expense)}`} color="var(--crit)" />
+          <TxStatCard label="Resultado" value={formatBRL(summary.income - summary.expense)} color={resultColor} soft />
+          <TxStatCard
             label="Pendentes"
             value={`${summary.pending}`}
             sub={`${summary.neutral} neutros`}
-            color={summary.pending > 0 ? '#D97706' : '#98A2B3'}
+            color={summary.pending > 0 ? 'var(--warn)' : 'var(--faint)'}
           />
         </div>
 
-        {/* Filters */}
-        <div className="card px-4 py-3 flex flex-wrap gap-2 items-center">
-          <div
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 flex-1 min-w-[180px]"
-            style={{ border: '1px solid var(--border-card)', background: '#F8FAFC' }}
-          >
-            <Search size={12} color="#9CA3AF" />
+        {/* ── Filters ── */}
+        <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            flex: '1 1 180px', border: '1px solid var(--line)', borderRadius: 8,
+            padding: '5px 10px', background: 'var(--paper)',
+          }}>
+            <Search size={12} color="var(--faint)" />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(0) }}
               placeholder="Buscar por descrição…"
-              className="flex-1 text-xs outline-none bg-transparent text-gray-700 placeholder:text-gray-400"
+              style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
             />
           </div>
 
-          <Select value={filterMonth} onChange={v => { setFilterMonth(v); setPage(0) }} label="Mês">
+          <select className="ledger-select" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(0) }} aria-label="Mês">
             <option value="">Todos os meses</option>
             {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
-          </Select>
+          </select>
 
-          <Select value={filterType} onChange={v => { setFilterType(v); setPage(0) }} label="Tipo">
+          <select className="ledger-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(0) }} aria-label="Tipo">
             <option value="">Todos</option>
             <option value="income">Receita</option>
             <option value="expense">Despesa</option>
-          </Select>
+          </select>
 
-          <Select value={filterStatus} onChange={v => { setFilterStatus(v); setPage(0) }} label="Status">
+          <select className="ledger-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0) }} aria-label="Status">
             <option value="">Todos</option>
             <option value="paid">Pago</option>
             <option value="pending">Pendente</option>
             <option value="cancelled">Cancelado</option>
-          </Select>
+          </select>
 
-          <Select value={filterMacro} onChange={v => { setFilterMacro(v); setPage(0) }} label="Macro">
+          <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Macro">
             <option value="">Todas</option>
             {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </Select>
+          </select>
 
-          {(search || filterType || filterStatus || filterMacro || filterCls) && (
+          {hasFilters && (
             <button
               onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterCls(''); setPage(0) }}
-              className="text-xs text-red-500 hover:text-red-700 px-2 font-medium"
+              style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
             >
               Limpar
             </button>
           )}
         </div>
 
-        {/* Table */}
-        <div className="card overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-card)', background: '#F8FAFC' }}>
-                <th
-                  className="text-left px-4 py-3 cursor-pointer select-none"
-                  onClick={() => toggleSort('competenceDate')}
-                >
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Data <SortIcon field="competenceDate" />
-                  </span>
-                </th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Descrição
-                </th>
-                <th
-                  className="text-right px-4 py-3 cursor-pointer select-none"
-                  onClick={() => toggleSort('amount')}
-                >
-                  <span className="flex items-center justify-end gap-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Valor <SortIcon field="amount" />
-                  </span>
-                </th>
-                <th
-                  className="text-left px-4 py-3 cursor-pointer select-none"
-                  onClick={() => toggleSort('category')}
-                >
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Categoria <SortIcon field="category" />
-                  </span>
-                </th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Classificação
-                </th>
-                <th
-                  className="text-left px-4 py-3 cursor-pointer select-none"
-                  onClick={() => toggleSort('status')}
-                >
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Status <SortIcon field="status" />
-                  </span>
-                </th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {pageItems.map(tx => {
-                const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
-                const isEditing = editingId === tx.id
-                return (
-                  <tr
-                    key={tx.id}
-                    className={`transition-colors hover:bg-gray-50 ${tx.status === 'pending' ? 'opacity-60' : ''}`}
-                    style={{ borderBottom: '1px solid #F7F8FA' }}
+        {/* ── Ledger table ── */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+              <thead>
+                <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                  <th
+                    className="table-th"
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => toggleSort('competenceDate')}
                   >
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs num">
-                      {tx.competenceDate}
-                    </td>
-                    <td className="px-4 py-3 text-gray-800 max-w-[280px]">
-                      <p className="truncate font-medium text-xs">{tx.description}</p>
-                      {tx.isAdjustment && (
-                        <p className="text-[10px] text-indigo-400 mt-0.5">ajustado</p>
-                      )}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right font-semibold whitespace-nowrap num text-sm"
-                      style={{ color: clsColor(tx.classificationType) }}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Data <SortIcon field="competenceDate" />
+                    </span>
+                  </th>
+                  <th className="table-th">Descrição</th>
+                  <th
+                    className="table-th table-th-right"
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => toggleSort('amount')}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                      Valor <SortIcon field="amount" />
+                    </span>
+                  </th>
+                  <th
+                    className="table-th"
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => toggleSort('category')}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Categoria <SortIcon field="category" />
+                    </span>
+                  </th>
+                  <th className="table-th">Classificação</th>
+                  <th
+                    className="table-th"
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => toggleSort('status')}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Status <SortIcon field="status" />
+                    </span>
+                  </th>
+                  <th style={{ width: 72 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map(tx => {
+                  const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                  const isEditing = editingId === tx.id
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="table-row"
+                      style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
                     >
-                      {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {macro && (
-                        <span
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
-                          style={{ background: macro.color + '18', color: macro.color }}
-                        >
-                          {macro.name}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <select
-                          value={editPatch.classificationType as string}
-                          onChange={e => setEditPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
-                          className="text-xs border rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1"
-                          style={{ borderColor: 'var(--border-card)' }}
-                        >
-                          {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                        </select>
-                      ) : (
-                        <span className="text-[11px] text-gray-500">{CLS_LABELS[tx.classificationType] ?? tx.classificationType}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                          tx.status === 'paid'
-                            ? 'bg-green-50 text-green-700'
-                            : tx.status === 'pending'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-gray-100 text-gray-400'
-                        }`}
+                      <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                        {tx.competenceDate}
+                      </td>
+                      <td className="table-td" style={{ maxWidth: 280 }}>
+                        <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
+                          {tx.description}
+                        </p>
+                        {tx.isAdjustment && (
+                          <p style={{ fontSize: 10, color: 'var(--ink-2)', marginTop: 2 }}>ajustado</p>
+                        )}
+                      </td>
+                      <td
+                        className="table-td table-th-right"
+                        style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: clsColor(tx.classificationType) }}
                       >
-                        {tx.status === 'paid' ? 'Pago' : tx.status === 'pending' ? 'Pendente' : 'Cancelado'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {isEditing ? (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => saveEdit(tx.id)}
-                            className="text-[10px] px-2 py-1 rounded font-semibold text-white"
-                            style={{ background: 'var(--sidebar-active)' }}
+                        {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
+                      </td>
+                      <td className="table-td">
+                        {macro && (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                            border: `1px solid ${macro.color}50`, color: macro.color,
+                            fontWeight: 600, background: `${macro.color}12`,
+                          }}>
+                            {macro.name}
+                          </span>
+                        )}
+                      </td>
+                      <td className="table-td">
+                        {isEditing ? (
+                          <select
+                            value={editPatch.classificationType as string}
+                            onChange={e => setEditPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
+                            style={{ fontSize: 11, border: '1px solid var(--line)', borderRadius: 6, padding: '3px 6px', background: 'var(--card-bg)', color: 'var(--ink)', outline: 'none', fontFamily: 'var(--ui)' }}
                           >
-                            Salvar
-                          </button>
+                            {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+                            {CLS_LABELS[tx.classificationType] ?? tx.classificationType}
+                          </span>
+                        )}
+                      </td>
+                      <td className="table-td">
+                        {tx.status === 'paid' && (
+                          <span className="chip chip-pos">Pago</span>
+                        )}
+                        {tx.status === 'pending' && (
+                          <span className="chip chip-warn">Pendente</span>
+                        )}
+                        {tx.status === 'cancelled' && (
+                          <span className="chip chip-neutral">Cancelado</span>
+                        )}
+                      </td>
+                      <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => saveEdit(tx.id)}>Salvar</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>✕</button>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => setEditingId(null)}
-                            className="text-[10px] px-2 py-1 border rounded text-gray-500"
-                            style={{ borderColor: 'var(--border-card)' }}
+                            onClick={() => startEdit(tx)}
+                            style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
                           >
-                            ✕
+                            Editar
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEdit(tx)}
-                          className="text-[10px] font-medium hover:opacity-80"
-                          style={{ color: 'var(--sidebar-active)' }}
-                        >
-                          Editar
-                        </button>
-                      )}
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+                {pageItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>
+                      <div className="empty-state">
+                        <div className="empty-glyph" />
+                        <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento encontrado</h4>
+                        <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 220 }}>
+                          Ajuste os filtros ou importe um extrato.
+                        </p>
+                      </div>
                     </td>
                   </tr>
-                )
-              })}
-              {pageItems.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">
-                    Nenhum lançamento encontrado
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Pagination */}
+        {/* ── Pagination ── */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 pb-4">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, paddingBottom: 16, fontSize: 12.5, color: 'var(--ink-2)' }}>
             <button
+              className="btn-ghost"
+              style={{ width: 28, height: 28 }}
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="p-1.5 rounded hover:bg-white disabled:opacity-30 transition-colors"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={13} />
             </button>
-            <span className="font-medium">
+            <span style={{ fontWeight: 600 }}>
               Página {page + 1} de {totalPages}
-              <span className="text-gray-400 font-normal ml-1">({filtered.length} registros)</span>
+              <span style={{ color: 'var(--faint)', fontWeight: 400, marginLeft: 4 }}>({filtered.length} registros)</span>
             </span>
             <button
+              className="btn-ghost"
+              style={{ width: 28, height: 28 }}
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page === totalPages - 1}
-              className="p-1.5 rounded hover:bg-white disabled:opacity-30 transition-colors"
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={13} />
             </button>
           </div>
         )}
+
       </div>
     </main>
   )
 }
 
-function StatCard({ label, value, color, sub, soft }: { label: string; value: string; color: string; sub?: string; soft?: boolean }) {
-  return (
-    <div className="card p-4" style={soft ? { background: 'var(--accent-soft)' } : undefined}>
-      <p className="text-[10.5px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#98A2B3' }}>{label}</p>
-      <p className="text-[20px] font-extrabold num tracking-tight" style={{ color }}>{value}</p>
-      {sub && <p className="text-[11px] mt-0.5" style={{ color: '#98A2B3' }}>{sub}</p>}
-    </div>
-  )
-}
-
-function Select({ value, onChange, label, children }: {
-  value: string
-  onChange: (v: string) => void
-  label: string
-  children: React.ReactNode
+function TxStatCard({ label, value, color, sub, soft }: {
+  label: string; value: string; color: string; sub?: string; soft?: boolean
 }) {
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      aria-label={label}
-      className="text-xs rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none"
-      style={{ border: '1px solid var(--border-card)' }}
-    >
-      {children}
-    </select>
+    <div className="card" style={{ padding: '14px 18px', ...(soft ? { background: 'var(--accent-soft)' } : {}) }}>
+      <span className="eyebrow" style={{ display: 'block', marginBottom: 7 }}>{label}</span>
+      <p className="num" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', color }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{sub}</p>}
+    </div>
   )
 }

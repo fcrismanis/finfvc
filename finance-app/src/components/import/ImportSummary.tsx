@@ -1,4 +1,3 @@
-import { CheckCircle, TrendingUp, TrendingDown, ArrowLeftRight, Copy, Tag } from 'lucide-react'
 import type { ImportSummaryData } from '../../importers/types'
 import { formatBRL } from '../../utils/currency'
 
@@ -9,110 +8,85 @@ interface Props {
 }
 
 export function ImportSummary({ summary, onNewImport, onGoToDashboard }: Props) {
-  const cards = [
-    {
-      label: 'Receitas',
-      count: summary.incomeCount,
-      amount: summary.totalIncome,
-      color: '#16A34A',
-      bg: '#F0FDF4',
-      icon: TrendingUp,
-    },
-    {
-      label: 'Despesas',
-      count: summary.expenseCount,
-      amount: summary.totalExpenses,
-      color: '#DC2626',
-      bg: '#FEF2F2',
-      icon: TrendingDown,
-    },
-    {
-      label: 'Neutros / Transferências',
-      count: summary.neutralCount,
-      amount: null,
-      color: '#6B7280',
-      bg: '#F9FAFB',
-      icon: ArrowLeftRight,
-    },
-  ]
+  const resultValue = summary.totalIncome - summary.totalExpenses
+  const resultPositive = resultValue >= 0
 
   return (
-    <div className="flex flex-col gap-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-full" style={{ background: '#F0FDF4' }}>
-          <CheckCircle size={24} color="#16A34A" />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10,
+          background: 'var(--pos-soft)', border: '1px solid var(--pos)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pos)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
         </div>
         <div>
-          <p className="font-semibold text-gray-900">{summary.total} lançamentos importados com sucesso</p>
-          <p className="text-xs text-gray-500 mt-0.5">Arquivo: {summary.sourceFile}</p>
+          <p style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink)', letterSpacing: '-.01em' }}>
+            {summary.total} lançamentos importados com sucesso
+          </p>
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3, fontFamily: 'var(--mono)' }}>
+            {summary.sourceFile}
+          </p>
         </div>
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-3 gap-3">
-        {cards.map(card => {
-          const Icon = card.icon
-          return (
-            <div key={card.label} className="rounded-xl p-3 border border-gray-100" style={{ background: card.bg }}>
-              <div className="flex items-center gap-2 mb-1">
-                <Icon size={14} color={card.color} />
-                <p className="text-xs text-gray-600 font-medium">{card.label}</p>
-              </div>
-              <p className="text-lg font-bold" style={{ color: card.color }}>{card.count}</p>
-              {card.amount !== null && (
-                <p className="text-xs text-gray-500 mt-0.5">{formatBRL(card.amount)}</p>
-              )}
-            </div>
-          )
-        })}
+      {/* Breakdown cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+        <SummaryMiniCard label="Receitas" count={summary.incomeCount} amount={summary.totalIncome} color="var(--pos)" bg="var(--pos-soft)" />
+        <SummaryMiniCard label="Despesas" count={summary.expenseCount} amount={summary.totalExpenses} color="var(--ink-2)" bg="var(--well)" />
+        <SummaryMiniCard label="Neutros" count={summary.neutralCount} amount={null} color="var(--faint)" bg="var(--well)" />
       </div>
 
       {/* Notices */}
       {(summary.duplicateCount > 0 || summary.uncategorizedCount > 0) && (
-        <div className="flex flex-col gap-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {summary.duplicateCount > 0 && (
-            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              <Copy size={14} />
-              <span>{summary.duplicateCount} lançamentos ignorados por serem duplicados</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--warn)', background: 'var(--warn-soft)', borderRadius: 8, padding: '8px 12px', border: '1px solid var(--warn)' }}>
+              {summary.duplicateCount} lançamentos ignorados por serem duplicados.
             </div>
           )}
           {summary.uncategorizedCount > 0 && (
-            <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
-              <Tag size={14} />
-              <span>{summary.uncategorizedCount} lançamentos sem categoria — revise em Lançamentos</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-2)', background: 'var(--accent-soft)', borderRadius: 8, padding: '8px 12px', border: '1px solid var(--line)' }}>
+              {summary.uncategorizedCount} lançamentos sem categoria — revise em Lançamentos.
             </div>
           )}
         </div>
       )}
 
       {/* Result snapshot */}
-      <div className="rounded-xl border border-gray-200 p-4">
-        <p className="text-xs text-gray-500 mb-2 font-medium">Resultado operacional bruto desta importação</p>
-        <p
-          className="text-2xl font-bold"
-          style={{ color: summary.totalIncome - summary.totalExpenses >= 0 ? '#16A34A' : '#DC2626' }}
-        >
-          {formatBRL(summary.totalIncome - summary.totalExpenses)}
+      <div className="card" style={{ padding: '14px 18px' }}>
+        <span className="eyebrow" style={{ display: 'block', marginBottom: 8 }}>Resultado operacional bruto desta importação</span>
+        <p className="num" style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-.03em', color: resultPositive ? 'var(--pos)' : 'var(--crit)' }}>
+          {formatBRL(resultValue)}
         </p>
-        <p className="text-xs text-gray-400 mt-1">Receitas – Despesas (excluindo neutros e resgates)</p>
+        <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 5 }}>
+          Receitas − Despesas (excluindo neutros e resgates)
+        </p>
       </div>
 
       {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          onClick={onGoToDashboard}
-          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-        >
-          Ver no Dashboard
-        </button>
-        <button
-          onClick={onNewImport}
-          className="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
-        >
-          Importar outro arquivo
-        </button>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="btn btn-primary" onClick={onGoToDashboard}>Ver no Dashboard</button>
+        <button className="btn btn-secondary" onClick={onNewImport}>Importar outro arquivo</button>
       </div>
+    </div>
+  )
+}
+
+function SummaryMiniCard({ label, count, amount, color, bg }: {
+  label: string; count: number; amount: number | null; color: string; bg: string
+}) {
+  return (
+    <div style={{ background: bg, border: '1px solid var(--line)', borderRadius: 9, padding: '10px 14px' }}>
+      <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{label}</span>
+      <p style={{ fontSize: 20, fontWeight: 800, color }}>{count}</p>
+      {amount !== null && (
+        <p className="num" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{formatBRL(amount)}</p>
+      )}
     </div>
   )
 }

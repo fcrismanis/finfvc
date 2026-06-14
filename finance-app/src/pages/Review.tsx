@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { AlertTriangle, CheckCircle, ChevronDown } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -135,28 +135,39 @@ export function Review({ onNavigate }: Props) {
   const macroOptions = MACRO_CATEGORIES
 
   return (
-    <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg-page)' }}>
-      <div className="p-5 md:p-7 max-w-[940px] mx-auto w-full flex flex-col gap-5">
+    <main className="page-shell">
+      <div style={{ margin: '0 auto', maxWidth: 960, display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-        {/* Header */}
-        <div className="flex items-start gap-3 flex-wrap">
+        {/* ── Page header ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h1 className="text-[26px] font-extrabold tracking-tight" style={{ color: '#101828' }}>Revisão</h1>
-            <p className="text-[13px] mt-0.5" style={{ color: '#98A2B3' }}>Lançamentos que precisam de atenção</p>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Revisão</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              Lançamentos que pedem atenção
+            </div>
           </div>
-          <span className="ml-auto self-center text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: '#D97706', background: '#FFFBEB' }}>
-            {allItems.length} para revisar
-          </span>
+          {allItems.length > 0 && (
+            <span className="badge b-warn">
+              <span className="dot" />
+              {allItems.length} para revisar
+            </span>
+          )}
         </div>
 
         {isDemo && (
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-            Dados demonstrativos — <button className="underline ml-1 font-medium" onClick={() => onNavigate('/conectar')}>importe seu extrato</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-soft)', borderRadius: 9, padding: '7px 13px', fontSize: 12, color: 'var(--ink)' }}>
+            Dados demonstrativos —{' '}
+            <button
+              style={{ fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)', fontSize: 12, fontFamily: 'var(--ui)' }}
+              onClick={() => onNavigate('/conectar')}
+            >
+              importe seu extrato
+            </button>
           </div>
         )}
 
-        {/* Filter chips */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* ── Filter pills ── */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {FILTER_CHIPS.map(f => {
             const count = counts[f.key]
             const active = activeFilter === f.key
@@ -164,23 +175,15 @@ export function Review({ onNavigate }: Props) {
               <button
                 key={f.key}
                 onClick={() => setActiveFilter(f.key)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                style={{
-                  background: active ? 'var(--sidebar-active)' : 'white',
-                  color: active ? 'white' : '#6B7280',
-                  border: active ? '1px solid transparent' : '1px solid var(--border-card)',
-                  boxShadow: active ? 'none' : 'var(--shadow-card)',
-                }}
+                className={`filter-pill${active ? ' active' : ''}`}
               >
                 {f.label}
                 {count > 0 && (
-                  <span
-                    className="text-[9px] font-bold px-1 py-px rounded-full"
-                    style={{
-                      background: active ? 'rgba(255,255,255,0.25)' : '#F3F4F6',
-                      color: active ? 'white' : '#6B7280',
-                    }}
-                  >
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                    background: active ? 'rgba(255,255,255,.22)' : 'var(--well)',
+                    color: active ? '#fff' : 'var(--faint)',
+                  }}>
                     {count}
                   </span>
                 )}
@@ -189,67 +192,68 @@ export function Review({ onNavigate }: Props) {
           })}
         </div>
 
+        {/* ── Empty state ── */}
         {items.length === 0 && (
-          <div className="card p-10 flex flex-col items-center gap-3">
-            <CheckCircle size={32} color="#16A34A" />
-            <p className="text-sm text-gray-600 font-medium">Nenhum lançamento para revisar</p>
-            <p className="text-xs text-gray-400">Tudo em ordem neste filtro</p>
+          <div className="card">
+            <div className="empty-state">
+              <div className="empty-glyph" />
+              <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento para revisar</h4>
+              <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>Tudo em ordem neste filtro.</p>
+            </div>
           </div>
         )}
 
-        {/* Review cards */}
-        <div className="space-y-2">
+        {/* ── Review cards ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {items.map(({ tx, reasons }) => {
             const isEditing = editingId === tx.id
             const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
 
             return (
-              <div key={tx.id} className="card overflow-hidden">
+              <div key={tx.id} className="card" style={{ overflow: 'hidden' }}>
                 {/* Main row */}
-                <div className="flex items-start gap-3 p-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{tx.description}</p>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 18px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                        {tx.description}
+                      </p>
                       {tx.isAdjustment && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-semibold">
-                          ajustado
-                        </span>
+                        <span className="chip chip-neutral">ajustado</span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-1 text-[11px] text-gray-400">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4, fontSize: 11, color: 'var(--faint)' }}>
                       <span className="num">{tx.competenceDate}</span>
                       {tx.accountId && <span>· {tx.accountId.replace('acc_', '')}</span>}
                       {macro && (
-                        <span>·
-                          <span className="ml-1 font-medium" style={{ color: macro.color }}>{macro.name}</span>
+                        <span>·&nbsp;
+                          <span style={{ fontWeight: 600, color: macro.color }}>{macro.name}</span>
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    {/* Editorial notes */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
                       {reasons.map((r, i) => (
-                        <span
-                          key={i}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium"
-                        >
-                          <AlertTriangle size={8} /> {r}
-                        </span>
+                        <span key={i} className="review-note">{r}</span>
                       ))}
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold num" style={{ color: tx.type === 'income' ? '#059669' : '#DC2626' }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p className="num" style={{ fontSize: 13.5, fontWeight: 800, color: tx.type === 'income' ? 'var(--pos)' : 'var(--ink)' }}>
                       {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
                     </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
+                    <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>
                       {tx.status === 'pending' ? 'Pendente' : 'Pago'}
                     </p>
                   </div>
                   <button
                     onClick={() => isEditing ? setEditingId(null) : startEdit(tx)}
-                    className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="btn-ghost"
+                    style={{ width: 28, height: 28, flexShrink: 0 }}
                   >
                     <ChevronDown
-                      size={15}
+                      size={14}
+                      color="var(--ink-2)"
                       style={{ transform: isEditing ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
                     />
                   </button>
@@ -257,94 +261,69 @@ export function Review({ onNavigate }: Props) {
 
                 {/* Edit form */}
                 {isEditing && (
-                  <div
-                    className="border-t p-4 space-y-3"
-                    style={{ background: '#F8FAFC', borderColor: 'var(--border-card)' }}
-                  >
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div style={{ borderTop: '1px solid var(--line)', padding: '14px 18px', background: 'var(--well)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <label className="block text-gray-500 mb-1.5 font-semibold text-[11px] uppercase tracking-wide">
-                          Classificação
-                        </label>
+                        <label className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>Classificação</label>
                         <select
                           value={editPatch.classificationType as string}
                           onChange={e => setEditPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
-                          className="w-full rounded-lg px-2.5 py-2 bg-white focus:outline-none text-xs"
-                          style={{ border: '1px solid var(--border-card)' }}
+                          className="ledger-select"
+                          style={{ width: '100%' }}
                         >
                           {clsOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-gray-500 mb-1.5 font-semibold text-[11px] uppercase tracking-wide">
-                          Macro categoria
-                        </label>
+                        <label className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>Macro categoria</label>
                         <select
                           value={editPatch.macroCategoryId as string ?? ''}
                           onChange={e => setEditPatch(p => ({ ...p, macroCategoryId: e.target.value }))}
-                          className="w-full rounded-lg px-2.5 py-2 bg-white focus:outline-none text-xs"
-                          style={{ border: '1px solid var(--border-card)' }}
+                          className="ledger-select"
+                          style={{ width: '100%' }}
                         >
                           {macroOptions.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
                       </div>
                     </div>
-                    <div className="flex gap-5 text-xs text-gray-600">
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                    <div style={{ display: 'flex', gap: 18, fontSize: 12, color: 'var(--ink-2)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={!!editPatch.includeInOperationalResult}
                           onChange={e => setEditPatch(p => ({ ...p, includeInOperationalResult: e.target.checked }))}
-                          className="rounded"
                         />
                         Resultado operacional
                       </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={!!editPatch.includeInCashflow}
                           onChange={e => setEditPatch(p => ({ ...p, includeInCashflow: e.target.checked }))}
-                          className="rounded"
                         />
                         Fluxo de caixa
                       </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={!!editPatch.includeInBudget}
                           onChange={e => setEditPatch(p => ({ ...p, includeInBudget: e.target.checked }))}
-                          className="rounded"
                         />
                         Orçamento
                       </label>
                     </div>
                     <div>
-                      <label className="block text-gray-500 mb-1.5 font-semibold text-[11px] uppercase tracking-wide">
-                        Observação
-                      </label>
+                      <label className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>Observação</label>
                       <input
                         value={editPatch.notes as string ?? ''}
                         onChange={e => setEditPatch(p => ({ ...p, notes: e.target.value }))}
                         placeholder="Por que este ajuste?"
-                        className="w-full rounded-lg px-2.5 py-2 text-xs bg-white focus:outline-none"
-                        style={{ border: '1px solid var(--border-card)' }}
+                        style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8, padding: '7px 10px', fontSize: 12, background: 'var(--card-bg)', color: 'var(--ink)', outline: 'none', fontFamily: 'var(--ui)', boxSizing: 'border-box' }}
                       />
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveEdit(tx.id)}
-                        className="px-4 py-2 text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
-                        style={{ background: 'var(--sidebar-active)' }}
-                      >
-                        Salvar ajuste
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="px-4 py-2 text-xs text-gray-600 rounded-lg hover:bg-white transition-colors"
-                        style={{ border: '1px solid var(--border-card)' }}
-                      >
-                        Cancelar
-                      </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => saveEdit(tx.id)}>Salvar ajuste</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancelar</button>
                     </div>
                   </div>
                 )}

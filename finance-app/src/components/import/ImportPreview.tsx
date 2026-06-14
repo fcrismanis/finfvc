@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ParsedImportItem } from '../../importers/types'
 import type { ClassificationType } from '../../types'
 import { classificationTypeOptions } from '../../importers/classifier'
@@ -55,81 +55,97 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
     onUpdate(items.map(i => i.isDuplicate ? i : { ...i, selected }))
   }
 
-  const typeColor = (item: ParsedImportItem) => {
-    if (item.isDuplicate) return '#9CA3AF'
-    if (item.classification.type === 'income') return '#16A34A'
-    if (['transfer', 'neutral', 'adjustment', 'investment', 'redemption'].includes(item.classification.classificationType)) return '#9CA3AF'
-    return '#DC2626'
+  function typeColor(item: ParsedImportItem): string {
+    if (item.isDuplicate) return 'var(--faint)'
+    if (item.classification.type === 'income') return 'var(--pos)'
+    if (['transfer', 'neutral', 'adjustment', 'investment', 'redemption'].includes(item.classification.classificationType)) return 'var(--faint)'
+    return 'var(--ink-2)'
   }
 
+  const incomeCount = items.filter(i => i.classification.type === 'income' && !i.isDuplicate).length
+  const expenseCount = items.filter(i => i.classification.type === 'expense' && !i.isDuplicate).length
+
   return (
-    <div className="flex flex-col gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50 rounded-lg text-sm">
-        <span className="font-semibold text-indigo-800">{items.length} lançamentos detectados</span>
-        <span className="text-green-700">·  {items.filter(i => i.classification.type === 'income' && !i.isDuplicate).length} receitas</span>
-        <span className="text-red-700">·  {items.filter(i => i.classification.type === 'expense' && !i.isDuplicate).length} despesas</span>
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12,
+        padding: '10px 14px', background: 'var(--well)', borderRadius: 9,
+        border: '1px solid var(--line)', fontSize: 12.5,
+      }}>
+        <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{items.length} lançamentos detectados</span>
+        <span style={{ color: 'var(--pos)' }}>· {incomeCount} receitas</span>
+        <span style={{ color: 'var(--ink-2)' }}>· {expenseCount} despesas</span>
         {duplicateCount > 0 && (
-          <span className="flex items-center gap-1 text-amber-700">
-            <AlertTriangle size={13} /> {duplicateCount} possíveis duplicados
-          </span>
+          <span style={{ color: 'var(--warn)', fontWeight: 600 }}>· {duplicateCount} possíveis duplicados</span>
         )}
-        <span className="ml-auto text-gray-600">{selectedCount} selecionados para importar</span>
+        <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>{selectedCount} selecionados</span>
       </div>
 
       {/* Bulk actions */}
-      <div className="flex gap-2 text-xs">
-        <button onClick={() => toggleAll(true)} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium">Selecionar todos</button>
-        <button onClick={() => toggleAll(false)} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium">Desmarcar todos</button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => toggleAll(true)}>Selecionar todos</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => toggleAll(false)}>Desmarcar todos</button>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full text-xs">
+      <div style={{ overflowX: 'auto', borderRadius: 9, border: '1px solid var(--line)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="w-8 px-2 py-2" />
-              <th className="text-left px-3 py-2 text-gray-500 font-medium">Data</th>
-              <th className="text-left px-3 py-2 text-gray-500 font-medium">Descrição</th>
-              <th className="text-right px-3 py-2 text-gray-500 font-medium">Valor</th>
-              <th className="text-left px-3 py-2 text-gray-500 font-medium w-44">Classificação</th>
-              <th className="text-left px-3 py-2 text-gray-500 font-medium">Conta</th>
+            <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+              <th style={{ width: 36, padding: '9px 8px' }} />
+              <th className="table-th">Data</th>
+              <th className="table-th">Descrição</th>
+              <th className="table-th table-th-right">Valor</th>
+              <th className="table-th" style={{ width: 160 }}>Classificação</th>
+              <th className="table-th">Conta</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {pageItems.map((item, idx) => (
               <tr
                 key={idx}
-                className={`transition-colors ${item.isDuplicate ? 'bg-amber-50' : item.selected ? 'hover:bg-gray-50' : 'opacity-50 bg-gray-50'}`}
+                style={{
+                  borderBottom: '1px solid var(--line)',
+                  background: item.isDuplicate ? 'var(--warn-soft)' : item.selected ? 'transparent' : 'var(--well)',
+                  opacity: item.selected || item.isDuplicate ? 1 : 0.55,
+                  transition: 'background 0.1s',
+                }}
               >
-                <td className="px-2 py-2 text-center">
+                <td style={{ padding: '8px', textAlign: 'center' }}>
                   <input
                     type="checkbox"
                     checked={item.selected && !item.isDuplicate}
                     disabled={item.isDuplicate}
                     onChange={() => toggleSelected(idx)}
-                    className="rounded"
                   />
                 </td>
-                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{item.transactionDate}</td>
-                <td className="px-3 py-2 text-gray-800 max-w-56 truncate">
-                  {item.isDuplicate && <span className="inline-block mr-1 text-amber-600 font-semibold">[DUP]</span>}
-                  {item.normalizedDescription}
+                <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
+                  {item.transactionDate}
+                </td>
+                <td className="table-td" style={{ maxWidth: 200 }}>
+                  {item.isDuplicate && (
+                    <span className="chip chip-warn" style={{ marginRight: 5 }}>DUP</span>
+                  )}
+                  <span style={{ fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: '100%' }}>
+                    {item.normalizedDescription}
+                  </span>
                 </td>
                 <td
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap"
-                  style={{ color: typeColor(item) }}
+                  className="table-td table-th-right"
+                  style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: typeColor(item), fontFamily: 'var(--mono)', fontSize: 12 }}
                 >
-                  {item.classification.type === 'expense' ? '-' : '+'}{formatBRL(item.amount)}
+                  {item.classification.type === 'expense' ? '−' : '+'}{formatBRL(item.amount)}
                 </td>
-                <td className="px-3 py-2">
+                <td className="table-td">
                   {item.isDuplicate ? (
-                    <span className="text-amber-600 text-xs">Duplicado ignorado</span>
+                    <span style={{ fontSize: 11, color: 'var(--warn)', fontStyle: 'italic' }}>Duplicado ignorado</span>
                   ) : (
                     <select
                       value={item.classification.classificationType}
                       onChange={e => updateClassification(idx, e.target.value as ClassificationType)}
-                      className="w-full text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="ledger-select"
+                      style={{ width: '100%', fontSize: 11 }}
                     >
                       {classOptions.map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
@@ -137,7 +153,9 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
                     </select>
                   )}
                 </td>
-                <td className="px-3 py-2 text-gray-500 max-w-28 truncate">{item.raw.rawAccount || '—'}</td>
+                <td className="table-td" style={{ color: 'var(--faint)', fontSize: 11, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.raw.rawAccount || '—'}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -146,40 +164,27 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-40"
-          >
-            <ChevronLeft size={16} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
+          <button className="btn-ghost" style={{ width: 28, height: 28 }} onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+            <ChevronLeft size={13} />
           </button>
           <span>Página {page + 1} de {totalPages}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page === totalPages - 1}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-40"
-          >
-            <ChevronRight size={16} />
+          <button className="btn-ghost" style={{ width: 28, height: 28 }} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>
+            <ChevronRight size={13} />
           </button>
         </div>
       )}
 
       {/* Actions */}
-      <div className="flex gap-3 pt-2">
+      <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
         <button
           onClick={onConfirm}
           disabled={selectedCount === 0}
-          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="btn btn-primary"
         >
           Importar {selectedCount} lançamentos
         </button>
-        <button
-          onClick={onCancel}
-          className="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
-        >
-          Cancelar
-        </button>
+        <button onClick={onCancel} className="btn btn-secondary">Cancelar</button>
       </div>
     </div>
   )
