@@ -102,7 +102,7 @@ export function ImportSummary({ summary, onNewImport, onGoToDashboard }: Props) 
       <div className="flex gap-3">
         <button
           onClick={onGoToDashboard}
-          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-[#1B1A16] hover:opacity-90 transition-opacity"
+          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
         >
           Ver no Dashboard
         </button>

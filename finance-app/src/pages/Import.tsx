@@ -75,13 +75,13 @@ export function Import({ onNavigate }: Props) {
                 <div
                   className="flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
                   style={{
-                    background: done ? '#1E6F49' : active ? '#1B1A16' : '#E1DDD1',
-                    color: done || active ? '#fff' : '#8A8578',
+                    background: done ? '#16A34A' : active ? '#4F46E5' : '#E5E7EB',
+                    color: done || active ? '#fff' : '#9CA3AF',
                   }}
                 >
                   {done ? '✓' : i + 1}
                 </div>
-                <span style={{ color: active ? '#1B1A16' : done ? '#1E6F49' : '#8A8578', fontWeight: active ? 600 : 400 }}>
+                <span style={{ color: active ? '#4F46E5' : done ? '#16A34A' : '#9CA3AF', fontWeight: active ? 600 : 400 }}>
                   {labels[i]}
                 </span>
                 {i < 2 && <span className="text-gray-300 mx-1">›</span>}

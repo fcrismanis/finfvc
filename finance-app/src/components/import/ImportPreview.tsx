@@ -65,8 +65,8 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg text-sm" style={{ background: 'var(--accent-soft)' }}>
-        <span className="font-semibold" style={{ color: '#1B1A16' }}>{items.length} lançamentos detectados</span>
+      <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50 rounded-lg text-sm">
+        <span className="font-semibold text-indigo-800">{items.length} lançamentos detectados</span>
         <span className="text-green-700">·  {items.filter(i => i.classification.type === 'income' && !i.isDuplicate).length} receitas</span>
         <span className="text-red-700">·  {items.filter(i => i.classification.type === 'expense' && !i.isDuplicate).length} despesas</span>
         {duplicateCount > 0 && (
@@ -129,7 +129,7 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
                     <select
                       value={item.classification.classificationType}
                       onChange={e => updateClassification(idx, e.target.value as ClassificationType)}
-                      className="w-full text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#8A8578]"
+                      className="w-full text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     >
                       {classOptions.map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
@@ -170,7 +170,7 @@ export function ImportPreview({ items, onUpdate, onConfirm, onCancel }: Props) {
         <button
           onClick={onConfirm}
           disabled={selectedCount === 0}
-          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-[#1B1A16] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+          className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Importar {selectedCount} lançamentos
         </button>
