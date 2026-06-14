@@ -23,23 +23,27 @@ const tools = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-const DARK = '#2A2520'
-const DARK_BORDER = 'rgba(255,255,255,0.07)'
+const DARK = '#211F1B'
+const DARK_BORDER = 'rgba(255,255,255,.08)'
 
 export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   return (
     <aside
-      className="flex flex-col w-[240px] min-w-[240px] h-full"
-      style={{ background: DARK }}
+      className="flex flex-col h-full"
+      style={{ width: 230, minWidth: 230, background: DARK }}
     >
       {/* Logo */}
       <div
-        className="flex items-center gap-2.5 px-5 py-[17px]"
+        className="flex items-center gap-[11px] px-5 py-[17px]"
         style={{ borderBottom: `1px solid ${DARK_BORDER}` }}
       >
         <div
-          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0 font-extrabold text-base text-white"
-          style={{ background: '#3D8A66' }}
+          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0 font-extrabold text-base"
+          style={{
+            background: '#11100D',
+            border: '1px solid rgba(255,255,255,.12)',
+            color: '#F2F0E9',
+          }}
         >
           F
         </div>
@@ -50,7 +54,7 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
           <button
             onClick={onClose}
             className="lg:hidden ml-auto w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: 'rgba(255,255,255,0.5)' }}
+            style={{ color: 'rgba(255,255,255,.5)' }}
             aria-label="Fechar menu"
           >
             <X size={15} />
@@ -59,11 +63,26 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="sidebar-dark flex-1 py-3 overflow-y-auto">
+      <nav className="flex-1 py-[14px] overflow-y-auto">
         {primary.map(item => (
           <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
         ))}
-        <div className="mx-5 my-3 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+
+        {/* Separador FERRAMENTAS */}
+        <div
+          style={{
+            fontFamily: "'Geist Mono', ui-monospace, monospace",
+            fontSize: 9,
+            letterSpacing: '.16em',
+            textTransform: 'uppercase' as const,
+            color: 'rgba(255,255,255,.32)',
+            padding: '6px 20px',
+            marginTop: 8,
+          }}
+        >
+          Ferramentas
+        </div>
+
         {tools.map(item => (
           <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
         ))}
@@ -71,18 +90,18 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
 
       {/* User */}
       <div
-        className="mx-3 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
-        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="mx-3 mb-[14px] flex items-center gap-[10px] px-3 py-[10px] rounded-xl"
+        style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.08)' }}
       >
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 text-white"
-          style={{ background: 'rgba(61,138,102,0.38)' }}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
+          style={{ background: '#3a362c', color: '#E9E2CF' }}
         >
           FC
         </div>
         <div className="min-w-0">
           <p className="text-[13px] font-bold leading-none truncate text-white">Família Crivo</p>
-          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>Plano familiar</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,.45)' }}>Plano familiar</p>
         </div>
       </div>
     </aside>
@@ -98,7 +117,7 @@ function NavItem({ route, label, icon: Icon, active, onNavigate }: {
 }) {
   return (
     <button onClick={() => onNavigate(route)} className={`nav-item${active ? ' active' : ''}`}>
-      <Icon size={15} />
+      <Icon size={16} />
       {label}
     </button>
   )
