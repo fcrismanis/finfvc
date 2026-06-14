@@ -23,8 +23,8 @@ const tools = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-const DARK = '#262B4D'
-const DARK_BORDER = 'rgba(255,255,255,0.08)'
+const DARK = '#2A2520'
+const DARK_BORDER = 'rgba(255,255,255,0.07)'
 
 export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   return (
@@ -39,7 +39,7 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       >
         <div
           className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0 font-extrabold text-base text-white"
-          style={{ background: 'var(--sidebar-active)' }}
+          style={{ background: '#3D8A66' }}
         >
           F
         </div>
@@ -76,7 +76,7 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       >
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 text-white"
-          style={{ background: 'rgba(99,102,241,0.55)' }}
+          style={{ background: 'rgba(61,138,102,0.38)' }}
         >
           FC
         </div>

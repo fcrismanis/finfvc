@@ -1,21 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --sidebar-bg: #262B4D;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-active: #4F46E5;
-  --sidebar-active-soft: #EEF0FF;
-  --sidebar-text: #667085;
-  --sidebar-ink: #101828;
-  --bg-page: #F4F3F0;
-  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.03);
-  --border-card: #ECEEF2;
-  --radius-card: 18px;
-  --accent: #4F46E5;
-  --accent-soft: #EEF0FF;
-  --color-pos: #15803D;
-  --color-neg: #C9603F;
-  --color-over: #DC4E41;
+  /* ── Ledger Editorial — Warm Token System ── */
+  --bg-page: #F5F2ED;
+
+  /* Sidebar — grafite quente */
+  --sidebar-bg: #2A2520;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-active: #3D8A66;
+  --sidebar-active-soft: #EDF5F0;
+  --sidebar-text: #8A8078;
+  --sidebar-ink: #1A1714;
+
+  /* Card */
+  --shadow-card: 0 1px 2px 0 rgb(26 23 20 / 0.05), 0 1px 4px 0 rgb(26 23 20 / 0.03);
+  --border-card: #E8E4DE;
+  --radius-card: 12px;
+
+  /* Accent — editorial green */
+  --accent: #2D6A4F;
+  --accent-soft: #EDF5F0;
+
+  /* Semantic */
+  --color-pos: #2D6A4F;
+  --color-neg: #1A1714;
+  --color-over: #A04B30;
+  --color-ocre: #9A7520;
+  --color-clay: #A04B30;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,7 +34,7 @@
 body {
   font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-page);
-  color: #111827;
+  color: #1A1714;
   letter-spacing: -0.011em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -40,8 +51,8 @@ body {
   margin: 1px 8px;
   width: calc(100% - 16px);
   padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 14.5px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 600;
   text-align: left;
   color: var(--sidebar-text);
@@ -61,22 +72,23 @@ body {
 .nav-item.active {
   background: var(--sidebar-active-soft);
   color: var(--sidebar-active);
-  font-weight: 600;
+  font-weight: 700;
 }
 
-/* Dark sidebar overrides */
+/* Dark sidebar — grafite quente */
 .sidebar-dark .nav-item {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.52);
 }
 .sidebar-dark .nav-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
 }
 .sidebar-dark .nav-item.active {
-  background: rgba(99, 102, 241, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  color: #fff;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.36);
+  border: none;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 700;
 }
 
 /* Card shell */
@@ -87,7 +99,7 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* Tabular numbers everywhere */
+/* Tabular numbers */
 .num {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -99,8 +111,8 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  font-weight: 600;
-  border-radius: 8px;
+  font-weight: 700;
+  border-radius: 7px;
   padding: 7px 14px;
   border: none;
   cursor: pointer;
@@ -122,54 +134,54 @@ body {
   border: 1px solid transparent;
 }
 .btn-ghost:not(:disabled):hover { background: #F4F6FA; color: var(--sidebar-ink); }
-.btn-danger { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
-.btn-danger:not(:disabled):hover { background: #FEE2E2; }
+.btn-danger { background: #FBF0ED; color: #A04B30; border: 1px solid #F0C9BC; }
+.btn-danger:not(:disabled):hover { background: #F5DDD6; }
 .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 6px; gap: 4px; }
-.btn-lg { font-size: 14px; padding: 10px 20px; border-radius: 10px; }
+.btn-lg { font-size: 14px; padding: 10px 20px; border-radius: 9px; }
 
 /* ── Badges ─────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;
   align-items: center;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
   white-space: nowrap;
 }
-.badge-ok       { color: #059669; background: #F0FDF4; }
-.badge-warning  { color: #B45309; background: #FFFBEB; }
-.badge-critical { color: #DC2626; background: #FEF2F2; }
-.badge-info     { color: #4F46E5; background: #EEF2FF; }
+.badge-ok       { color: #2D6A4F; background: #EDF5F0; }
+.badge-warning  { color: #9A7520; background: #FDF8EC; }
+.badge-critical { color: #A04B30; background: #FBF0ED; }
+.badge-info     { color: #2D6A4F; background: #EDF5F0; }
 .badge-neutral  { color: #64748B; background: #F8FAFC; }
 .badge-blue     { color: var(--accent); background: var(--accent-soft); }
 
 /* ── Table ──────────────────────────────────────────────────── */
 .table-th {
   font-size: 11px;
-  font-weight: 600;
-  color: #98A2B3;
+  font-weight: 700;
+  color: #9A9290;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 10px 16px;
   text-align: left;
 }
 .table-th-right { text-align: right; }
-.table-row      { border-bottom: 1px solid #F7F8FA; transition: background 0.1s; }
-.table-row:hover { background: #F8FAFC; }
-.table-td       { padding: 10px 16px; font-size: 12px; color: #374151; }
+.table-row      { border-bottom: 1px solid #F0EDE8; transition: background 0.1s; }
+.table-row:hover { background: #F8F5F0; }
+.table-td       { padding: 10px 16px; font-size: 12px; color: #4A4540; }
 
 /* ── Page layout helpers ────────────────────────────────────── */
 .page-shell {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px;
   background: var(--bg-page);
 }
-.page-content { margin: 0 auto; }
+.page-content { margin: 0 auto; max-width: 1200px; }
 .section-gap  { display: flex; flex-direction: column; gap: 16px; }
 
-/* ── Global overflow guard — nunca scroll horizontal indevido ── */
+/* ── Global overflow guard ── */
 html, body { overflow-x: hidden; max-width: 100%; }
 
 /* ── Responsive sidebar ─────────────────────────────────────── */
@@ -179,7 +191,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .sidebar-overlay {
   display: none;
 }
-/* sidebar fixa visível até 1023px; vira drawer abaixo disso */
 @media (max-width: 1023px) {
   .sidebar-shell {
     position: fixed;

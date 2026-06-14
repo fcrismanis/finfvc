@@ -9,15 +9,15 @@ interface Props {
   partialTotal?: number
 }
 
-const ENTRY_GREEN = '#15803D'
-const SALDO_GREEN = '#15803D'
-const CRITICAL_RED = '#BB3E36'
-// Rampa índigo do padrão Home B — grupos de despesa sempre nessa escala,
-// vermelho reservado pra Dívidas (isCritical)
-const INDIGO_RAMP = ['#4F46E5', '#6366F1', '#818CF8', '#A5B4FC', '#C7D2FE', '#818CF8', '#6366F1']
+const ENTRY_GREEN = '#2D6A4F'
+const SALDO_GREEN = '#2D6A4F'
+const CRITICAL_RED = '#A04B30'
+
+// Ledger Editorial warm step palette — sage, ocre, clay, slate, muted wine, teal, warm brown
+const STEP_RAMP = ['#4A7C6B', '#9A7520', '#A04B30', '#4A6B8A', '#7A5C7A', '#3D6B7A', '#8A6A3D']
 
 function stepColor(index: number, isCritical: boolean): string {
-  return isCritical ? CRITICAL_RED : INDIGO_RAMP[index % INDIGO_RAMP.length]
+  return isCritical ? CRITICAL_RED : STEP_RAMP[index % STEP_RAMP.length]
 }
 
 function compactBRL(v: number): string {
@@ -45,9 +45,8 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
     )
   }
 
-  // Build column model: entry + steps + saldo
   type Col = { key: string; label: string; topLabel: string; color: string; top: number; height: number; isCritical?: boolean }
-  const H = 300 // bar area px
+  const H = 300
   const scale = income > 0 ? H / income : 0
 
   const cols: Col[] = []
@@ -83,29 +82,27 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
 
       {isPartial && partialDay != null && partialTotal != null && (
         <div
-          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 mb-4 text-[11.5px] font-semibold"
-          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 mb-4 text-[11px] font-semibold"
+          style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid #C8E6D8' }}
         >
-          📅 Mês em andamento · dia {partialDay} de {partialTotal} · leitura parcial
+          Mês em andamento · dia {partialDay} de {partialTotal} · leitura parcial
         </div>
       )}
 
       {/* ── Desktop: waterfall horizontal (≥900px) ── */}
       <div className="hidden min-[900px]:block">
-        {/* Top value labels */}
         <div className="flex items-end gap-2" style={{ marginBottom: 6 }}>
           {cols.map(c => (
             <div
               key={c.key}
-              className="flex-1 text-center text-[12.5px] font-bold num"
-              style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? CRITICAL_RED : '#3D478F' }}
+              className="flex-1 text-center text-[12px] font-bold num"
+              style={{ color: c.key === 'entry' || c.key === 'saldo' ? ENTRY_GREEN : c.isCritical ? CRITICAL_RED : '#5A6A7A' }}
             >
               {c.topLabel}
             </div>
           ))}
         </div>
 
-        {/* Bars */}
         <div className="flex items-stretch" style={{ height: H, position: 'relative' }}>
           {cols.map((c, i) => {
             const next = cols[i + 1]
@@ -116,36 +113,38 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
                   style={{
                     position: 'absolute', left: '9%', right: '9%',
                     top: c.top, height: c.height, background: c.color,
-                    borderRadius: 10, transition: 'top 0.4s ease, height 0.4s ease',
+                    borderRadius: 8, transition: 'top 0.4s ease, height 0.4s ease',
                   }}
                 />
                 {showConnector && (
-                  <div style={{ position: 'absolute', left: '86%', width: '28%', top: c.top + c.height, height: 1.5, background: '#D7DCE5' }} />
+                  <div style={{
+                    position: 'absolute', left: '86%', width: '28%',
+                    top: c.top + c.height, height: 1.5, background: '#D8D4CE',
+                  }} />
                 )}
               </div>
             )
           })}
         </div>
 
-        {/* Bottom labels */}
         <div className="flex gap-2" style={{ marginTop: 8 }}>
           {cols.map(c => (
             <div
               key={c.key}
-              className="flex-1 text-center text-[12px] font-semibold"
-              style={{ color: c.key === 'entry' || c.key === 'saldo' || c.label === 'Alimentação' ? '#101828' : '#667085' }}
+              className="flex-1 text-center text-[11.5px] font-semibold"
+              style={{ color: c.key === 'entry' || c.key === 'saldo' ? '#1A1714' : '#6A6460' }}
             >
               {c.label}
             </div>
           ))}
         </div>
 
-        <p className="text-[12px] mt-5" style={{ color: '#98A2B3' }}>
-          A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra. Clique em um grupo para ver as categorias.
+        <p className="text-[12px] mt-5" style={{ color: '#9A9290' }}>
+          A renda entra à esquerda e vai sendo consumida etapa a etapa até a sobra.
         </p>
       </div>
 
-      {/* ── Mobile: fluxo vertical empilhado (<900px) ── */}
+      {/* ── Mobile: fluxo vertical (<900px) ── */}
       <div className="min-[900px]:hidden flex flex-col gap-2">
         <FunnelRow label="Entrou" amount={income} color={ENTRY_GREEN} bold income />
         {stepsWithData.map((s, idx) => (
@@ -166,19 +165,19 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
 function FunnelRow({ label, amount, color, running, bold, income, saldo }: {
   label: string; amount: number; color: string; running?: number; bold?: boolean; income?: boolean; saldo?: boolean
 }) {
-  const bg = income ? '#F0FDF4' : saldo ? '#F0FDF4' : '#F8FAFC'
+  const bg = income ? '#EDF5F0' : saldo ? '#EDF5F0' : '#F5F2ED'
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5" style={{ background: bg }}>
+    <div className="flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5" style={{ background: bg }}>
       <div className="flex items-center gap-2 min-w-0">
-        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
-        <span className={`text-[13px] truncate ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color: '#101828' }}>{label}</span>
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className={`text-[13px] truncate ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color: '#1A1714' }}>{label}</span>
       </div>
       <div className="text-right flex-shrink-0">
-        <span className="text-[14px] font-bold num" style={{ color: amount < 0 ? '#475569' : color }}>
+        <span className="text-[14px] font-bold num" style={{ color: amount < 0 ? '#6A6460' : color }}>
           {amount < 0 ? '−' : ''}{formatBRL(Math.abs(amount))}
         </span>
         {running != null && (
-          <span className="block text-[10.5px] num" style={{ color: '#98A2B3' }}>saldo {formatBRL(running)}</span>
+          <span className="block text-[10.5px] num" style={{ color: '#9A9290' }}>saldo {formatBRL(running)}</span>
         )}
       </div>
     </div>
@@ -188,9 +187,9 @@ function FunnelRow({ label, amount, color, running, bold, income, saldo }: {
 function FunnelHeader() {
   return (
     <div className="mb-4">
-      <h3 className="text-[15px] font-bold" style={{ color: '#101828' }}>Funil da Clareza</h3>
-      <p className="text-[12px] mt-0.5" style={{ color: '#98A2B3' }}>
-        entrada → saídas por grupo → sobra · clique para detalhar
+      <h3 className="text-[14.5px] font-bold" style={{ color: '#1A1714' }}>Funil da Clareza</h3>
+      <p className="text-[12px] mt-0.5" style={{ color: '#9A9290' }}>
+        entrada → saídas por grupo → sobra
       </p>
     </div>
   )
@@ -199,12 +198,15 @@ function FunnelHeader() {
 function EmptyFunnel() {
   return (
     <div className="py-10 flex flex-col items-center gap-3">
-      <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--accent-soft)' }}>
-        <span style={{ fontSize: 24 }}>📊</span>
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-soft)' }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="20" height="20" rx="3" />
+          <path d="M8 18V10M12 18V6M16 18v-4" />
+        </svg>
       </div>
       <div className="text-center">
-        <p className="text-[14px] font-semibold" style={{ color: '#101828' }}>Nenhum dado para este mês</p>
-        <p className="text-[12px] mt-1" style={{ color: '#98A2B3' }}>
+        <p className="text-[14px] font-semibold" style={{ color: '#1A1714' }}>Nenhum dado para este mês</p>
+        <p className="text-[12px] mt-1" style={{ color: '#9A9290' }}>
           Importe seus lançamentos para ver o Funil da Clareza.
         </p>
       </div>
