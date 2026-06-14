@@ -29,11 +29,11 @@ export function EmptyState({ icon: Icon, title, description, action, compact = f
           }
         </div>
       )}
-      <p style={{ fontSize: compact ? 12.5 : 13, fontWeight: 600, color: '#374151' }}>
+      <p style={{ fontSize: compact ? 12.5 : 13, fontWeight: 600, color: '#1B1A16' }}>
         {title}
       </p>
       {description && (
-        <p style={{ fontSize: 12, color: '#9CA3AF', maxWidth: 280, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 12, color: '#8A8578', maxWidth: 280, lineHeight: 1.5 }}>
           {description}
         </p>
       )}

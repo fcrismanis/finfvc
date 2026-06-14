@@ -240,7 +240,7 @@ export function Budget({ selectedMonth }: Props) {
                       ) : (
                         <button
                           onClick={() => startEdit(macro.id)}
-                          className="font-medium tabular-nums num text-gray-700 hover:text-indigo-600 transition-colors"
+                          className="font-medium tabular-nums num text-gray-700 hover:text-[#1B1A16] transition-colors"
                           title="Clique para editar"
                         >
                           {row.plannedAmount > 0

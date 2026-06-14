@@ -253,7 +253,7 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
                     <td className="px-4 py-3 text-gray-800 max-w-[280px]">
                       <p className="truncate font-medium text-xs">{tx.description}</p>
                       {tx.isAdjustment && (
-                        <p className="text-[10px] text-indigo-400 mt-0.5">ajustado</p>
+                        <p className="text-[10px] text-[#8A8578] mt-0.5">ajustado</p>
                       )}
                     </td>
                     <td

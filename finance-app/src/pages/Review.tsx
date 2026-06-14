@@ -211,7 +211,7 @@ export function Review({ onNavigate }: Props) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900 truncate">{tx.description}</p>
                       {tx.isAdjustment && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-semibold">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#ECE7DB] text-[#1B1A16] font-semibold">
                           ajustado
                         </span>
                       )}

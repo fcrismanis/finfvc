@@ -1,21 +1,63 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   FIN · Ledger Editorial — camada visual (drop-in para finance-app/src/index.css)
+   ----------------------------------------------------------------------------
+   Esta é uma TROCA DE TEMA. Só presentation layer:
+   tokens, cor, raio, sombra, hairlines, tipografia de rótulo/numero.
+   NÃO altera lógica, props, cálculo, rotas, dados, Supabase/Auth/Importers.
+   A maior parte do app é reestilizada só por aqui (.card / .btn / .badge /
+   .table-* / .nav-item + variáveis). Itens que exigem patch de componente
+   estão documentados na entrega (sidebar bg, emoji de empty state, rampa do funil).
+   ========================================================================== */
+
 :root {
-  --sidebar-bg: #262B4D;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-active: #4F46E5;
-  --sidebar-active-soft: #EEF0FF;
-  --sidebar-text: #667085;
-  --sidebar-ink: #101828;
-  --bg-page: #F4F3F0;
-  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.03);
-  --border-card: #ECEEF2;
-  --radius-card: 18px;
-  --accent: #4F46E5;
-  --accent-soft: #EEF0FF;
-  --color-pos: #15803D;
-  --color-neg: #C9603F;
-  --color-over: #DC4E41;
+  /* ── Paleta base: papel & tinta ─────────────────────────────── */
+  --paper:     #F2F0E9;   /* fundo da página — papel quente            */
+  --well:      #EBE8DF;   /* poço — superfície rebaixada                */
+  --card-bg:   #FCFBF7;   /* card comum — off-white quente              */
+  --ink:       #1B1A16;   /* tinta — texto principal e cor de marca     */
+  --ink-2:     #57534A;   /* texto secundário                          */
+  --faint:     #8A8578;   /* terciário / placeholder / rótulo apagado   */
+  --line:      #E1DDD1;   /* linha / divisor — hairline                 */
+
+  /* ── Acentos semânticos — só com função, nunca decoração ────── */
+  --pos:       #1E6F49;   --pos-soft:  #E6EEE6;   /* entrada / saldo +   */
+  --warn:      #8C6716;   --warn-soft: #F1E8D2;   /* atenção            */
+  --crit:      #9C4339;   --crit-soft: #F0E2DD;   /* crítico / estouro  */
+
+  /* ── Aliases sobre os nomes que o app já usa ────────────────── */
+  --bg-page:        var(--paper);
+  --bg-card:        var(--card-bg);   /* usado por MigrationPage (antes indefinido) */
+  --bg-sunk:        var(--well);
+  --border-card:    var(--line);
+  --radius-card:    11px;             /* 18 → 11 (raio mais maduro) */
+  --text-secondary: var(--ink-2);     /* usado por MigrationPage (antes indefinido) */
+
+  /* Sombras: a genérica vira hairline; a forte fica RESERVADA ao Funil */
+  --shadow-card: none;
+  --shadow-hero:
+    0 18px 40px -24px rgba(27, 26, 22, .45),
+    0 2px 6px -2px   rgba(27, 26, 22, .12);
+
+  /* Marca / interativo = tinta (sai o índigo SaaS) */
+  --accent:      var(--ink);
+  --accent-soft: #ECE7DB;
+
+  /* Números semânticos */
+  --color-pos:  var(--pos);
+  --color-neg:  var(--crit);
+  --color-over: var(--crit);
+
+  /* Sidebar — o recolor de fundo é patch de componente (Sidebar.tsx).
+     Aqui ficam os tokens que o CSS controla; o fundo grafite quente
+     vem no patch. Mantidos funcionais para não quebrar nada. */
+  --sidebar-bg:          #211F1B;   /* grafite quente (aplicado via patch) */
+  --sidebar-border:      rgba(255, 255, 255, 0.08);
+  --sidebar-active:      var(--ink);
+  --sidebar-active-soft: #ECE7DB;
+  --sidebar-text:        #A8A294;
+  --sidebar-ink:         var(--ink);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,7 +65,7 @@
 body {
   font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-page);
-  color: #111827;
+  color: var(--ink);
   letter-spacing: -0.011em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -32,7 +74,19 @@ body {
 
 #root { height: 100vh; display: flex; flex-direction: column; }
 
-/* Sidebar nav */
+/* Rótulo / data / coluna numérica — textura de livro-razão */
+.mono,
+.eyebrow {
+  font-family: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Sidebar nav ────────────────────────────────────────────── */
 .nav-item {
   display: flex;
   align-items: center;
@@ -40,9 +94,9 @@ body {
   margin: 1px 8px;
   width: calc(100% - 16px);
   padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 14.5px;
-  font-weight: 600;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 560;
   text-align: left;
   color: var(--sidebar-text);
   background: transparent;
@@ -52,46 +106,46 @@ body {
   transition: background 0.12s ease, color 0.12s ease;
   white-space: nowrap;
 }
-
-.nav-item:hover {
-  background: #F4F6FA;
-  color: var(--sidebar-ink);
-}
-
+.nav-item:hover { background: #F4F1EA; color: var(--sidebar-ink); }
 .nav-item.active {
   background: var(--sidebar-active-soft);
-  color: var(--sidebar-active);
-  font-weight: 600;
+  color: var(--ink);
+  font-weight: 650;
 }
 
-/* Dark sidebar overrides */
-.sidebar-dark .nav-item {
-  color: rgba(255, 255, 255, 0.6);
-}
+/* Sidebar escura (grafite quente) — item ativo: filete sand + wash translúcido */
+.sidebar-dark .nav-item { color: rgba(255, 255, 255, 0.58); }
 .sidebar-dark .nav-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
 }
 .sidebar-dark .nav-item.active {
-  background: rgba(99, 102, 241, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.07);
+  border: none;
+  box-shadow: inset 2px 0 0 #C9B68E;   /* filete sand */
   color: #fff;
-  font-weight: 600;
+  font-weight: 650;
 }
 
-/* Card shell */
+/* ── Card shell — papel quente, hairline, sem sombra ────────── */
 .card {
-  background: white;
+  background: var(--card-bg);
   border-radius: var(--radius-card);
   border: 1px solid var(--border-card);
   box-shadow: var(--shadow-card);
 }
 
-/* Tabular numbers everywhere */
-.num {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+/* Funil da Clareza — ÚNICO elemento em branco puro + sombra (o herói).
+   Marcado com a classe `clarity-funnel` no wrapper do ClarityFunnel. */
+.clarity-funnel {
+  background: #fff;
+  border: 1px solid rgba(27, 26, 22, .10);
+  border-radius: 13px;
+  box-shadow: var(--shadow-hero);
 }
+
+/* Números tabulares */
+.num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
 /* ── Buttons ────────────────────────────────────────────────── */
 .btn {
@@ -108,103 +162,85 @@ body {
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-primary  { background: var(--accent); color: #fff; }
+.btn-primary  { background: var(--accent); color: #FCFBF7; }
 .btn-primary:not(:disabled):hover { opacity: 0.88; }
 .btn-secondary {
-  background: #fff;
-  color: var(--sidebar-ink);
+  background: var(--card-bg);
+  color: var(--ink);
   border: 1px solid var(--border-card);
 }
-.btn-secondary:not(:disabled):hover { background: #F4F6FA; }
+.btn-secondary:not(:disabled):hover { background: var(--well); }
 .btn-ghost {
   background: transparent;
-  color: var(--sidebar-text);
+  color: var(--ink-2);
   border: 1px solid transparent;
 }
-.btn-ghost:not(:disabled):hover { background: #F4F6FA; color: var(--sidebar-ink); }
-.btn-danger { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
-.btn-danger:not(:disabled):hover { background: #FEE2E2; }
+.btn-ghost:not(:disabled):hover { background: var(--well); color: var(--ink); }
+.btn-danger { background: var(--crit-soft); color: var(--crit); border: 1px solid #E4C8C1; }
+.btn-danger:not(:disabled):hover { background: #E9D2CB; }
 .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 6px; gap: 4px; }
 .btn-lg { font-size: 14px; padding: 10px 20px; border-radius: 10px; }
 
-/* ── Badges ─────────────────────────────────────────────────── */
+/* ── Badges — chip discreto, palette quente ─────────────────── */
 .badge {
   display: inline-flex;
   align-items: center;
   font-size: 10px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 5px;
   white-space: nowrap;
+  letter-spacing: .01em;
 }
-.badge-ok       { color: #059669; background: #F0FDF4; }
-.badge-warning  { color: #B45309; background: #FFFBEB; }
-.badge-critical { color: #DC2626; background: #FEF2F2; }
-.badge-info     { color: #4F46E5; background: #EEF2FF; }
-.badge-neutral  { color: #64748B; background: #F8FAFC; }
-.badge-blue     { color: var(--accent); background: var(--accent-soft); }
+.badge-ok       { color: var(--pos);   background: var(--pos-soft); }
+.badge-warning  { color: var(--warn);  background: var(--warn-soft); }
+.badge-critical { color: var(--crit);  background: var(--crit-soft); }
+.badge-info     { color: var(--ink);   background: var(--accent-soft); }
+.badge-neutral  { color: var(--ink-2); background: var(--well); }
+.badge-blue     { color: var(--ink);   background: var(--accent-soft); }
 
-/* ── Table ──────────────────────────────────────────────────── */
+/* ── Table — livro-razão: cabeçalho mono, hairline, hover quente ── */
 .table-th {
-  font-size: 11px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 10px;
   font-weight: 600;
-  color: #98A2B3;
+  color: var(--faint);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
   padding: 10px 16px;
   text-align: left;
 }
 .table-th-right { text-align: right; }
-.table-row      { border-bottom: 1px solid #F7F8FA; transition: background 0.1s; }
-.table-row:hover { background: #F8FAFC; }
-.table-td       { padding: 10px 16px; font-size: 12px; color: #374151; }
+.table-row      { border-bottom: 1px solid var(--line); transition: background 0.1s; }
+.table-row:hover { background: var(--well); }
+.table-td       { padding: 11px 16px; font-size: 12.5px; color: var(--ink); }
 
-/* ── Page layout helpers ────────────────────────────────────── */
-.page-shell {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  background: var(--bg-page);
-}
+/* ── Page layout — conteúdo centralizado na área útil ───────── */
+.page-shell { flex: 1; overflow-y: auto; padding: 20px; background: var(--bg-page); }
 .page-content { margin: 0 auto; }
 .section-gap  { display: flex; flex-direction: column; gap: 16px; }
 
-/* ── Global overflow guard — nunca scroll horizontal indevido ── */
+/* Guard de overflow — nunca scroll horizontal indevido */
 html, body { overflow-x: hidden; max-width: 100%; }
 
-/* ── Responsive sidebar ─────────────────────────────────────── */
-.sidebar-shell {
-  flex-shrink: 0;
-}
-.sidebar-overlay {
-  display: none;
-}
-/* sidebar fixa visível até 1023px; vira drawer abaixo disso */
+/* ── Sidebar responsiva (drawer < 1024px) ───────────────────── */
+.sidebar-shell { flex-shrink: 0; }
+.sidebar-overlay { display: none; }
 @media (max-width: 1023px) {
   .sidebar-shell {
-    position: fixed;
-    top: 0;
-    left: -240px;
-    height: 100%;
-    z-index: 50;
-    transition: left 0.22s ease;
+    position: fixed; top: 0; left: -240px; height: 100%;
+    z-index: 50; transition: left 0.22s ease;
   }
-  .sidebar-shell.open {
-    left: 0;
-  }
+  .sidebar-shell.open { left: 0; }
   .sidebar-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 49;
+    display: block; position: fixed; inset: 0;
+    background: rgba(27, 26, 22, 0.5); z-index: 49;
   }
 }
 
 /* ── Loading spinner ────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-fade { 0%,100% { opacity:.4 } 50% { opacity:1 } }
-
 .spinner {
   width: 32px; height: 32px;
   border: 3px solid var(--border-card);
@@ -213,3 +249,14 @@ html, body { overflow-x: hidden; max-width: 100%; }
   animation: spin 0.7s linear infinite;
 }
 .spinner-sm { width: 18px; height: 18px; border-width: 2px; }
+
+/* ----------------------------------------------------------------------------
+   Centralização (critério obrigatório)
+   As páginas já usam um container interno `max-w-[…] mx-auto w-full`, então o
+   conteúdo JÁ fica centralizado na área útil após a sidebar. Removido o antigo
+   bloco `.app-main > div` (mirava um elemento inexistente — era CSS morto).
+   Salvaguarda leve abaixo, caso alguma tela futura não traga o wrapper.
+   -------------------------------------------------------------------------- */
+@media (min-width: 1024px) {
+  main.flex-1 > div:only-child { margin-left: auto; margin-right: auto; }
+}

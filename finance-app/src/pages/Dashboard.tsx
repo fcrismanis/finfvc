@@ -142,8 +142,8 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
 
       {totalPlanned === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 py-6 text-center">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-soft)' }}>
-            <span style={{ fontSize: 20 }}>📊</span>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--well)', border: '1px dashed var(--line)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A8578" strokeWidth={1.6} strokeLinecap="round"><line x1="5" y1="19" x2="5" y2="13" /><line x1="12" y1="19" x2="12" y2="8" /><line x1="19" y1="19" x2="19" y2="11" /></svg>
           </div>
           <p className="text-[13px] font-semibold text-gray-600">Sem orçamento definido</p>
           <button onClick={() => onNavigate('/orcamento')} className="text-[12.5px] font-semibold px-3.5 py-2 rounded-lg" style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}>
@@ -158,7 +158,7 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
               {formatBRL(totalRealized)} de {formatBRL(totalPlanned)} planejados
             </span>
           </div>
-          <div className="h-2 rounded-full overflow-hidden mb-5" style={{ background: '#EEF2FF' }}>
+          <div className="h-2 rounded-full overflow-hidden mb-5" style={{ background: 'var(--well)' }}>
             <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: 'var(--accent)' }} />
           </div>
           <div className="flex flex-col gap-3">
@@ -168,10 +168,10 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
               return (
                 <div key={d.macroCategoryId || d.categoryId} className="flex items-center gap-3">
                   <span className="text-[12.5px] font-medium w-24 flex-shrink-0 truncate" style={{ color: '#475569' }}>{d.name}</span>
-                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#EEF2FF' }}>
-                    <div className="h-full rounded-full" style={{ width: `${fill}%`, background: over ? '#DC4E41' : 'var(--accent)' }} />
+                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--well)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${fill}%`, background: over ? '#9C4339' : 'var(--accent)' }} />
                   </div>
-                  <span className="text-[11px] font-bold flex-shrink-0" style={{ color: over ? '#DC4E41' : '#0E9E6E' }}>
+                  <span className="text-[11px] font-bold flex-shrink-0" style={{ color: over ? '#9C4339' : '#1E6F49' }}>
                     {over ? `+${Math.abs(d.deviationPct).toFixed(0)}%` : 'ok'}
                   </span>
                 </div>
@@ -204,7 +204,7 @@ function VillainsCard({ data }: { data: BudgetComparison[] }) {
           {villains.map(d => (
             <div key={d.macroCategoryId || d.categoryId} className="flex items-center justify-between gap-2">
               <span className="text-[13px] font-medium truncate" style={{ color: '#475569' }}>{d.name}</span>
-              <span className="text-[13px] font-bold num flex-shrink-0" style={{ color: '#DC4E41' }}>+{formatBRL(d.deviationRs)}</span>
+              <span className="text-[13px] font-bold num flex-shrink-0" style={{ color: '#9C4339' }}>+{formatBRL(d.deviationRs)}</span>
             </div>
           ))}
         </div>
@@ -220,7 +220,7 @@ function AlertsCard({ alerts, isPartial, daysLeft }: { alerts: AlertItem[]; isPa
       <p className="text-[12px] mt-0.5 mb-4" style={{ color: '#98A2B3' }}>o que o mês está dizendo</p>
       <div className="flex flex-col gap-2">
         {isPartial && (
-          <Row icon={<Calendar size={14} color="var(--accent)" />} bg="var(--accent-soft)" text={`Leitura parcial: faltam ${daysLeft} dias para fechar o mês.`} color="#3730A3" />
+          <Row icon={<Calendar size={14} color="var(--accent)" />} bg="var(--accent-soft)" text={`Leitura parcial: faltam ${daysLeft} dias para fechar o mês.`} color="#1B1A16" />
         )}
         {alerts.slice(0, 3).map(a => (
           <Row
