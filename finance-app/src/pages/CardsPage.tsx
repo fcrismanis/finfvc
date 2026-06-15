@@ -16,10 +16,10 @@ export function CardsPage({ onNavigate }: Props) {
     setConnections(getLocalConnections())
   }, [])
 
-  const creditCards: (PluggyLocalAccount & { connectorName: string })[] = connections.flatMap(c =>
+  const creditCards: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null })[] = connections.flatMap(c =>
     c.accounts
       .filter(a => a.type === 'CREDIT')
-      .map(a => ({ ...a, connectorName: c.connectorName }))
+      .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl }))
   )
 
   const totalBill  = creditCards.reduce((s, a) => s + a.balance, 0)
@@ -111,7 +111,12 @@ export function CardsPage({ onNavigate }: Props) {
                         )}
                       </td>
                       <td className="table-td">
-                        <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{card.connectorName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {card.connectorImageUrl && (
+                            <img src={card.connectorImageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'contain', flexShrink: 0 }} />
+                          )}
+                          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{card.connectorName}</span>
+                        </div>
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: 'var(--crit)' }}>
                         {fmtBRL(card.balance)}
