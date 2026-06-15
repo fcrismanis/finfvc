@@ -119,7 +119,7 @@ function AppShell() {
       case '/':            return <Dashboard selectedMonth={selectedMonth} onNavigate={navigate} onMonthChange={setSelectedMonth} />
       case '/conectar':    return <Import onNavigate={navigate} />
       case '/lancamentos': return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
-      case '/orcamento':   return <Budget selectedMonth={selectedMonth} />
+      case '/orcamento':   return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/revisao':     return <Review onNavigate={navigate} />
       case '/fechamento':  return <Closing selectedMonth={selectedMonth} />
       case '/migrar':      return <MigrationPage />

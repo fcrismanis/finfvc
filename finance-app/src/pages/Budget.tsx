@@ -6,12 +6,14 @@ import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMacroCategoryTotals } from '../engine/calculate'
 import { suggestBudgets } from '../services/budget.service'
+import type { NavFilter } from '../App'
 
 interface Props {
   selectedMonth: string
+  onNavigate?: (route: string, filter?: NavFilter) => void
 }
 
-export function Budget({ selectedMonth }: Props) {
+export function Budget({ selectedMonth, onNavigate }: Props) {
   const { transactions, budgets, saveBudget } = useData()
   const [month, setMonth] = useState(selectedMonth)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -98,7 +100,8 @@ export function Budget({ selectedMonth }: Props) {
       else if (devPct > 20) status = 'warning'
       else status = 'ok'
     }
-    return { macro, plannedAmount, realizedAmount, dev, devPct, status, isEditing: editingId === macroId }
+    const avgLast3m = realizedRow?.avgLast3m ?? 0
+    return { macro, plannedAmount, realizedAmount, dev, devPct, status, isEditing: editingId === macroId, avgLast3m }
   }
 
   const devColor = totalDev > 0 ? 'var(--crit)' : 'var(--pos)'
@@ -164,6 +167,7 @@ export function Budget({ selectedMonth }: Props) {
               <thead>
                 <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
                   <th className="table-th">Categoria</th>
+                  <th className="table-th table-th-right">Média 3m</th>
                   <th className="table-th table-th-right">Planejado</th>
                   <th className="table-th table-th-right">Realizado</th>
                   <th className="table-th table-th-right">Desvio</th>
@@ -185,13 +189,26 @@ export function Budget({ selectedMonth }: Props) {
                       <td className="table-td">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: macro.color }} />
-                          <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{macro.name}</span>
+                          {onNavigate ? (
+                            <button
+                              onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [macro.id], filterLabel: macro.name })}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', fontFamily: 'var(--ui)', padding: 0, textAlign: 'left' }}
+                              title="Ver lançamentos desta categoria"
+                            >
+                              {macro.name}
+                            </button>
+                          ) : (
+                            <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{macro.name}</span>
+                          )}
                         </div>
                         {row.realizedAmount > 0 && (
                           <div className="bbar" style={{ marginTop: 6, width: '100%' }}>
                             <i style={{ width: `${barPct}%`, background: barColor }} />
                           </div>
                         )}
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>
+                        {row.avgLast3m > 0 ? formatBRL(row.avgLast3m) : <span style={{ color: 'var(--line)' }}>—</span>}
                       </td>
                       <td className="table-td table-th-right">
                         {row.isEditing ? (
