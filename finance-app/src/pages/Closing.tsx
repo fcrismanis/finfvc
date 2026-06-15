@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight, CreditCard, ChevronDown } from 'lucide-react'
+import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight, CreditCard, ChevronDown, RefreshCw } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL, formatPct } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMonthSummary, getBudgetComparison, getRedemptionTotal } from '../engine/calculate'
 import { emptyClosing, CHECKLIST_ITEMS } from '../services/closing.service'
+import { diagnoseReconciliation, neutralPatch } from '../services/reconciliation.service'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export function Closing({ selectedMonth, onNavigate }: Props) {
-  const { transactions, budgets, closings, saveClosing } = useData()
+  const { transactions, budgets, closings, saveClosing, updateTransactions } = useData()
   const [month, setMonth] = useState(selectedMonth)
   const [closing, setClosing] = useState(() => closings.find(c => c.month === month) ?? emptyClosing(month))
   const [notes, setNotes] = useState(closing.notes)
@@ -56,6 +57,20 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
     const pending = monthTxs.filter(t => t.status === 'pending')
     return { count: pluggy.length, uncategorized: uncategorized.length, pending: pending.length }
   }, [monthTxs])
+
+  const recon = useMemo(() => diagnoseReconciliation(monthTxs), [monthTxs])
+  const [neutralizing, setNeutralizing] = useState(false)
+
+  async function handleNeutralize() {
+    if (recon.candidateIds.size === 0 || closing.isClosed) return
+    setNeutralizing(true)
+    try {
+      const items = [...recon.candidateIds].map(id => ({ id, patch: neutralPatch() }))
+      await updateTransactions(items, { markManual: true })
+    } finally {
+      setNeutralizing(false)
+    }
+  }
 
   function toggleChecklist(id: string) {
     if (closing.isClosed) return
@@ -282,6 +297,45 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
                 {pluggyStats.uncategorized} lançamento{pluggyStats.uncategorized !== 1 ? 's' : ''} sem categoria — classifique antes de fechar o mês.
               </p>
             )}
+          </div>
+        )}
+
+        {/* ── Reconciliation / neutral movements ── */}
+        {(recon.neutralTotal > 0 || recon.internalCount > 0 || recon.possibleCardDupes > 0) && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <RefreshCw size={15} color="var(--ink-2)" />
+              <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Conciliação — movimentos internos</h3>
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              {[
+                { label: 'Total neutro', value: formatBRL(recon.neutralTotal), color: 'var(--faint)' },
+                { label: 'Movimentos internos', value: String(recon.internalCount), color: recon.internalCount > 0 ? 'var(--ink-2)' : 'var(--faint)' },
+                { label: 'Poss. duplicações por cartão', value: String(recon.possibleCardDupes), color: recon.possibleCardDupes > 0 ? 'var(--warn)' : 'var(--pos)' },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</span>
+                  <span className="num" style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+            {recon.candidateIds.size > 0 && (
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-2)' }}>
+                  {recon.candidateIds.size} lançamento{recon.candidateIds.size !== 1 ? 's' : ''} (cartão/transferência/PIX próprio ou espelhado) ainda não está neutro.
+                </p>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={neutralizing || closing.isClosed}
+                  onClick={handleNeutralize}
+                >
+                  {neutralizing ? 'Aplicando…' : `Marcar ${recon.candidateIds.size} como neutros`}
+                </button>
+              </div>
+            )}
+            <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 8 }}>
+              Neutros não entram no orçamento nem no resultado operacional. Ajustes manuais são preservados.
+            </p>
           </div>
         )}
 
