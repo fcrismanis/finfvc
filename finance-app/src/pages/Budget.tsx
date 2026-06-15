@@ -258,6 +258,43 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
                     </tr>
                   )
                 })}
+                {(() => {
+                  const uncatRow = realized.find(r => r.macroCategoryId === 'mac_uncat')
+                  if (!uncatRow || uncatRow.total === 0) return null
+                  return (
+                    <tr key="mac_uncat" className="table-row" style={{ opacity: 0.8 }}>
+                      <td className="table-td">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: '#9CA3AF' }} />
+                          {onNavigate ? (
+                            <button
+                              onClick={() => onNavigate('/lancamentos', { filterLabel: 'A classificar', sourcePage: 'budget', sourceLabel: 'Orçamento' })}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12.5, color: 'var(--faint)', fontFamily: 'var(--ui)', padding: 0, textAlign: 'left' }}
+                            >
+                              A classificar
+                            </button>
+                          ) : (
+                            <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--faint)' }}>A classificar</span>
+                          )}
+                        </div>
+                        <div className="bbar" style={{ marginTop: 6, width: '100%' }}>
+                          <i style={{ width: '100%', background: '#9CA3AF' }} />
+                        </div>
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>—</td>
+                      <td className="table-td table-th-right">
+                        <span style={{ color: 'var(--line)', fontFamily: 'var(--mono)', fontSize: 12.5 }}>—</span>
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#9CA3AF', fontFamily: 'var(--mono)', fontSize: 12.5 }}>
+                        {formatBRL(uncatRow.total)}
+                      </td>
+                      <td className="table-td table-th-right">
+                        <span style={{ fontSize: 10, color: 'var(--faint)', fontStyle: 'italic' }}>sem meta</span>
+                      </td>
+                      <td className="table-td" />
+                    </tr>
+                  )
+                })()}
               </tbody>
             </table>
           </div>
