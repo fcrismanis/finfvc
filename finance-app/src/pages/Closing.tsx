@@ -187,19 +187,24 @@ export function Closing({ selectedMonth }: Props) {
           <div className="card" style={{ padding: '18px 20px' }}>
             <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 14 }}>Resumo do mês</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <SummaryRow label="Receita operacional" value={formatBRL(summary.operationalIncome)} color="var(--pos)" />
-              <SummaryRow label="Despesas operacionais" value={formatBRL(summary.totalExpenses)} color="var(--crit)" />
+              <SummaryRow label="(+) Receita operacional" value={formatBRL(summary.operationalIncome)} color="var(--pos)" />
+              <SummaryRow label="(−) Despesas operacionais" value={formatBRL(summary.totalExpenses)} color="var(--crit)" />
               <SummaryRow
                 label="Resultado operacional"
                 value={formatBRL(summary.operationalResult)}
                 color={summary.operationalResult >= 0 ? 'var(--pos)' : 'var(--crit)'}
                 bold
               />
-              <SummaryRow label="Taxa de sobra" value={formatPct(summary.savingsRate * 100)} color="var(--ink)" />
+              <SummaryRow label="Margem familiar" value={formatPct(summary.savingsRate * 100)} color="var(--ink)" />
               <div style={{ borderTop: '1px solid var(--line)', paddingTop: 8, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <SummaryRow label="Total investimentos" value={formatBRL(investmentTotal)} color="var(--faint)" />
-                <SummaryRow label="Total resgates" value={formatBRL(redemption)} color="var(--faint)" />
-                <SummaryRow label="Total dívidas/juros" value={formatBRL(debtTotal)} color="var(--crit)" />
+                <SummaryRow label="(−) Dívidas e juros" value={formatBRL(debtTotal)} color="var(--crit)" />
+                <SummaryRow label="(+) Resgates" value={formatBRL(redemption)} color="var(--faint)" />
+                <SummaryRow label="(−) Investimentos/aportes" value={formatBRL(investmentTotal)} color="var(--faint)" />
+                <SummaryRow
+                  label="Invest. líquido"
+                  value={formatBRL(investmentTotal - redemption)}
+                  color={investmentTotal >= redemption ? 'var(--pos)' : 'var(--warn)'}
+                />
                 <SummaryRow label="Pendentes futuros" value={formatBRL(summary.pendingAmount)} color="var(--warn)" />
               </div>
             </div>

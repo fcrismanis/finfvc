@@ -23,12 +23,8 @@ const Transactions = lazy(() => import('./pages/Transactions').then(m => ({ defa
 const Budget       = lazy(() => import('./pages/Budget').then(m => ({ default: m.Budget })))
 const Review       = lazy(() => import('./pages/Review').then(m => ({ default: m.Review })))
 const Closing      = lazy(() => import('./pages/Closing').then(m => ({ default: m.Closing })))
-const Placeholder  = lazy(() => import('./pages/Placeholder').then(m => ({ default: m.Placeholder })))
-
-const PLACEHOLDER_PAGES: Record<string, { title: string; description: string }> = {
-  '/consultor':     { title: 'Consultor IA',  description: 'Análise inteligente das suas finanças com recomendações personalizadas.' },
-  '/configuracoes': { title: 'Configurações', description: 'Gerencie contas, categorias, orçamento padrão e preferências.' },
-}
+const Advisor      = lazy(() => import('./pages/Advisor').then(m => ({ default: m.Advisor })))
+const Settings     = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 
 const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
 
@@ -106,8 +102,6 @@ function AppShell() {
     didInitMonth.current = true
   }, [transactions, selectedMonth])
 
-  const placeholder = PLACEHOLDER_PAGES[activeRoute]
-
   function navigate(route: string, filter?: NavFilter) {
     setActiveRoute(route)
     setNavFilter(filter ?? null)
@@ -122,8 +116,10 @@ function AppShell() {
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/revisao':     return <Review onNavigate={navigate} />
       case '/fechamento':  return <Closing selectedMonth={selectedMonth} />
-      case '/migrar':      return <MigrationPage />
-      default:             return placeholder ? <Placeholder title={placeholder.title} description={placeholder.description} /> : null
+      case '/migrar':        return <MigrationPage />
+      case '/consultor':    return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/configuracoes': return <Settings />
+      default:              return null
     }
   }
 

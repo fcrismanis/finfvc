@@ -3,13 +3,13 @@ import type { MonthClosing } from '../types'
 const KEY = 'finance_closings'
 
 export const CHECKLIST_ITEMS: { id: string; label: string }[] = [
-  { id: 'imports_reviewed', label: 'Importações revisadas' },
-  { id: 'duplicates_checked', label: 'Duplicidades verificadas' },
-  { id: 'neutrals_confirmed', label: 'Neutros confirmados' },
-  { id: 'redemptions_checked', label: 'Resgates e aportes revisados' },
-  { id: 'budget_compared', label: 'Orçamento comparado' },
-  { id: 'card_pending_checked', label: 'Pendências do cartão revisadas' },
-  { id: 'next_month_planned', label: 'Próximo mês planejado' },
+  { id: 'imports_reviewed',     label: 'Todos os extratos importados e revisados' },
+  { id: 'duplicates_checked',   label: 'Duplicidades e transferências confirmadas' },
+  { id: 'no_category_fixed',    label: 'Lançamentos sem categoria classificados' },
+  { id: 'pending_resolved',     label: 'Pendentes do mês resolvidos ou justificados' },
+  { id: 'budget_compared',      label: 'Desvios de orçamento revisados' },
+  { id: 'investments_logged',   label: 'Investimentos e resgates registrados' },
+  { id: 'next_month_planned',   label: 'Orçamento do próximo mês definido' },
 ]
 
 export function emptyClosing(month: string): MonthClosing {
