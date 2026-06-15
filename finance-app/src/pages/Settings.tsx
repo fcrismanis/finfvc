@@ -7,7 +7,6 @@ interface Props {
 
 export function Settings({ onNavigate }: Props) {
   const { transactions, budgets, closings, subCategories } = useData()
-
   return (
     <main className="page-shell">
       <div style={{ margin: '0 auto', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>

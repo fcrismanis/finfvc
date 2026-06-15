@@ -11,6 +11,7 @@ import {
   mapPluggyToTransactions,
   updateConnectionSyncMeta,
   getPeriodDates,
+  type ConnInfo,
 } from '../services/pluggy.service'
 import { MACRO_CATEGORIES } from '../config/categories'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
@@ -69,6 +70,8 @@ export function PluggyPage() {
   const [fetchingToken, setFetchingToken] = useState(false)
   const [registering, setRegistering] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
+  const [pendingConn, setPendingConn] = useState<PluggyLocalConnection | null>(null)
+  const [pendingSelected, setPendingSelected] = useState<Set<string>>(new Set())
   const [sync, setSync] = useState<SyncSession | null>(null)
 
   useEffect(() => {
@@ -98,13 +101,32 @@ export function PluggyPage() {
     setTokenError(null)
     try {
       const conn = await registerConnection(item.id)
-      saveLocalConnection(conn)
-      setConnections(getLocalConnections())
+      // Don't save yet — show account selection step first
+      setPendingConn(conn)
+      setPendingSelected(new Set(conn.accounts.map(a => a.id)))
     } catch (err) {
       setTokenError(err instanceof Error ? err.message : 'Erro ao salvar conexão')
     } finally {
       setRegistering(false)
     }
+  }
+
+  function handleAddSelected() {
+    if (!pendingConn || pendingSelected.size === 0) return
+    const filtered = { ...pendingConn, accounts: pendingConn.accounts.filter(a => pendingSelected.has(a.id)) }
+    saveLocalConnection(filtered)
+    setConnections(getLocalConnections())
+    setPendingConn(null)
+    setPendingSelected(new Set())
+  }
+
+  function togglePendingAccount(id: string) {
+    setPendingSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   function handleError(error: { message: string }) {
@@ -120,13 +142,24 @@ export function PluggyPage() {
     setConnections(getLocalConnections())
   }
 
+  function buildConnInfo(itemId: string, _accountId: string, accountName: string): ConnInfo | undefined {
+    const conn = connections.find(c => c.itemId === itemId)
+    if (!conn) return undefined
+    return {
+      accountName,
+      institutionName: conn.connectorName,
+      institutionLogoUrl: conn.connectorImageUrl,
+    }
+  }
+
   // Start sync and immediately fetch (current_month default)
   async function startSync(itemId: string, accountId: string, accountName: string, period: PeriodPreset = 'current_month') {
     const dates = getPeriodDates(period)
+    const connInfo = buildConnInfo(itemId, accountId, accountName)
     setSync({ itemId, accountId, accountName, period, customFrom: '', customTo: '', phase: 'fetching' })
     try {
       const raw = await fetchPluggyTransactions({ accountId, from: dates.from, to: dates.to })
-      const result = mapPluggyToTransactions(raw, accountId, transactions)
+      const result = mapPluggyToTransactions(raw, accountId, transactions, connInfo)
       setSync(s => s ? { ...s, phase: 'preview', result } : s)
     } catch (err) {
       setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
@@ -143,10 +176,11 @@ export function PluggyPage() {
       const dates = getPeriodDates(period)
       from = dates.from; to = dates.to
     }
+    const connInfo = buildConnInfo(sync.itemId, sync.accountId, sync.accountName)
     setSync(s => s ? { ...s, period, customFrom, customTo, phase: 'fetching', result: undefined } : s)
     try {
       const raw = await fetchPluggyTransactions({ accountId: sync.accountId, from, to })
-      const result = mapPluggyToTransactions(raw, sync.accountId, transactions)
+      const result = mapPluggyToTransactions(raw, sync.accountId, transactions, connInfo)
       setSync(s => s ? { ...s, phase: 'preview', result } : s)
     } catch (err) {
       setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
@@ -199,6 +233,59 @@ export function PluggyPage() {
         {registering && (
           <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--well)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--faint)' }}>
             Buscando contas na Pluggy…
+          </div>
+        )}
+
+        {/* Account selection step — shown after widget success, before saving */}
+        {pendingConn && (
+          <div className="card" style={{ padding: '20px 22px', border: '1px solid var(--accent)', borderRadius: 12 }}>
+            <div style={{ marginBottom: 14 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 2 }}>
+                Contas encontradas — {pendingConn.connectorName}
+              </h3>
+              <p style={{ fontSize: 11.5, color: 'var(--faint)' }}>Selecione as contas que deseja adicionar ao FIN</p>
+            </div>
+            {pendingConn.accounts.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: 'var(--faint)', marginBottom: 14 }}>Nenhuma conta retornada pela Pluggy.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {pendingConn.accounts.map(acc => (
+                  <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 9, background: pendingSelected.has(acc.id) ? 'var(--accent-soft)' : 'var(--well)', border: `1px solid ${pendingSelected.has(acc.id) ? 'var(--accent)' : 'var(--line)'}`, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingSelected.has(acc.id)}
+                      onChange={() => togglePendingAccount(acc.id)}
+                      style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{acc.name}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', padding: '1px 5px', borderRadius: 3, background: acc.type === 'CREDIT' ? 'var(--accent-soft)' : 'var(--pos-soft)', color: acc.type === 'CREDIT' ? 'var(--accent)' : 'var(--pos)', border: `1px solid ${acc.type === 'CREDIT' ? 'var(--accent)' : 'var(--pos)'}40` }}>
+                          {acc.type === 'CREDIT' ? 'CARTÃO' : 'CONTA'}
+                        </span>
+                      </div>
+                      {acc.subtype && <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>{acc.subtype}</p>}
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtBRL(acc.balance)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn btn-primary"
+                disabled={pendingSelected.size === 0}
+                onClick={handleAddSelected}
+              >
+                Adicionar {pendingSelected.size > 0 ? `${pendingSelected.size} conta${pendingSelected.size !== 1 ? 's' : ''}` : 'selecionadas'} ao FIN
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setPendingConn(null); setPendingSelected(new Set()) }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         )}
 
