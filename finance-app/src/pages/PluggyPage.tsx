@@ -1,60 +1,48 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { PluggyConnect } from 'react-pluggy-connect'
 import { getConnectToken } from '../services/pluggy.service'
 
-type PluggyBackendStatus = 'checking' | 'configured' | 'not_configured'
-type PluggyConnectStatus = 'idle' | 'loading' | 'error'
+type BackendStatus = 'checking' | 'configured' | 'not_configured'
 
 export function PluggyPage() {
-  const [pluggyStatus, setPluggyStatus] = useState<PluggyBackendStatus>('checking')
-  const [connectStatus, setConnectStatus] = useState<PluggyConnectStatus>('idle')
-  const [connectError, setConnectError] = useState<string | null>(null)
-  const scriptInjected = useRef(false)
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
+  const [connectToken, setConnectToken] = useState<string | null>(null)
+  const [fetchingToken, setFetchingToken] = useState(false)
+  const [tokenError, setTokenError] = useState<string | null>(null)
+  const [lastConnectedItem, setLastConnectedItem] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then((d: { configured: boolean }) => setPluggyStatus(d.configured ? 'configured' : 'not_configured'))
-      .catch(() => setPluggyStatus('not_configured'))
+      .then((d: { configured: boolean }) => setBackendStatus(d.configured ? 'configured' : 'not_configured'))
+      .catch(() => setBackendStatus('not_configured'))
   }, [])
 
-  async function handlePluggyConnect() {
-    setConnectStatus('loading')
-    setConnectError(null)
+  async function handleConnect() {
+    setFetchingToken(true)
+    setTokenError(null)
     try {
       const token = await getConnectToken('local-user')
-      openPluggyWidget(token)
-      setConnectStatus('idle')
+      setConnectToken(token)
     } catch (err) {
-      setConnectError(err instanceof Error ? err.message : 'Erro ao obter token Pluggy')
-      setConnectStatus('error')
+      setTokenError(err instanceof Error ? err.message : 'Erro ao obter token Pluggy')
+    } finally {
+      setFetchingToken(false)
     }
   }
 
-  function openPluggyWidget(connectToken: string) {
-    if (!scriptInjected.current) {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
-      script.onload = () => { scriptInjected.current = true; launchWidget(connectToken) }
-      document.head.appendChild(script)
-    } else {
-      launchWidget(connectToken)
-    }
+  function handleSuccess({ item }: { item: { id: string } }) {
+    setConnectToken(null)
+    setLastConnectedItem(item.id)
   }
 
-  function launchWidget(connectToken: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const PluggyConnect = (window as any).PluggyConnect
-    if (!PluggyConnect) {
-      setConnectError('Widget Pluggy não carregou. Verifique a conexão.')
-      setConnectStatus('error')
-      return
-    }
-    new PluggyConnect({
-      connectToken,
-      onSuccess: () => { setConnectStatus('idle') },
-      onError:   () => { setConnectError('Conexão encerrada com erro.'); setConnectStatus('error') },
-      onClose:   () => { setConnectStatus('idle') },
-    }).init()
+  function handleError(error: { message: string }) {
+    setConnectToken(null)
+    setTokenError(`Erro na conexão: ${error.message}`)
+  }
+
+  function handleClose() {
+    setConnectToken(null)
   }
 
   return (
@@ -71,15 +59,15 @@ export function PluggyPage() {
           </div>
         </div>
 
-        {/* Status banner */}
-        {pluggyStatus === 'checking' && (
+        {/* Backend status banner */}
+        {backendStatus === 'checking' && (
           <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--faint)', flexShrink: 0 }} />
             <p style={{ fontSize: 13, color: 'var(--faint)' }}>Verificando configuração do backend…</p>
           </div>
         )}
 
-        {pluggyStatus === 'not_configured' && (
+        {backendStatus === 'not_configured' && (
           <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
             <div>
@@ -91,7 +79,7 @@ export function PluggyPage() {
           </div>
         )}
 
-        {pluggyStatus === 'configured' && (
+        {backendStatus === 'configured' && (
           <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--pos-soft)', border: '1px solid rgba(30,111,73,.28)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pos)', flexShrink: 0 }} />
             <div>
@@ -103,9 +91,15 @@ export function PluggyPage() {
           </div>
         )}
 
-        {connectError && (
+        {tokenError && (
           <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--crit-soft)', border: '1px solid var(--crit)', fontSize: 12.5, color: 'var(--crit)' }}>
-            {connectError}
+            {tokenError}
+          </div>
+        )}
+
+        {lastConnectedItem && (
+          <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--pos-soft)', border: '1px solid rgba(30,111,73,.28)', fontSize: 12.5, color: 'var(--pos)', fontWeight: 600 }}>
+            Conexão criada com sucesso. Item ID: {lastConnectedItem}
           </div>
         )}
 
@@ -115,11 +109,11 @@ export function PluggyPage() {
             <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Conexões ativas</h3>
             <button
               className="btn btn-secondary btn-sm"
-              disabled={pluggyStatus !== 'configured' || connectStatus === 'loading'}
-              onClick={handlePluggyConnect}
-              style={{ opacity: pluggyStatus !== 'configured' ? 0.4 : 1 }}
+              disabled={backendStatus !== 'configured' || fetchingToken}
+              onClick={handleConnect}
+              style={{ opacity: backendStatus !== 'configured' ? 0.4 : 1 }}
             >
-              {connectStatus === 'loading' ? 'Obtendo token…' : '+ Conectar banco'}
+              {fetchingToken ? 'Obtendo token…' : '+ Conectar banco'}
             </button>
           </div>
           <div style={{ textAlign: 'center', padding: '28px 0', color: 'var(--faint)' }}>
@@ -165,6 +159,16 @@ export function PluggyPage() {
         </div>
 
       </div>
+
+      {/* Pluggy Connect widget — renders as overlay when token is available */}
+      {connectToken && (
+        <PluggyConnect
+          connectToken={connectToken}
+          onSuccess={handleSuccess}
+          onError={handleError}
+          onClose={handleClose}
+        />
+      )}
     </main>
   )
 }
