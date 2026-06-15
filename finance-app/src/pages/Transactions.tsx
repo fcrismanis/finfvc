@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
+import { loadSubCategories, ESSENTIALITY_LABELS } from '../services/subcategory.service'
 import type { ReviewReason } from '../utils/reviewItems'
-import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
+import type { Transaction, ClassificationType, SortField, SortDir, SubCategory } from '../types'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -50,8 +51,22 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
+  const [subCategories, setSubCategories] = useState<SubCategory[]>(() => loadSubCategories())
 
   const isReviewMode = navFilter?.smartFilter === 'review'
+  const drilldownSource = navFilter?.sourcePage ?? null
+
+  function goBack() {
+    const routes: Record<string, string> = {
+      dashboard: '/',
+      budget: '/orcamento',
+      closing: '/fechamento',
+      review: '/revisao',
+    }
+    const route = drilldownSource ? (routes[drilldownSource] ?? '/') : '/'
+    onClearFilter?.()
+    onNavigate(route)
+  }
 
   // When navFilter arrives, reset page and review pill
   useEffect(() => {
@@ -141,12 +156,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterCls)
 
   function openModal(tx: Transaction) {
+    setSubCategories(loadSubCategories())
     setModalTx(tx)
     setModalPatch({
       description: tx.description,
       status: tx.status,
       classificationType: tx.classificationType,
       macroCategoryId: tx.macroCategoryId,
+      subCategoryId: tx.subCategoryId,
       notes: tx.notes ?? '',
       competenceDate: tx.competenceDate,
     })
@@ -161,6 +178,23 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   return (
     <main className="page-shell">
       <div className="page-content section-gap">
+
+        {/* ── Back button (drilldown) ── */}
+        {drilldownSource && (
+          <button
+            onClick={goBack}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)',
+              background: 'var(--well)', border: '1px solid var(--line)',
+              borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
+              fontFamily: 'var(--ui)', alignSelf: 'flex-start',
+            }}
+          >
+            <ArrowLeft size={13} />
+            Voltar para {navFilter?.sourceLabel ?? 'tela anterior'}
+          </button>
+        )}
 
         {/* ── Page header ── */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -379,14 +413,24 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                       </td>
                       <td className="table-td">
                         {macro && (
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            fontSize: 10, padding: '2px 7px', borderRadius: 4,
-                            border: `1px solid ${macro.color}50`, color: macro.color,
-                            fontWeight: 600, background: `${macro.color}12`,
-                          }}>
-                            {macro.name}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                              border: `1px solid ${macro.color}50`, color: macro.color,
+                              fontWeight: 600, background: `${macro.color}12`, alignSelf: 'flex-start',
+                            }}>
+                              {macro.name}
+                            </span>
+                            {tx.subCategoryId && (() => {
+                              const sub = subCategories.find(s => s.id === tx.subCategoryId)
+                              return sub ? (
+                                <span style={{ fontSize: 9.5, color: 'var(--faint)', paddingLeft: 2 }}>
+                                  ↳ {sub.name}
+                                </span>
+                              ) : null
+                            })()}
+                          </div>
                         )}
                       </td>
                       <td className="table-td">
@@ -456,6 +500,25 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               disabled={page === totalPages - 1}
             >
               <ChevronRight size={13} />
+            </button>
+          </div>
+        )}
+
+        {/* ── Footer back button ── */}
+        {drilldownSource && (
+          <div style={{ paddingBottom: 8 }}>
+            <button
+              onClick={goBack}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)',
+                background: 'var(--well)', border: '1px solid var(--line)',
+                borderRadius: 8, padding: '8px 14px', cursor: 'pointer',
+                fontFamily: 'var(--ui)',
+              }}
+            >
+              <ArrowLeft size={13} />
+              Voltar para {navFilter?.sourceLabel ?? 'tela anterior'}
             </button>
           </div>
         )}
@@ -533,7 +596,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <ModalField label="Categoria">
                 <select
                   value={modalPatch.macroCategoryId ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined }))}
+                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined, subCategoryId: undefined }))}
                   className="ledger-select"
                   style={{ width: '100%', fontSize: 12 }}
                 >
@@ -541,6 +604,28 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </ModalField>
+
+              {modalPatch.macroCategoryId && (() => {
+                const filteredSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
+                if (filteredSubs.length === 0) return null
+                return (
+                  <ModalField label="Subcategoria">
+                    <select
+                      value={modalPatch.subCategoryId ?? ''}
+                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
+                      className="ledger-select"
+                      style={{ width: '100%', fontSize: 12 }}
+                    >
+                      <option value="">Sem subcategoria</option>
+                      {filteredSubs.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({ESSENTIALITY_LABELS[s.essentiality]})
+                        </option>
+                      ))}
+                    </select>
+                  </ModalField>
+                )
+              })()}
 
               <ModalField label="Observações">
                 <textarea

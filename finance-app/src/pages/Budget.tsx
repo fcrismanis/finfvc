@@ -191,7 +191,7 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
                           <div style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: macro.color }} />
                           {onNavigate ? (
                             <button
-                              onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [macro.id], filterLabel: macro.name })}
+                              onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [macro.id], filterLabel: macro.name, sourcePage: 'budget', sourceLabel: 'Orçamento' })}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', fontFamily: 'var(--ui)', padding: 0, textAlign: 'left' }}
                               title="Ver lançamentos desta categoria"
                             >

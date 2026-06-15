@@ -2,8 +2,11 @@ import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'rea
 
 export interface NavFilter {
   macroCategoryIds?: string[]
+  categoryIds?: string[]
   filterLabel?: string
   smartFilter?: string
+  sourcePage?: 'dashboard' | 'budget' | 'closing' | 'review'
+  sourceLabel?: string
 }
 import { MigrationPage } from './pages/MigrationPage'
 import { Menu } from 'lucide-react'
@@ -115,7 +118,7 @@ function AppShell() {
       case '/lancamentos': return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/revisao':     return <Review onNavigate={navigate} />
-      case '/fechamento':  return <Closing selectedMonth={selectedMonth} />
+      case '/fechamento':  return <Closing selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/migrar':        return <MigrationPage />
       case '/consultor':    return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/configuracoes': return <Settings />

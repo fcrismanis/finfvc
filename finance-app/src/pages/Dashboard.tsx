@@ -120,6 +120,8 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
             onStepClick={(step: FunnelStep) => onNavigate('/lancamentos', {
               macroCategoryIds: step.macroIds,
               filterLabel: step.label,
+              sourcePage: 'dashboard',
+              sourceLabel: 'Visão Geral',
             })}
           />
           <PlanejadoCard data={budgetComparison} isPartial={isCurrent} onNavigate={onNavigate} />
