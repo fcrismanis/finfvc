@@ -166,10 +166,15 @@ Execuções repetidas da sync no mesmo período são seguras — duplicatas são
 
 ### Prioridade de categorização automática
 
-1. **Histórico** — descrição exata encontrada em transações revisadas anteriormente (match por `description.toUpperCase()`)
-2. **Categoria Pluggy** — `ptx.category` mapeada para `macroCategoryId` via `PLUGGY_CAT_MAP` em `pluggy.service.ts`
-3. **Heurísticas locais** — regras regex em `categorize.service.ts` (supermercados, farmácias, etc.)
-4. **Sem categoria** — `needsReview = true`, aparece na central de Revisão
+1. **Manual override** — nunca sobrescrito.
+2. **Histórico** — descrição exata encontrada em transações revisadas anteriormente (match por `description.toUpperCase()`).
+3. **Pluggy `categoryId`** — código numérico via `PLUGGY_ID_MAP` (confiança alta).
+4. **Pluggy `category`** — nome em inglês via `PLUGGY_NAME_MAP` (confiança média).
+5. **Inferência por texto** — `inferCategoryFromText()` sobre descrição/contraparte (confiança baixa).
+6. **A classificar** — `needsReview = true`, aparece na central de Revisão.
+
+> 📑 Detalhes completos do mapa, tabelas de códigos/nomes, tratamento de neutros e
+> uso do botão "Reclassificar importados": **[pluggy-category-map.md](./pluggy-category-map.md)**.
 
 ### Proteções contra sobrescrita
 
