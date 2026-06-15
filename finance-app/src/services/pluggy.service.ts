@@ -1,4 +1,5 @@
 import { suggestCategoryWithHistory } from './categorize.service'
+import { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap'
 
 /**
  * Pluggy Open Finance service.
@@ -202,279 +203,24 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
   return { ...data.connection, savedAt: new Date().toISOString() }
 }
 
-// ── Pluggy category mapping ───────────────────────────────────────────────────
-// Priority: categoryId (numeric code) → category (English name) → null
+// ── Pluggy category mapping — delegated to pluggyCategoryMap.ts ──────────────
+// Re-export for external callers (PluggyPage reclassify button etc.)
+export { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap'
 
-interface PluggyCatResult {
-  macroCategoryId: string
-  classificationType: import('../types').ClassificationType
-  includeInOperationalResult?: boolean
-  includeInBudget?: boolean
-  includeInCashflow?: boolean
-  isInternalTransfer?: boolean
-}
+// (maps moved to pluggyCategoryMap.ts — use lookupPluggyCategory / inferCategoryFromText)
 
-const NEUTRAL: Partial<PluggyCatResult> = {
-  classificationType: 'neutral',
-  includeInOperationalResult: false,
-  includeInBudget: false,
-}
-
-// Pluggy categoryId codes → FIN macro category
-const PLUGGY_ID_MAP: Record<string, PluggyCatResult> = {
-  // Alimentação
-  '01010000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  '01020000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  '01030000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  '01040000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  '01050000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  '01000000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
-  // Casa / Moradia
-  '08000000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
-  '08010000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
-  '08020000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
-  '08030000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
-  '08040000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
-  // Saúde
-  '09000000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
-  '09010000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
-  '09020000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
-  '09030000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
-  // Transporte
-  '10000000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
-  '10010000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
-  '10020000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
-  '10030000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
-  // Educação — confirmado no payload real
-  '07000000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
-  '07010000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
-  '07020000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
-  // Assinaturas
-  '11000000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
-  '11010000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
-  '11020000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
-  // Compras
-  '12000000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
-  '12010000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
-  '12020000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
-  // Serviços
-  '13000000': { macroCategoryId: 'mac_servicos', classificationType: 'operational_expense' },
-  // Seguros
-  '14000000': { macroCategoryId: 'mac_seguros', classificationType: 'operational_expense' },
-  // Lazer
-  '15000000': { macroCategoryId: 'mac_lazer', classificationType: 'operational_expense' },
-  '15010000': { macroCategoryId: 'mac_lazer', classificationType: 'operational_expense' },
-  // Impostos
-  '16000000': { macroCategoryId: 'mac_impostos', classificationType: 'operational_expense' },
-  // Cuidados pessoais
-  '17000000': { macroCategoryId: 'mac_cuidados', classificationType: 'operational_expense' },
-  // Pets
-  '18000000': { macroCategoryId: 'mac_pets', classificationType: 'operational_expense' },
-  // Dívida / Financiamento — confirmado no payload real
-  '02000000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
-  '02010000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
-  '02020000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
-  // Receita
-  '03000000': { macroCategoryId: 'mac_receita_op', classificationType: 'operational_income' },
-  '03010000': { macroCategoryId: 'mac_receita_op', classificationType: 'operational_income' },
-  '03020000': { macroCategoryId: 'mac_receita_ev', classificationType: 'extraordinary_income' },
-  // Transferências / movfin — confirmados no payload real
-  '04000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL, isInternalTransfer: true } as PluggyCatResult,
-  '04010000': { macroCategoryId: 'mac_movfin', ...NEUTRAL, isInternalTransfer: true } as PluggyCatResult,
-  '05000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05010000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05020000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05030000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05040000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05050000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05060000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
-  '05070000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult, // PIX — confirmado
-  '06000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult, // Investimentos
-}
-
-const PLUGGY_CAT_MAP: Record<string, string> = {
-  // ── English (Pluggy API output) ──
-  // Food & drink
-  'Groceries':             'mac_alimentacao',
-  'Eating out':            'mac_alimentacao',
-  'Bars and restaurants':  'mac_alimentacao',
-  'Food and drink':        'mac_alimentacao',
-  'Bakeries':              'mac_alimentacao',
-  'Coffee shops':          'mac_alimentacao',
-  // Housing & utilities
-  'Housing':               'mac_casa',
-  'Rent':                  'mac_casa',
-  'Water and sewage':      'mac_casa',
-  'Electricity':           'mac_casa',
-  'Gas':                   'mac_casa',
-  'Internet and telephone':'mac_casa',
-  'Home maintenance':      'mac_casa',
-  'Home and garden':       'mac_casa',
-  'Bills and utilities':   'mac_casa',
-  // Health
-  'Healthcare':            'mac_saude',
-  'Pharmacy':              'mac_saude',
-  'Doctors and clinics':   'mac_saude',
-  'Gym and fitness centers':'mac_saude',
-  'Health insurance':      'mac_saude',
-  'Health and beauty':     'mac_saude',
-  // Transport
-  'Transport':             'mac_transporte',
-  'Fuel':                  'mac_transporte',
-  'Parking':               'mac_transporte',
-  'Tolls and parking':     'mac_transporte',
-  'Public transport':      'mac_transporte',
-  'Ride hailing':          'mac_transporte',
-  'Car maintenance':       'mac_transporte',
-  // Education
-  'Education':             'mac_educacao',
-  'Courses and training':  'mac_educacao',
-  'School supplies':       'mac_educacao',
-  // Subscriptions
-  'Digital services':      'mac_assinaturas',
-  'Streaming':             'mac_assinaturas',
-  'Subscriptions':         'mac_assinaturas',
-  'Apps':                  'mac_assinaturas',
-  // Shopping
-  'Shopping':              'mac_compras',
-  'Online shopping':       'mac_compras',
-  'Electronics':           'mac_compras',
-  'Clothing':              'mac_compras',
-  'Home appliances':       'mac_compras',
-  // Services
-  'Services':              'mac_servicos',
-  'Professional services': 'mac_servicos',
-  'Domestic services':     'mac_servicos',
-  // Insurance
-  'Insurance':             'mac_seguros',
-  'Life insurance':        'mac_seguros',
-  'Car insurance':         'mac_seguros',
-  // Leisure
-  'Leisure and tourism':   'mac_lazer',
-  'Travel':                'mac_lazer',
-  'Cinema and theater':    'mac_lazer',
-  'Sports and leisure':    'mac_lazer',
-  'Entertainment':         'mac_lazer',
-  // Personal care
-  'Personal care':         'mac_cuidados',
-  'Beauty salon':          'mac_cuidados',
-  'Wellness':              'mac_cuidados',
-  // Pets
-  'Pets':                  'mac_pets',
-  'Veterinary':            'mac_pets',
-  // Taxes & fees
-  'Taxes':                 'mac_impostos',
-  'Bank fees':             'mac_impostos',
-  'Fees':                  'mac_impostos',
-  // Income
-  'Salary':                'mac_receita_op',
-  'Income':                'mac_receita_ev',
-  'Other credits':         'mac_receita_ev',
-  'Investment returns':    'mac_receita_ev',
-  // Financial movements (neutral — must be handled specially in mapper)
-  'Credit card payment':   'mac_movfin',
-  'Transfers':             'mac_movfin',
-  'Investments':           'mac_movfin',
-  // Debt
-  'Loans and financing':   'mac_divida',
-  'Loan':                  'mac_divida',
-  'Financing':             'mac_divida',
-
-  // ── Portuguese fallback ──
-  'Alimentação e Bebidas': 'mac_alimentacao',
-  'Restaurantes e Bares':  'mac_alimentacao',
-  'Supermercados':         'mac_alimentacao',
-  'Padaria e Confeitaria': 'mac_alimentacao',
-  'Açougue e Peixaria':    'mac_alimentacao',
-  'Bebidas':               'mac_alimentacao',
-  'Casa e Jardim':         'mac_casa',
-  'Contas e Utilidades':   'mac_casa',
-  'Aluguel':               'mac_casa',
-  'Água e Esgoto':         'mac_casa',
-  'Energia Elétrica':      'mac_casa',
-  'Gás':                   'mac_casa',
-  'Internet e Telefone':   'mac_casa',
-  'Manutenção e Reparos':  'mac_casa',
-  'Saúde e Beleza':        'mac_saude',
-  'Farmácias':             'mac_saude',
-  'Médicos e Clínicas':    'mac_saude',
-  'Academia e Esportes':   'mac_saude',
-  'Plano de Saúde':        'mac_saude',
-  'Transporte':            'mac_transporte',
-  'Combustível':           'mac_transporte',
-  'Pedágios e Estacionamentos':'mac_transporte',
-  'Transporte Público':    'mac_transporte',
-  'Aplicativos de Transporte':'mac_transporte',
-  'Manutenção de Veículo': 'mac_transporte',
-  'Educação':              'mac_educacao',
-  'Cursos e Treinamentos': 'mac_educacao',
-  'Material Escolar':      'mac_educacao',
-  'Assinaturas e Serviços':'mac_assinaturas',
-  'Streaming e Entretenimento':'mac_assinaturas',
-  'Aplicativos':           'mac_assinaturas',
-  'Compras e Shopping':    'mac_compras',
-  'Vestuário e Calçados':  'mac_compras',
-  'Eletrônicos':           'mac_compras',
-  'Eletrodomésticos':      'mac_compras',
-  'Lojas Online':          'mac_compras',
-  'Serviços Profissionais':'mac_servicos',
-  'Serviços Domésticos':   'mac_servicos',
-  'Seguros':               'mac_seguros',
-  'Seguro de Vida':        'mac_seguros',
-  'Seguro Veicular':       'mac_seguros',
-  'Lazer e Turismo':       'mac_lazer',
-  'Viagens':               'mac_lazer',
-  'Cinema e Teatro':       'mac_lazer',
-  'Bares e Baladas':       'mac_lazer',
-  'Esportes e Lazer':      'mac_lazer',
-  'Animais e Pets':        'mac_pets',
-  'Veterinário':           'mac_pets',
-  'Impostos e Taxas':      'mac_impostos',
-  'IPTU':                  'mac_impostos',
-  'IPVA':                  'mac_impostos',
-  'Cuidados Pessoais':     'mac_cuidados',
-  'Salão de Beleza':       'mac_cuidados',
-  'Bem Estar':             'mac_cuidados',
-  'Salário':               'mac_receita_op',
-  'Receita':               'mac_receita_ev',
-  'Outros Créditos':       'mac_receita_ev',
-  'Transferências':        'mac_movfin',
-  'Investimentos':         'mac_movfin',
-  'Empréstimos':           'mac_divida',
-  'Financiamentos':        'mac_divida',
-}
-
-const NEUTRAL_CATEGORY_NAMES = new Set([
-  'Credit card payment', 'Transfers', 'Transferências',
-  'Same person transfer', 'Transfer - PIX',
-])
-
+/** @deprecated use lookupPluggyCategory from pluggyCategoryMap */
 export function pluggyCategoryToResult(
   categoryId: string | null | undefined,
   categoryName: string | null | undefined,
-): PluggyCatResult | null {
-  // Priority 1: numeric code (most reliable)
-  if (categoryId) {
-    const byId = PLUGGY_ID_MAP[categoryId]
-    if (byId) return byId
-  }
-  // Priority 2: English name
-  if (categoryName) {
-    const macroId = PLUGGY_CAT_MAP[categoryName]
-    if (macroId) {
-      const isNeutral = NEUTRAL_CATEGORY_NAMES.has(categoryName)
-      return isNeutral
-        ? { macroCategoryId: macroId, ...NEUTRAL } as PluggyCatResult
-        : { macroCategoryId: macroId, classificationType: 'operational_expense' }
-    }
-  }
-  return null
+) {
+  return lookupPluggyCategory(categoryId, categoryName)
 }
 
-/** @deprecated use pluggyCategoryToResult */
+/** @deprecated use lookupPluggyCategory from pluggyCategoryMap */
 export function pluggyCategoryToMacro(pluggyCategory: string | null): string | null {
   if (!pluggyCategory) return null
-  return PLUGGY_CAT_MAP[pluggyCategory] ?? null
+  return lookupPluggyCategory(null, pluggyCategory)?.macroCategoryId ?? null
 }
 
 // ── Map Pluggy raw transactions → app Transaction format ──────────────────────
@@ -565,17 +311,43 @@ export function mapPluggyToTransactions(
     }
 
     // Priority 2: Pluggy provider category (by ID first, then by name)
-    const catResult = pluggyCategoryToResult(ptx.categoryId, ptx.category)
+    const catResult = lookupPluggyCategory(ptx.categoryId, ptx.category)
     if (catResult) {
       return {
         ...baseTx,
-        macroCategoryId:           catResult.macroCategoryId,
-        classificationType:        catResult.classificationType,
+        macroCategoryId:            catResult.macroCategoryId,
+        subCategoryId:              catResult.subCategoryId,
+        subCategoryNameSuggested:   catResult.subCategoryNameSuggested,
+        classificationType:         catResult.classificationType,
         includeInOperationalResult: catResult.includeInOperationalResult ?? true,
-        includeInBudget:           catResult.includeInBudget ?? true,
-        includeInCashflow:         catResult.includeInCashflow ?? true,
-        isInternalTransfer:        catResult.isInternalTransfer ?? false,
-        needsReview: false,
+        includeInBudget:            catResult.includeInBudget ?? true,
+        includeInCashflow:          catResult.includeInCashflow ?? true,
+        isInternalTransfer:         catResult.isInternalTransfer ?? false,
+        pluggyCategoryMapped:       true,
+        categoryConfidence:         catResult.confidence,
+        needsReview:                catResult.confidence !== 'high',
+      }
+    }
+
+    // Priority 3: text inference from description / counterparty names
+    const inferred = inferCategoryFromText(
+      ptx.description ?? '',
+      ptx.paymentData?.receiver?.name ?? undefined,
+      ptx.paymentData?.payer?.name ?? undefined,
+    )
+    if (inferred) {
+      return {
+        ...baseTx,
+        macroCategoryId:            inferred.macroCategoryId,
+        subCategoryId:              inferred.subCategoryId,
+        subCategoryNameSuggested:   inferred.subCategoryNameSuggested,
+        classificationType:         inferred.classificationType,
+        includeInOperationalResult: inferred.includeInOperationalResult ?? true,
+        includeInBudget:            inferred.includeInBudget ?? true,
+        includeInCashflow:          inferred.includeInCashflow ?? true,
+        isInternalTransfer:         inferred.isInternalTransfer ?? false,
+        categoryConfidence:         'low',
+        needsReview:                true,
       }
     }
 

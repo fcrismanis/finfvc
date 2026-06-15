@@ -56,6 +56,9 @@ export interface Transaction {
   lastImportedAt?: string
   pluggyCategory?: string
   pluggyCategoryId?: string
+  pluggyCategoryMapped?: boolean
+  categoryConfidence?: 'high' | 'medium' | 'low'
+  subCategoryNameSuggested?: string
   pluggyOperationType?: string
   pluggyPaymentMethod?: string
   pluggyReceiverName?: string
