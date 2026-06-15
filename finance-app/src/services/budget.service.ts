@@ -15,8 +15,8 @@ export function getBudgets(): Budget[] {
 }
 
 export function getBudgetsOrMock(): { budgets: Budget[]; isDemo: boolean } {
-  const local = getBudgets()
-  if (local.length > 0) return { budgets: local, isDemo: false }
+  const raw = localStorage.getItem(KEY)
+  if (raw !== null) return { budgets: getBudgets(), isDemo: false }
   return { budgets: MOCK_BUDGETS, isDemo: true }
 }
 

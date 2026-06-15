@@ -41,16 +41,15 @@ export function DangerZonePage() {
     localStorage.setItem('finance_transactions', JSON.stringify(newTxs))
     localStorage.setItem('finance_budgets', JSON.stringify(newBudgets))
     localStorage.setItem('finance_closings', JSON.stringify(newClosings))
-    setMonthCleared(true)
-    setClearMonthConfirm('')
-    reload()
+    window.location.reload()
   }
 
   function handleClearLocal() {
-    const KEYS = ['finance_transactions', 'finance_budgets', 'finance_closings', 'finance_migration_banner_dismissed']
-    KEYS.forEach(k => localStorage.removeItem(k))
-    setConfirmClear(false)
-    setCleared(true)
+    const DATA_KEYS = ['finance_transactions', 'finance_budgets', 'finance_closings', 'finance_subcategories']
+    DATA_KEYS.forEach(k => localStorage.setItem(k, '[]'))
+    localStorage.removeItem('fin_pluggy_connections')
+    localStorage.removeItem('finance_migration_banner_dismissed')
+    window.location.reload()
   }
 
   return (
