@@ -5,9 +5,9 @@ import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
-import { loadSubCategories, ESSENTIALITY_LABELS } from '../services/subcategory.service'
+import { ESSENTIALITY_LABELS } from '../services/subcategory.service'
 import type { ReviewReason } from '../utils/reviewItems'
-import type { Transaction, ClassificationType, SortField, SortDir, SubCategory } from '../types'
+import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -37,7 +37,7 @@ function clsColor(cls: ClassificationType): string {
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
-  const { transactions, isDemo, updateTransaction } = useData()
+  const { transactions, isDemo, updateTransaction, subCategories } = useData()
 
   const [search, setSearch] = useState('')
   const [filterMonth, setFilterMonth] = useState(selectedMonth)
@@ -51,7 +51,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
-  const [subCategories, setSubCategories] = useState<SubCategory[]>(() => loadSubCategories())
 
   const isReviewMode = navFilter?.smartFilter === 'review'
   const drilldownSource = navFilter?.sourcePage ?? null
@@ -156,7 +155,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterCls)
 
   function openModal(tx: Transaction) {
-    setSubCategories(loadSubCategories())
     setModalTx(tx)
     setModalPatch({
       description: tx.description,

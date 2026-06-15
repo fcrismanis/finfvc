@@ -1,4 +1,4 @@
-import type { Transaction, Budget, MonthClosing } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import type { IDataProvider, LoadResult } from './data.provider'
 import { SupabaseAdapter } from '../adapters/supabase.adapter'
 import { supabase } from '../lib/supabase'
@@ -100,6 +100,7 @@ export class SupabaseDataProvider implements IDataProvider {
     const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (patch.description !== undefined)         dbPatch.description = patch.description
     if (patch.categoryId !== undefined)          dbPatch.category_id = patch.categoryId ?? null
+    if (patch.subCategoryId !== undefined)       dbPatch.sub_category_id = patch.subCategoryId ?? null
     if (patch.macroCategoryId !== undefined)     dbPatch.macro_category_id = patch.macroCategoryId ?? null
     if (patch.classificationType !== undefined)  dbPatch.classification_type = patch.classificationType
     if (patch.status !== undefined)              dbPatch.status = patch.status
@@ -193,6 +194,56 @@ export class SupabaseDataProvider implements IDataProvider {
       .upsert(row, { onConflict: 'family_id,month', ignoreDuplicates: false })
 
     if (error) throw new Error(`[SupabaseDataProvider] saveMonthlyClosing: ${error.message}`)
+  }
+
+  async loadSubCategories(): Promise<SubCategory[]> {
+    if (!this.familyId) return []
+    const { data, error } = await supabase
+      .from('sub_categories')
+      .select('*')
+      .eq('family_id', this.familyId)
+      .order('name', { ascending: true })
+    if (error) {
+      console.warn('[SupabaseDataProvider] loadSubCategories:', error.message)
+      return []
+    }
+    return (data as Array<{
+      id: string; family_id: string; macro_category_id: string;
+      name: string; essentiality: string; active: boolean; created_at: string; updated_at: string
+    }>).map(r => ({
+      id: r.id,
+      macroCategoryId: r.macro_category_id,
+      name: r.name,
+      essentiality: r.essentiality as SubCategory['essentiality'],
+      active: r.active,
+      createdAt: r.created_at,
+    }))
+  }
+
+  async saveSubCategory(sub: SubCategory): Promise<void> {
+    if (!this.familyId) return
+    const { error } = await supabase
+      .from('sub_categories')
+      .upsert({
+        id: sub.id,
+        family_id: this.familyId,
+        macro_category_id: sub.macroCategoryId,
+        name: sub.name,
+        essentiality: sub.essentiality,
+        active: sub.active,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+    if (error) throw new Error(`[SupabaseDataProvider] saveSubCategory: ${error.message}`)
+  }
+
+  async deleteSubCategory(id: string): Promise<void> {
+    if (!this.familyId) return
+    const { error } = await supabase
+      .from('sub_categories')
+      .delete()
+      .eq('id', id)
+      .eq('family_id', this.familyId)
+    if (error) throw new Error(`[SupabaseDataProvider] deleteSubCategory: ${error.message}`)
   }
 
   // ── Private ────────────────────────────────────────────────────────────────

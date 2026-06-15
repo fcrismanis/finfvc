@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
-import type { Transaction, Budget, MonthClosing } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import { useAuth } from './AuthContext'
 import { createDataProvider } from '../adapters/adapter.factory'
 
@@ -7,6 +7,7 @@ interface DataContextValue {
   transactions: Transaction[]
   budgets: Budget[]
   closings: MonthClosing[]
+  subCategories: SubCategory[]
   isDemo: boolean
   loading: boolean
   error: string | null
@@ -15,6 +16,8 @@ interface DataContextValue {
   saveBudget: (budget: Budget) => void
   saveClosing: (closing: MonthClosing) => void
   appendTransactions: (txns: Transaction[]) => Promise<void>
+  saveSubCategory: (sub: SubCategory) => Promise<void>
+  deleteSubCategory: (id: string) => Promise<void>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -28,6 +31,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [closings, setClosings] = useState<MonthClosing[]>([])
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
   const [isDemo, setIsDemo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,8 +44,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTransactions(result.transactions)
       setBudgets(result.budgets)
       setIsDemo(result.isDemo)
-      const cl = await provider.getMonthlyClosings()
+      const [cl, subs] = await Promise.all([
+        provider.getMonthlyClosings(),
+        provider.loadSubCategories(),
+      ])
       setClosings(cl)
+      setSubCategories(subs)
     } catch (e) {
       setError((e as Error).message ?? 'Erro ao carregar dados')
     } finally {
@@ -71,10 +79,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await loadData(false)  // silent reload — don't unmount the migration page mid-flight
   }, [provider, loadData])
 
+  const saveSubCategory = useCallback(async (sub: SubCategory) => {
+    await provider.saveSubCategory(sub)
+    const updated = await provider.loadSubCategories()
+    setSubCategories(updated)
+  }, [provider])
+
+  const deleteSubCategory = useCallback(async (id: string) => {
+    await provider.deleteSubCategory(id)
+    const updated = await provider.loadSubCategories()
+    setSubCategories(updated)
+  }, [provider])
+
   return (
     <DataContext.Provider value={{
-      transactions, budgets, closings, isDemo, loading, error,
+      transactions, budgets, closings, subCategories, isDemo, loading, error,
       reload, updateTransaction, saveBudget, saveClosing, appendTransactions,
+      saveSubCategory, deleteSubCategory,
     }}>
       {children}
     </DataContext.Provider>

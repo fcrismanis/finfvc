@@ -1,4 +1,4 @@
-import type { Transaction, Budget, MonthClosing } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 
 export interface LoadResult {
   transactions: Transaction[]
@@ -19,4 +19,10 @@ export interface IDataProvider {
   getMonthlyClosings(): Promise<MonthClosing[]>
   /** Persist a monthly closing (upsert by month). */
   saveMonthlyClosing(closing: MonthClosing): Promise<void>
+  /** Load all subcategories for this family. */
+  loadSubCategories(): Promise<SubCategory[]>
+  /** Upsert a subcategory. */
+  saveSubCategory(sub: SubCategory): Promise<void>
+  /** Delete a subcategory by id. */
+  deleteSubCategory(id: string): Promise<void>
 }

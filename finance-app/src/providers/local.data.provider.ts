@@ -1,8 +1,9 @@
-import type { Transaction, Budget, MonthClosing } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import type { IDataProvider, LoadResult } from './data.provider'
 import { getTransactionsOrMock, updateTransaction as svcUpdateTx } from '../services/transactions.service'
 import { getBudgetsOrMock, saveBudget as svcSaveBudget } from '../services/budget.service'
 import { getAllClosings, saveClosing } from '../services/closing.service'
+import { loadSubCategories, upsertSubCategory, deleteSubCategory as svcDeleteSub } from '../services/subcategory.service'
 import { localAdapter } from '../adapters/local.adapter'
 
 export class LocalDataProvider implements IDataProvider {
@@ -30,5 +31,17 @@ export class LocalDataProvider implements IDataProvider {
 
   async saveMonthlyClosing(closing: MonthClosing): Promise<void> {
     saveClosing(closing)
+  }
+
+  async loadSubCategories(): Promise<SubCategory[]> {
+    return loadSubCategories()
+  }
+
+  async saveSubCategory(sub: SubCategory): Promise<void> {
+    upsertSubCategory(sub)
+  }
+
+  async deleteSubCategory(id: string): Promise<void> {
+    svcDeleteSub(id)
   }
 }

@@ -19,6 +19,7 @@ type DbTransaction = {
   account_id: string | null
   credit_card_id: string | null
   category_id: string | null
+  sub_category_id: string | null
   macro_category_id: string | null
   installment_current: number | null
   installment_total: number | null
@@ -51,6 +52,7 @@ function toTransaction(row: DbTransaction): Transaction {
     accountId: row.account_id ?? '',
     creditCardId: row.credit_card_id ?? undefined,
     categoryId: row.category_id ?? undefined,
+    subCategoryId: row.sub_category_id ?? undefined,
     macroCategoryId: row.macro_category_id ?? undefined,
     paymentMethod: row.payment_method as Transaction['paymentMethod'],
     installmentCurrent: row.installment_current ?? undefined,
@@ -88,6 +90,7 @@ function toDbRow(t: Transaction, familyId: string): Omit<DbTransaction, 'created
     account_id: t.accountId || null,
     credit_card_id: t.creditCardId ?? null,
     category_id: t.categoryId ?? null,
+    sub_category_id: t.subCategoryId ?? null,
     macro_category_id: t.macroCategoryId ?? null,
     installment_current: t.installmentCurrent ?? null,
     installment_total: t.installmentTotal ?? null,

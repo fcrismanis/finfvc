@@ -2,10 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { DATA_PROVIDER } from '../config/env'
-import {
-  loadSubCategories, upsertSubCategory, deleteSubCategory,
-  newSubCategoryId, ESSENTIALITY_LABELS,
-} from '../services/subcategory.service'
+import { newSubCategoryId, ESSENTIALITY_LABELS } from '../services/subcategory.service'
 import type { SubCategory, SubCategoryEssentiality, Transaction, Budget, MonthClosing } from '../types'
 
 interface BackupData {
@@ -18,10 +15,12 @@ interface BackupData {
 }
 
 export function Settings() {
-  const { transactions, budgets, closings, appendTransactions } = useData()
+  const {
+    transactions, budgets, closings, subCategories,
+    appendTransactions, saveSubCategory, deleteSubCategory,
+  } = useData()
   const [confirmClear, setConfirmClear] = useState(false)
   const [cleared, setCleared] = useState(false)
-  const [subCategories, setSubCategories] = useState<SubCategory[]>(() => loadSubCategories())
 
   // ── Backup import state ──
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -125,7 +124,7 @@ export function Settings() {
     setClearMonthConfirm('')
   }
 
-  function saveSub() {
+  async function saveSub() {
     if (!editingSub?.name?.trim() || !editingSub.macroCategoryId) return
     const sub: SubCategory = {
       id: editingSub.id ?? newSubCategoryId(),
@@ -135,14 +134,13 @@ export function Settings() {
       active: true,
       createdAt: editingSub.createdAt ?? new Date().toISOString(),
     }
-    const updated = upsertSubCategory(sub)
-    setSubCategories(updated)
+    await saveSubCategory(sub)
     setEditingSub(null)
   }
 
-  function removeSub(id: string) {
+  async function removeSub(id: string) {
     if (!confirm('Remover subcategoria? Os lançamentos com ela não serão afetados.')) return
-    setSubCategories(deleteSubCategory(id))
+    await deleteSubCategory(id)
   }
 
   const filteredSubs = subMacroFilter
