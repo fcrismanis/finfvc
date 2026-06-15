@@ -342,6 +342,25 @@ app.post('/api/pluggy/transactions', async (req, res) => {
         const txData = await txRes.json()
         const results = Array.isArray(txData.results) ? txData.results : []
         for (const tx of results) {
+          // Pluggy may return category as string or object { id, description }
+          const rawCat = tx.category
+          let categoryStr = null
+          let categoryId = null
+          if (rawCat != null) {
+            if (typeof rawCat === 'string') {
+              categoryStr = rawCat
+            } else if (typeof rawCat === 'object') {
+              categoryStr = rawCat.description ?? rawCat.name ?? null
+              categoryId  = rawCat.id != null ? String(rawCat.id) : null
+            }
+          }
+          // Debug: log first transaction per sync so we can verify field structure
+          if (allTransactions.length === 0) {
+            console.log('[pluggy] first tx sample:', JSON.stringify({
+              id: tx.id, description: tx.description, type: tx.type,
+              category: rawCat, providerCode: tx.providerCode,
+            }))
+          }
           allTransactions.push({
             id:           tx.id,
             accountId:    accId,
@@ -351,7 +370,8 @@ app.post('/api/pluggy/transactions', async (req, res) => {
             type:         tx.type,        // 'DEBIT' | 'CREDIT'
             status:       tx.status,      // 'POSTED' | 'PENDING'
             providerCode: tx.providerCode ?? null,
-            category:     tx.category ?? null,
+            category:     categoryStr,
+            categoryId:   categoryId,
           })
         }
         if (results.length < pageSize) break

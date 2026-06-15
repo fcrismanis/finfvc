@@ -55,6 +55,7 @@ export interface Transaction {
   manualEditedAt?: string
   lastImportedAt?: string
   pluggyCategory?: string
+  pluggyCategoryId?: string
   pluggyAccountName?: string
   pluggyInstitutionName?: string
   pluggyInstitutionLogoUrl?: string

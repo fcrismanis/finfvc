@@ -43,6 +43,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterMacro, setFilterMacro] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterTag, setFilterTag] = useState('')
+  const [filterInstitution, setFilterInstitution] = useState('')
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(0)
@@ -132,6 +133,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (filterType) result = result.filter(t => t.type === filterType)
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
+    if (filterInstitution) result = result.filter(t => {
+      const pInfo = pluggyAccountMap.get(t.accountId)
+      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName ?? ''
+      return inst === filterInstitution
+    })
     if (navFilter?.macroCategoryIds?.length) {
       const ids = new Set(navFilter.macroCategoryIds)
       result = result.filter(t => t.macroCategoryId != null && ids.has(t.macroCategoryId))
@@ -230,7 +236,18 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }, [transactions])
 
   const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag)
+  const allInstitutions = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of transactions) {
+      if (t.source !== 'pluggy') continue
+      const pInfo = pluggyAccountMap.get(t.accountId)
+      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName
+      if (inst) set.add(inst)
+    }
+    return Array.from(set).sort()
+  }, [transactions, pluggyAccountMap])
+
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution)
 
   return (
     <main className="page-shell">
@@ -383,9 +400,16 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               </select>
             )}
 
+            {allInstitutions.length > 0 && (
+              <select className="ledger-select" value={filterInstitution} onChange={e => { setFilterInstitution(e.target.value); setPage(0) }} aria-label="Instituição">
+                <option value="">Todas instituições</option>
+                {allInstitutions.map(inst => <option key={inst} value={inst}>{inst}</option>)}
+              </select>
+            )}
+
             {hasFilters && (
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setPage(0) }}
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setPage(0) }}
                 style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
               >
                 Limpar
@@ -477,41 +501,45 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   style={{ fontSize: 12.5, fontWeight: 600, width: '100%', background: 'var(--paper)', border: '1px solid var(--accent)', borderRadius: 5, padding: '2px 6px', outline: 'none', color: 'var(--ink)', fontFamily: 'var(--ui)' }}
                                 />
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <p
-                                    role="button"
-                                    tabIndex={0}
-                                    title="Clique duplo para editar descrição"
-                                    onDoubleClick={() => openInlineDesc(tx)}
-                                    onKeyDown={e => e.key === 'Enter' && openInlineDesc(tx)}
-                                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', maxWidth: 240, cursor: 'text' }}
-                                  >
-                                    {tx.description}
-                                  </p>
+                                <>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <p
+                                      role="button"
+                                      tabIndex={0}
+                                      title="Clique duplo para editar descrição"
+                                      onDoubleClick={() => openInlineDesc(tx)}
+                                      onKeyDown={e => e.key === 'Enter' && openInlineDesc(tx)}
+                                      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', maxWidth: 240, cursor: 'text' }}
+                                    >
+                                      {tx.description}
+                                    </p>
+                                    {(tx.manualCategoryOverride || tx.manualTextOverride) && (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
+                                        editado
+                                      </span>
+                                    )}
+                                    {tx.status === 'pending' && (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
+                                        pendente
+                                      </span>
+                                    )}
+                                  </div>
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
-                                    const label = tx.pluggyAccountName ?? pInfo?.name ?? tx.pluggyInstitutionName ?? pInfo?.institutionName ?? 'Open Finance'
+                                    const institution = tx.pluggyInstitutionName ?? pInfo?.institutionName
+                                    const account = tx.pluggyAccountName ?? pInfo?.name
                                     const logo = tx.pluggyInstitutionLogoUrl ?? pInfo?.logoUrl
+                                    if (!institution && !account) return null
                                     return (
-                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {logo ? (
-                                          <img src={logo} alt="" style={{ width: 10, height: 10, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }} />
-                                        ) : null}
-                                        {label}
-                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                        {logo && <img src={logo} alt="" style={{ width: 11, height: 11, borderRadius: 2, objectFit: 'contain', flexShrink: 0, opacity: 0.7 }} />}
+                                        <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                                          {institution}{account && institution ? ` · ${account}` : account}
+                                        </span>
+                                      </div>
                                     )
                                   })()}
-                                  {(tx.manualCategoryOverride || tx.manualTextOverride) && (
-                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
-                                      editado
-                                    </span>
-                                  )}
-                                  {tx.status === 'pending' && (
-                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
-                                      pendente
-                                    </span>
-                                  )}
-                                </div>
+                                </>
                               )}
                               {/* Tags chips (Bloco 6) */}
                               {tx.tags && tx.tags.length > 0 && (

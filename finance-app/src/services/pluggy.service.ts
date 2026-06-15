@@ -103,6 +103,7 @@ export interface PluggyRawTransaction {
   status: 'POSTED' | 'PENDING'
   providerCode: string | null
   category: string | null
+  categoryId: string | null
 }
 
 export async function fetchPluggyTransactions(
@@ -191,86 +192,162 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
   return { ...data.connection, savedAt: new Date().toISOString() }
 }
 
-// ── Pluggy category → macro category mapping (Bloco 3) ───────────────────────
+// ── Pluggy category → macro category mapping ─────────────────────────────────
+// Pluggy API returns English category strings. Portuguese kept as fallback.
 
 const PLUGGY_CAT_MAP: Record<string, string> = {
-  // Alimentação
-  'Alimentação e Bebidas': 'mac_alimentacao',
-  'Restaurantes e Bares': 'mac_alimentacao',
-  'Supermercados': 'mac_alimentacao',
-  'Padaria e Confeitaria': 'mac_alimentacao',
-  'Açougue e Peixaria': 'mac_alimentacao',
-  'Bebidas': 'mac_alimentacao',
-  // Casa
-  'Casa e Jardim': 'mac_casa',
-  'Contas e Utilidades': 'mac_casa',
-  'Aluguel': 'mac_casa',
-  'Água e Esgoto': 'mac_casa',
-  'Energia Elétrica': 'mac_casa',
-  'Gás': 'mac_casa',
-  'Internet e Telefone': 'mac_casa',
-  'Manutenção e Reparos': 'mac_casa',
-  // Saúde
-  'Saúde e Beleza': 'mac_saude',
-  'Farmácias': 'mac_saude',
-  'Médicos e Clínicas': 'mac_saude',
-  'Academia e Esportes': 'mac_saude',
-  'Plano de Saúde': 'mac_saude',
-  // Transporte
-  'Transporte': 'mac_transporte',
-  'Combustível': 'mac_transporte',
-  'Pedágios e Estacionamentos': 'mac_transporte',
-  'Transporte Público': 'mac_transporte',
-  'Aplicativos de Transporte': 'mac_transporte',
-  'Manutenção de Veículo': 'mac_transporte',
-  // Educação
-  'Educação': 'mac_educacao',
-  'Cursos e Treinamentos': 'mac_educacao',
-  'Material Escolar': 'mac_educacao',
-  // Assinaturas
-  'Assinaturas e Serviços': 'mac_assinaturas',
-  'Streaming e Entretenimento': 'mac_assinaturas',
-  'Aplicativos': 'mac_assinaturas',
-  // Compras
-  'Compras e Shopping': 'mac_compras',
-  'Vestuário e Calçados': 'mac_compras',
-  'Eletrônicos': 'mac_compras',
-  'Eletrodomésticos': 'mac_compras',
-  'Lojas Online': 'mac_compras',
-  // Serviços
-  'Serviços Profissionais': 'mac_servicos',
-  'Serviços Domésticos': 'mac_servicos',
-  // Seguros
-  'Seguros': 'mac_seguros',
-  'Seguro de Vida': 'mac_seguros',
-  'Seguro Veicular': 'mac_seguros',
-  // Lazer
-  'Lazer e Turismo': 'mac_lazer',
-  'Viagens': 'mac_lazer',
-  'Cinema e Teatro': 'mac_lazer',
-  'Bares e Baladas': 'mac_lazer',
-  'Esportes e Lazer': 'mac_lazer',
+  // ── English (Pluggy API output) ──
+  // Food & drink
+  'Groceries':             'mac_alimentacao',
+  'Eating out':            'mac_alimentacao',
+  'Bars and restaurants':  'mac_alimentacao',
+  'Food and drink':        'mac_alimentacao',
+  'Bakeries':              'mac_alimentacao',
+  'Coffee shops':          'mac_alimentacao',
+  // Housing & utilities
+  'Housing':               'mac_casa',
+  'Rent':                  'mac_casa',
+  'Water and sewage':      'mac_casa',
+  'Electricity':           'mac_casa',
+  'Gas':                   'mac_casa',
+  'Internet and telephone':'mac_casa',
+  'Home maintenance':      'mac_casa',
+  'Home and garden':       'mac_casa',
+  'Bills and utilities':   'mac_casa',
+  // Health
+  'Healthcare':            'mac_saude',
+  'Pharmacy':              'mac_saude',
+  'Doctors and clinics':   'mac_saude',
+  'Gym and fitness centers':'mac_saude',
+  'Health insurance':      'mac_saude',
+  'Health and beauty':     'mac_saude',
+  // Transport
+  'Transport':             'mac_transporte',
+  'Fuel':                  'mac_transporte',
+  'Parking':               'mac_transporte',
+  'Tolls and parking':     'mac_transporte',
+  'Public transport':      'mac_transporte',
+  'Ride hailing':          'mac_transporte',
+  'Car maintenance':       'mac_transporte',
+  // Education
+  'Education':             'mac_educacao',
+  'Courses and training':  'mac_educacao',
+  'School supplies':       'mac_educacao',
+  // Subscriptions
+  'Digital services':      'mac_assinaturas',
+  'Streaming':             'mac_assinaturas',
+  'Subscriptions':         'mac_assinaturas',
+  'Apps':                  'mac_assinaturas',
+  // Shopping
+  'Shopping':              'mac_compras',
+  'Online shopping':       'mac_compras',
+  'Electronics':           'mac_compras',
+  'Clothing':              'mac_compras',
+  'Home appliances':       'mac_compras',
+  // Services
+  'Services':              'mac_servicos',
+  'Professional services': 'mac_servicos',
+  'Domestic services':     'mac_servicos',
+  // Insurance
+  'Insurance':             'mac_seguros',
+  'Life insurance':        'mac_seguros',
+  'Car insurance':         'mac_seguros',
+  // Leisure
+  'Leisure and tourism':   'mac_lazer',
+  'Travel':                'mac_lazer',
+  'Cinema and theater':    'mac_lazer',
+  'Sports and leisure':    'mac_lazer',
+  'Entertainment':         'mac_lazer',
+  // Personal care
+  'Personal care':         'mac_cuidados',
+  'Beauty salon':          'mac_cuidados',
+  'Wellness':              'mac_cuidados',
   // Pets
-  'Animais e Pets': 'mac_pets',
-  'Veterinário': 'mac_pets',
-  // Impostos
-  'Impostos e Taxas': 'mac_impostos',
-  'IPTU': 'mac_impostos',
-  'IPVA': 'mac_impostos',
-  // Cuidados pessoais
-  'Cuidados Pessoais': 'mac_cuidados',
-  'Salão de Beleza': 'mac_cuidados',
-  'Bem Estar': 'mac_cuidados',
-  // Receitas
-  'Salário': 'mac_receita_op',
-  'Receita': 'mac_receita_ev',
-  'Outros Créditos': 'mac_receita_ev',
-  // Financeiro
-  'Transferências': 'mac_movfin',
-  'Investimentos': 'mac_movfin',
-  'Empréstimos': 'mac_divida',
-  'Financiamentos': 'mac_divida',
+  'Pets':                  'mac_pets',
+  'Veterinary':            'mac_pets',
+  // Taxes & fees
+  'Taxes':                 'mac_impostos',
+  'Bank fees':             'mac_impostos',
+  'Fees':                  'mac_impostos',
+  // Income
+  'Salary':                'mac_receita_op',
+  'Income':                'mac_receita_ev',
+  'Other credits':         'mac_receita_ev',
+  'Investment returns':    'mac_receita_ev',
+  // Financial movements (neutral — must be handled specially in mapper)
+  'Credit card payment':   'mac_movfin',
+  'Transfers':             'mac_movfin',
+  'Investments':           'mac_movfin',
+  // Debt
+  'Loans and financing':   'mac_divida',
+  'Loan':                  'mac_divida',
+  'Financing':             'mac_divida',
+
+  // ── Portuguese fallback ──
+  'Alimentação e Bebidas': 'mac_alimentacao',
+  'Restaurantes e Bares':  'mac_alimentacao',
+  'Supermercados':         'mac_alimentacao',
+  'Padaria e Confeitaria': 'mac_alimentacao',
+  'Açougue e Peixaria':    'mac_alimentacao',
+  'Bebidas':               'mac_alimentacao',
+  'Casa e Jardim':         'mac_casa',
+  'Contas e Utilidades':   'mac_casa',
+  'Aluguel':               'mac_casa',
+  'Água e Esgoto':         'mac_casa',
+  'Energia Elétrica':      'mac_casa',
+  'Gás':                   'mac_casa',
+  'Internet e Telefone':   'mac_casa',
+  'Manutenção e Reparos':  'mac_casa',
+  'Saúde e Beleza':        'mac_saude',
+  'Farmácias':             'mac_saude',
+  'Médicos e Clínicas':    'mac_saude',
+  'Academia e Esportes':   'mac_saude',
+  'Plano de Saúde':        'mac_saude',
+  'Transporte':            'mac_transporte',
+  'Combustível':           'mac_transporte',
+  'Pedágios e Estacionamentos':'mac_transporte',
+  'Transporte Público':    'mac_transporte',
+  'Aplicativos de Transporte':'mac_transporte',
+  'Manutenção de Veículo': 'mac_transporte',
+  'Educação':              'mac_educacao',
+  'Cursos e Treinamentos': 'mac_educacao',
+  'Material Escolar':      'mac_educacao',
+  'Assinaturas e Serviços':'mac_assinaturas',
+  'Streaming e Entretenimento':'mac_assinaturas',
+  'Aplicativos':           'mac_assinaturas',
+  'Compras e Shopping':    'mac_compras',
+  'Vestuário e Calçados':  'mac_compras',
+  'Eletrônicos':           'mac_compras',
+  'Eletrodomésticos':      'mac_compras',
+  'Lojas Online':          'mac_compras',
+  'Serviços Profissionais':'mac_servicos',
+  'Serviços Domésticos':   'mac_servicos',
+  'Seguros':               'mac_seguros',
+  'Seguro de Vida':        'mac_seguros',
+  'Seguro Veicular':       'mac_seguros',
+  'Lazer e Turismo':       'mac_lazer',
+  'Viagens':               'mac_lazer',
+  'Cinema e Teatro':       'mac_lazer',
+  'Bares e Baladas':       'mac_lazer',
+  'Esportes e Lazer':      'mac_lazer',
+  'Animais e Pets':        'mac_pets',
+  'Veterinário':           'mac_pets',
+  'Impostos e Taxas':      'mac_impostos',
+  'IPTU':                  'mac_impostos',
+  'IPVA':                  'mac_impostos',
+  'Cuidados Pessoais':     'mac_cuidados',
+  'Salão de Beleza':       'mac_cuidados',
+  'Bem Estar':             'mac_cuidados',
+  'Salário':               'mac_receita_op',
+  'Receita':               'mac_receita_ev',
+  'Outros Créditos':       'mac_receita_ev',
+  'Transferências':        'mac_movfin',
+  'Investimentos':         'mac_movfin',
+  'Empréstimos':           'mac_divida',
+  'Financiamentos':        'mac_divida',
 }
+
+const NEUTRAL_CATEGORIES = new Set(['Credit card payment', 'Transfers', 'Transferências'])
 
 export function pluggyCategoryToMacro(pluggyCategory: string | null): string | null {
   if (!pluggyCategory) return null
@@ -339,6 +416,7 @@ export function mapPluggyToTransactions(
       importBatchId: batchId,
       lastImportedAt: now,
       pluggyCategory: ptx.category ?? undefined,
+      pluggyCategoryId: ptx.categoryId ?? undefined,
       pluggyAccountName: connInfo?.accountName,
       pluggyInstitutionName: connInfo?.institutionName,
       pluggyInstitutionLogoUrl: connInfo?.institutionLogoUrl ?? undefined,
@@ -362,6 +440,17 @@ export function mapPluggyToTransactions(
     // Priority 2: Pluggy provider category mapping
     const pluggyMacro = pluggyCategoryToMacro(ptx.category)
     if (pluggyMacro) {
+      // Neutral categories (credit card payment, transfers): don't count as expense
+      if (NEUTRAL_CATEGORIES.has(ptx.category ?? '')) {
+        return {
+          ...baseTx,
+          macroCategoryId: pluggyMacro,
+          classificationType: 'neutral' as import('../types').ClassificationType,
+          includeInOperationalResult: false,
+          includeInBudget: false,
+          needsReview: false,
+        }
+      }
       return { ...baseTx, macroCategoryId: pluggyMacro, needsReview: false }
     }
 

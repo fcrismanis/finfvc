@@ -311,6 +311,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           <th className="table-th">Data</th>
                           <th className="table-th">Descrição</th>
                           <th className="table-th table-th-right">Valor</th>
+                          <th className="table-th">Cat. Pluggy</th>
                           <th className="table-th">Categoria atual</th>
                           <th className="table-th">Sugestão</th>
                           <th style={{ width: 100 }} />
@@ -327,10 +328,20 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                               <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
                                 {new Date(tx.competenceDate + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </td>
-                              <td className="table-td" style={{ maxWidth: 220 }}>
+                              <td className="table-td" style={{ maxWidth: 200 }}>
                                 <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
                                   {tx.description}
                                 </p>
+                                {tx.pluggyInstitutionName && (
+                                  <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{tx.pluggyInstitutionName}</p>
+                                )}
+                              </td>
+                              <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                                {tx.pluggyCategory ? (
+                                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--well)', color: 'var(--ink-2)', fontWeight: 500, border: '1px solid var(--line)', whiteSpace: 'nowrap' }}>
+                                    {tx.pluggyCategory}
+                                  </span>
+                                ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
                               </td>
                               <td className="table-td table-th-right" style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)' }}>
                                 {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
@@ -376,7 +387,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           )
                         })}
                         {pluggyItems.length === 0 && (
-                          <tr><td colSpan={6}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
+                          <tr><td colSpan={7}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
                         )}
                       </tbody>
                     </table>
