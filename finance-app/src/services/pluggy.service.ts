@@ -92,18 +92,28 @@ export async function listConnections(_userId: string): Promise<PluggyConnection
   return res.json() as Promise<PluggyConnection[]>
 }
 
+export interface PluggyPaymentData {
+  paymentMethod?: string | null
+  receiver?: { name?: string | null; documentNumber?: string | null } | null
+  payer?: { name?: string | null; documentNumber?: string | null } | null
+  reason?: string | null
+}
+
 export interface PluggyRawTransaction {
   id: string
   accountId: string
-  accountType: 'BANK' | 'CREDIT'
+  accountType?: 'BANK' | 'CREDIT'
   date: string
   description: string
+  descriptionRaw?: string | null
   amount: number
   type: 'DEBIT' | 'CREDIT'
   status: 'POSTED' | 'PENDING'
   providerCode: string | null
   category: string | null
   categoryId: string | null
+  operationType?: string | null
+  paymentData?: PluggyPaymentData | null
 }
 
 export async function fetchPluggyTransactions(
@@ -192,8 +202,95 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
   return { ...data.connection, savedAt: new Date().toISOString() }
 }
 
-// ── Pluggy category → macro category mapping ─────────────────────────────────
-// Pluggy API returns English category strings. Portuguese kept as fallback.
+// ── Pluggy category mapping ───────────────────────────────────────────────────
+// Priority: categoryId (numeric code) → category (English name) → null
+
+interface PluggyCatResult {
+  macroCategoryId: string
+  classificationType: import('../types').ClassificationType
+  includeInOperationalResult?: boolean
+  includeInBudget?: boolean
+  includeInCashflow?: boolean
+  isInternalTransfer?: boolean
+}
+
+const NEUTRAL: Partial<PluggyCatResult> = {
+  classificationType: 'neutral',
+  includeInOperationalResult: false,
+  includeInBudget: false,
+}
+
+// Pluggy categoryId codes → FIN macro category
+const PLUGGY_ID_MAP: Record<string, PluggyCatResult> = {
+  // Alimentação
+  '01010000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  '01020000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  '01030000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  '01040000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  '01050000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  '01000000': { macroCategoryId: 'mac_alimentacao', classificationType: 'operational_expense' },
+  // Casa / Moradia
+  '08000000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
+  '08010000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
+  '08020000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
+  '08030000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
+  '08040000': { macroCategoryId: 'mac_casa', classificationType: 'operational_expense' },
+  // Saúde
+  '09000000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
+  '09010000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
+  '09020000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
+  '09030000': { macroCategoryId: 'mac_saude', classificationType: 'operational_expense' },
+  // Transporte
+  '10000000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
+  '10010000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
+  '10020000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
+  '10030000': { macroCategoryId: 'mac_transporte', classificationType: 'operational_expense' },
+  // Educação — confirmado no payload real
+  '07000000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
+  '07010000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
+  '07020000': { macroCategoryId: 'mac_educacao', classificationType: 'operational_expense' },
+  // Assinaturas
+  '11000000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
+  '11010000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
+  '11020000': { macroCategoryId: 'mac_assinaturas', classificationType: 'operational_expense' },
+  // Compras
+  '12000000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
+  '12010000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
+  '12020000': { macroCategoryId: 'mac_compras', classificationType: 'operational_expense' },
+  // Serviços
+  '13000000': { macroCategoryId: 'mac_servicos', classificationType: 'operational_expense' },
+  // Seguros
+  '14000000': { macroCategoryId: 'mac_seguros', classificationType: 'operational_expense' },
+  // Lazer
+  '15000000': { macroCategoryId: 'mac_lazer', classificationType: 'operational_expense' },
+  '15010000': { macroCategoryId: 'mac_lazer', classificationType: 'operational_expense' },
+  // Impostos
+  '16000000': { macroCategoryId: 'mac_impostos', classificationType: 'operational_expense' },
+  // Cuidados pessoais
+  '17000000': { macroCategoryId: 'mac_cuidados', classificationType: 'operational_expense' },
+  // Pets
+  '18000000': { macroCategoryId: 'mac_pets', classificationType: 'operational_expense' },
+  // Dívida / Financiamento — confirmado no payload real
+  '02000000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
+  '02010000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
+  '02020000': { macroCategoryId: 'mac_divida', classificationType: 'debt_cost' },
+  // Receita
+  '03000000': { macroCategoryId: 'mac_receita_op', classificationType: 'operational_income' },
+  '03010000': { macroCategoryId: 'mac_receita_op', classificationType: 'operational_income' },
+  '03020000': { macroCategoryId: 'mac_receita_ev', classificationType: 'extraordinary_income' },
+  // Transferências / movfin — confirmados no payload real
+  '04000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL, isInternalTransfer: true } as PluggyCatResult,
+  '04010000': { macroCategoryId: 'mac_movfin', ...NEUTRAL, isInternalTransfer: true } as PluggyCatResult,
+  '05000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05010000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05020000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05030000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05040000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05050000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05060000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult,
+  '05070000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult, // PIX — confirmado
+  '06000000': { macroCategoryId: 'mac_movfin', ...NEUTRAL } as PluggyCatResult, // Investimentos
+}
 
 const PLUGGY_CAT_MAP: Record<string, string> = {
   // ── English (Pluggy API output) ──
@@ -347,8 +444,34 @@ const PLUGGY_CAT_MAP: Record<string, string> = {
   'Financiamentos':        'mac_divida',
 }
 
-const NEUTRAL_CATEGORIES = new Set(['Credit card payment', 'Transfers', 'Transferências'])
+const NEUTRAL_CATEGORY_NAMES = new Set([
+  'Credit card payment', 'Transfers', 'Transferências',
+  'Same person transfer', 'Transfer - PIX',
+])
 
+export function pluggyCategoryToResult(
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+): PluggyCatResult | null {
+  // Priority 1: numeric code (most reliable)
+  if (categoryId) {
+    const byId = PLUGGY_ID_MAP[categoryId]
+    if (byId) return byId
+  }
+  // Priority 2: English name
+  if (categoryName) {
+    const macroId = PLUGGY_CAT_MAP[categoryName]
+    if (macroId) {
+      const isNeutral = NEUTRAL_CATEGORY_NAMES.has(categoryName)
+      return isNeutral
+        ? { macroCategoryId: macroId, ...NEUTRAL } as PluggyCatResult
+        : { macroCategoryId: macroId, classificationType: 'operational_expense' }
+    }
+  }
+  return null
+}
+
+/** @deprecated use pluggyCategoryToResult */
 export function pluggyCategoryToMacro(pluggyCategory: string | null): string | null {
   if (!pluggyCategory) return null
   return PLUGGY_CAT_MAP[pluggyCategory] ?? null
@@ -415,9 +538,13 @@ export function mapPluggyToTransactions(
       importHash,
       importBatchId: batchId,
       lastImportedAt: now,
-      pluggyCategory: ptx.category ?? undefined,
-      pluggyCategoryId: ptx.categoryId ?? undefined,
-      pluggyAccountName: connInfo?.accountName,
+      pluggyCategory:      ptx.category ?? undefined,
+      pluggyCategoryId:    ptx.categoryId ?? undefined,
+      pluggyOperationType: ptx.operationType ?? undefined,
+      pluggyPaymentMethod: ptx.paymentData?.paymentMethod ?? undefined,
+      pluggyReceiverName:  ptx.paymentData?.receiver?.name ?? undefined,
+      pluggyPayerName:     ptx.paymentData?.payer?.name ?? undefined,
+      pluggyAccountName:   connInfo?.accountName,
       pluggyInstitutionName: connInfo?.institutionName,
       pluggyInstitutionLogoUrl: connInfo?.institutionLogoUrl ?? undefined,
       createdAt: now,
@@ -437,21 +564,19 @@ export function mapPluggyToTransactions(
       }
     }
 
-    // Priority 2: Pluggy provider category mapping
-    const pluggyMacro = pluggyCategoryToMacro(ptx.category)
-    if (pluggyMacro) {
-      // Neutral categories (credit card payment, transfers): don't count as expense
-      if (NEUTRAL_CATEGORIES.has(ptx.category ?? '')) {
-        return {
-          ...baseTx,
-          macroCategoryId: pluggyMacro,
-          classificationType: 'neutral' as import('../types').ClassificationType,
-          includeInOperationalResult: false,
-          includeInBudget: false,
-          needsReview: false,
-        }
+    // Priority 2: Pluggy provider category (by ID first, then by name)
+    const catResult = pluggyCategoryToResult(ptx.categoryId, ptx.category)
+    if (catResult) {
+      return {
+        ...baseTx,
+        macroCategoryId:           catResult.macroCategoryId,
+        classificationType:        catResult.classificationType,
+        includeInOperationalResult: catResult.includeInOperationalResult ?? true,
+        includeInBudget:           catResult.includeInBudget ?? true,
+        includeInCashflow:         catResult.includeInCashflow ?? true,
+        isInternalTransfer:        catResult.isInternalTransfer ?? false,
+        needsReview: false,
       }
-      return { ...baseTx, macroCategoryId: pluggyMacro, needsReview: false }
     }
 
     return baseTx

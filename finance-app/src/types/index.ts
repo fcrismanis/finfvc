@@ -56,6 +56,10 @@ export interface Transaction {
   lastImportedAt?: string
   pluggyCategory?: string
   pluggyCategoryId?: string
+  pluggyOperationType?: string
+  pluggyPaymentMethod?: string
+  pluggyReceiverName?: string
+  pluggyPayerName?: string
   pluggyAccountName?: string
   pluggyInstitutionName?: string
   pluggyInstitutionLogoUrl?: string

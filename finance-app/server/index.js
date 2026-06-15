@@ -342,42 +342,38 @@ app.post('/api/pluggy/transactions', async (req, res) => {
         const txData = await txRes.json()
         const results = Array.isArray(txData.results) ? txData.results : []
         for (const tx of results) {
-          // Pluggy may return category as string or object { id, description }
-          const rawCat = tx.category
-          let categoryStr = null
-          let categoryId = null
-          if (rawCat != null) {
-            if (typeof rawCat === 'string') {
-              categoryStr = rawCat
-            } else if (typeof rawCat === 'object') {
-              categoryStr = rawCat.description ?? rawCat.name ?? null
-              categoryId  = rawCat.id != null ? String(rawCat.id) : null
-            }
-          }
+          // category comes as plain string from Pluggy (e.g. "Education")
+          // categoryId comes as string code (e.g. "07020000")
+          const categoryStr = typeof tx.category === 'string' ? tx.category
+            : (tx.category?.description ?? tx.category?.name ?? null)
+          const categoryId  = tx.categoryId != null ? String(tx.categoryId)
+            : (typeof tx.category === 'object' && tx.category?.id != null ? String(tx.category.id) : null)
+
           if ((process.env.NODE_ENV !== 'production' || process.env.DEBUG_PLUGGY === 'true') && allTransactions.length === 0) {
             console.log('[pluggy] tx field candidates', {
               keys: Object.keys(tx),
               categoryCandidates: {
                 category: tx.category,
                 categoryId: tx.categoryId,
-                categoryDescription: tx.categoryDescription,
-                merchantCategory: tx.merchant?.category,
                 paymentData: tx.paymentData,
                 operationType: tx.operationType,
               },
             })
           }
           allTransactions.push({
-            id:           tx.id,
-            accountId:    accId,
-            date:         tx.date,
-            description:  tx.description ?? tx.descriptionRaw ?? '',
-            amount:       tx.amount ?? 0,
-            type:         tx.type,        // 'DEBIT' | 'CREDIT'
-            status:       tx.status,      // 'POSTED' | 'PENDING'
-            providerCode: tx.providerCode ?? null,
-            category:     categoryStr,
-            categoryId:   categoryId,
+            id:            tx.id,
+            accountId:     accId,
+            date:          tx.date,
+            description:   tx.description ?? tx.descriptionRaw ?? '',
+            descriptionRaw: tx.descriptionRaw ?? null,
+            amount:        tx.amount ?? 0,
+            type:          tx.type,
+            status:        tx.status,
+            providerCode:  tx.providerCode ?? null,
+            category:      categoryStr,
+            categoryId:    categoryId,
+            operationType: tx.operationType ?? null,
+            paymentData:   tx.paymentData ?? null,
           })
         }
         if (results.length < pageSize) break

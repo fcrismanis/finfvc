@@ -9,6 +9,7 @@ import {
   registerConnection,
   fetchPluggyTransactions,
   mapPluggyToTransactions,
+  pluggyCategoryToResult,
   updateConnectionSyncMeta,
   getPeriodDates,
   type ConnInfo,
@@ -18,6 +19,47 @@ import type { PluggyLocalConnection, MapResult } from '../services/pluggy.servic
 import type { Transaction } from '../types'
 
 const IS_DEV = import.meta.env.DEV
+
+interface ReclassPreview {
+  total: number
+  willReclassify: number
+  willSkip: number
+  noMap: number
+  byMacro: Record<string, number>
+  patches: Array<{ id: string; patch: Partial<Transaction> }>
+}
+
+function buildReclassPreview(pluggyTxs: Transaction[]): ReclassPreview {
+  const patches: ReclassPreview['patches'] = []
+  const byMacro: Record<string, number> = {}
+  let noMap = 0
+  let willSkip = 0
+
+  for (const tx of pluggyTxs) {
+    if (tx.manualCategoryOverride || tx.manualSubCategoryOverride || (tx.manualEditedAt && tx.macroCategoryId)) {
+      willSkip++
+      continue
+    }
+    const result = pluggyCategoryToResult(tx.pluggyCategoryId ?? null, tx.pluggyCategory ?? null)
+    if (!result) { noMap++; continue }
+    byMacro[result.macroCategoryId] = (byMacro[result.macroCategoryId] ?? 0) + 1
+    patches.push({
+      id: tx.id,
+      patch: {
+        macroCategoryId:           result.macroCategoryId,
+        classificationType:        result.classificationType,
+        includeInOperationalResult: result.includeInOperationalResult ?? true,
+        includeInBudget:           result.includeInBudget ?? true,
+        includeInCashflow:         result.includeInCashflow ?? true,
+        isInternalTransfer:        result.isInternalTransfer ?? false,
+        needsReview: false,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  }
+
+  return { total: pluggyTxs.length, willReclassify: patches.length, willSkip, noMap, byMacro, patches }
+}
 
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
 type SyncPhase = 'period_select' | 'fetching' | 'preview' | 'importing' | 'done' | 'error'
@@ -65,7 +107,7 @@ const PERIOD_LABELS: Record<PeriodPreset, string> = {
 }
 
 export function PluggyPage() {
-  const { transactions, appendTransactions } = useData()
+  const { transactions, appendTransactions, updateTransaction } = useData()
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
   const [connectToken, setConnectToken] = useState<string | null>(null)
@@ -75,6 +117,8 @@ export function PluggyPage() {
   const [sync, setSync] = useState<SyncSession | null>(null)
   const [debugPayload, setDebugPayload] = useState<object | null>(null)
   const [debugLoading, setDebugLoading] = useState<string | null>(null)
+  const [reclassPreview, setReclassPreview] = useState<ReclassPreview | null>(null)
+  const [reclassRunning, setReclassRunning] = useState(false)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
@@ -140,6 +184,28 @@ export function PluggyPage() {
       setDebugPayload({ error: err instanceof Error ? err.message : 'Erro desconhecido' })
     } finally {
       setDebugLoading(null)
+    }
+  }
+
+  function handleReclassPreview() {
+    const pluggyTxs = transactions.filter(
+      t => (t.source === 'pluggy' || t.origin === 'import_api') && (t.pluggyCategory || t.pluggyCategoryId)
+    )
+    setReclassPreview(buildReclassPreview(pluggyTxs))
+  }
+
+  async function handleReclassConfirm() {
+    if (!reclassPreview) return
+    setReclassRunning(true)
+    try {
+      for (const { id, patch } of reclassPreview.patches) {
+        updateTransaction(id, patch)
+      }
+      // Give the last update time to persist before closing
+      await new Promise(r => setTimeout(r, 200))
+    } finally {
+      setReclassRunning(false)
+      setReclassPreview(null)
     }
   }
 
@@ -356,6 +422,21 @@ export function PluggyPage() {
           </div>
         )}
 
+        {/* Reclassify imported */}
+        {transactions.some(t => (t.source === 'pluggy' || t.origin === 'import_api') && (t.pluggyCategory || t.pluggyCategoryId)) && (
+          <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>Lançamentos Pluggy já importados</p>
+              <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+                Aplica o mapeamento de categorias atualizado nos lançamentos importados sem categoria manual.
+              </p>
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleReclassPreview}>
+              Reclassificar importados
+            </button>
+          </div>
+        )}
+
       </div>
 
       {connectToken && (
@@ -375,11 +456,73 @@ export function PluggyPage() {
       {debugPayload && (
         <DebugPayloadModal payload={debugPayload} onClose={() => setDebugPayload(null)} />
       )}
+
+      {reclassPreview && (
+        <ReclassModal
+          preview={reclassPreview}
+          running={reclassRunning}
+          onConfirm={handleReclassConfirm}
+          onClose={() => setReclassPreview(null)}
+        />
+      )}
     </main>
   )
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+function ReclassModal({ preview, running, onConfirm, onClose }: {
+  preview: ReclassPreview
+  running: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => !running && e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 480, boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Reclassificar lançamentos Pluggy</p>
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>Aplica mapeamento atualizado. Não sobrescreve categorias manuais.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+          {([
+            ['Total Pluggy', String(preview.total), 'var(--ink-2)'],
+            ['Serão cat.', String(preview.willReclassify), 'var(--pos)'],
+            ['Sem mapa', String(preview.noMap), 'var(--warn)'],
+          ] as [string,string,string][]).map(([l,v,c]) => (
+            <div key={l} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
+              <p style={{ fontSize: 18, fontWeight: 800, color: c, fontVariantNumeric: 'tabular-nums' }}>{v}</p>
+              <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{l}</p>
+            </div>
+          ))}
+        </div>
+        {preview.willSkip > 0 && (
+          <p style={{ fontSize: 11.5, color: 'var(--faint)' }}>{preview.willSkip} com categoria manual — não serão alterados.</p>
+        )}
+        {Object.keys(preview.byMacro).length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Distribuição</p>
+            {Object.entries(preview.byMacro).map(([macroId, count]) => {
+              const macro = MACRO_CATEGORIES.find(m => m.id === macroId)
+              return (
+                <div key={macroId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-2)' }}>
+                  <span>{macro?.name ?? macroId}</span>
+                  <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+          <button className="btn btn-primary" disabled={running || preview.willReclassify === 0} onClick={onConfirm}>
+            {running ? 'Aplicando…' : `Aplicar ${preview.willReclassify} classificação${preview.willReclassify !== 1 ? 'ões' : ''}`}
+          </button>
+          <button className="btn btn-secondary" disabled={running} onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function DebugPayloadModal({ payload, onClose }: { payload: object; onClose: () => void }) {
   const json = JSON.stringify(payload, null, 2)
@@ -553,21 +696,30 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
               <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
                 {result.newTxs.slice(0, 25).map(tx => {
                   const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                  const isNeutral = tx.classificationType === 'neutral'
                   return (
-                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, gap: 8 }}>
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '7px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{tx.transactionDate}</span>
                           {macro && (
                             <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 3, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12` }}>
                               {macro.name}
                             </span>
                           )}
-                          {tx.needsReview && !macro && (
+                          {isNeutral && (
+                            <span style={{ fontSize: 9.5, color: 'var(--faint)', fontWeight: 600 }}>neutro</span>
+                          )}
+                          {tx.needsReview && !macro && !isNeutral && (
                             <span style={{ fontSize: 9.5, color: 'var(--warn)', fontWeight: 600 }}>revisar</span>
                           )}
                         </div>
+                        {(tx.pluggyCategory || tx.pluggyCategoryId) && (
+                          <p style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2, fontFamily: 'var(--mono)' }}>
+                            Pluggy: {[tx.pluggyCategory, tx.pluggyCategoryId].filter(Boolean).join(' / ')}
+                          </p>
+                        )}
                       </div>
                       <span style={{ fontWeight: 700, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
                         {tx.type === 'income' ? '+' : '−'}{localFmtBRL(tx.amount)}

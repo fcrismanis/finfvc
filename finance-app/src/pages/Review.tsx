@@ -337,10 +337,19 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                                 )}
                               </td>
                               <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                                {tx.pluggyCategory ? (
-                                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--well)', color: 'var(--ink-2)', fontWeight: 500, border: '1px solid var(--line)', whiteSpace: 'nowrap' }}>
-                                    {tx.pluggyCategory}
-                                  </span>
+                                {(tx.pluggyCategory || tx.pluggyCategoryId) ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    {tx.pluggyCategory && (
+                                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--well)', color: 'var(--ink-2)', fontWeight: 500, border: '1px solid var(--line)', whiteSpace: 'nowrap' }}>
+                                        {tx.pluggyCategory}
+                                      </span>
+                                    )}
+                                    {tx.pluggyCategoryId && (
+                                      <span style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--mono)' }}>
+                                        {tx.pluggyCategoryId}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
                               </td>
                               <td className="table-td table-th-right" style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)' }}>
