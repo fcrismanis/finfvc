@@ -1,3 +1,6 @@
+# Backend secrets — never commit .env with real keys
+server/.env
+
 # Logs
 logs
 *.log

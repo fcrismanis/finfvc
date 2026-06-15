@@ -43,16 +43,29 @@ export async function askAdvisor(
     return simulatedResponse(prompt, context)
   }
 
-  // For gpt/claude: call backend endpoint
-  const res = await fetch('/api/advisor', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, context, provider }),
-  })
-  if (!res.ok) {
-    throw new Error('Backend endpoint não disponível. Configure /api/advisor primeiro.')
+  // gpt / claude → secure backend; keys never in browser
+  let res: Response
+  try {
+    res = await fetch('/api/advisor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        question: prompt,
+        month: context.month,
+        context: { summary: context, transactions: [], budget: {} },
+      }),
+    })
+  } catch {
+    throw new Error('Não foi possível conectar ao backend. Inicie o servidor com: cd server && npm run dev')
   }
-  const data = await res.json() as { answer: string }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? `Erro ${res.status} no endpoint /api/advisor`)
+  }
+  const data = await res.json() as { answer: string; error?: string }
+  if (data.error) throw new Error(data.error)
   return { answer: data.answer, provider }
 }
 
