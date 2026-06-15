@@ -191,6 +191,92 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
   return { ...data.connection, savedAt: new Date().toISOString() }
 }
 
+// ── Pluggy category → macro category mapping (Bloco 3) ───────────────────────
+
+const PLUGGY_CAT_MAP: Record<string, string> = {
+  // Alimentação
+  'Alimentação e Bebidas': 'mac_alimentacao',
+  'Restaurantes e Bares': 'mac_alimentacao',
+  'Supermercados': 'mac_alimentacao',
+  'Padaria e Confeitaria': 'mac_alimentacao',
+  'Açougue e Peixaria': 'mac_alimentacao',
+  'Bebidas': 'mac_alimentacao',
+  // Casa
+  'Casa e Jardim': 'mac_casa',
+  'Contas e Utilidades': 'mac_casa',
+  'Aluguel': 'mac_casa',
+  'Água e Esgoto': 'mac_casa',
+  'Energia Elétrica': 'mac_casa',
+  'Gás': 'mac_casa',
+  'Internet e Telefone': 'mac_casa',
+  'Manutenção e Reparos': 'mac_casa',
+  // Saúde
+  'Saúde e Beleza': 'mac_saude',
+  'Farmácias': 'mac_saude',
+  'Médicos e Clínicas': 'mac_saude',
+  'Academia e Esportes': 'mac_saude',
+  'Plano de Saúde': 'mac_saude',
+  // Transporte
+  'Transporte': 'mac_transporte',
+  'Combustível': 'mac_transporte',
+  'Pedágios e Estacionamentos': 'mac_transporte',
+  'Transporte Público': 'mac_transporte',
+  'Aplicativos de Transporte': 'mac_transporte',
+  'Manutenção de Veículo': 'mac_transporte',
+  // Educação
+  'Educação': 'mac_educacao',
+  'Cursos e Treinamentos': 'mac_educacao',
+  'Material Escolar': 'mac_educacao',
+  // Assinaturas
+  'Assinaturas e Serviços': 'mac_assinaturas',
+  'Streaming e Entretenimento': 'mac_assinaturas',
+  'Aplicativos': 'mac_assinaturas',
+  // Compras
+  'Compras e Shopping': 'mac_compras',
+  'Vestuário e Calçados': 'mac_compras',
+  'Eletrônicos': 'mac_compras',
+  'Eletrodomésticos': 'mac_compras',
+  'Lojas Online': 'mac_compras',
+  // Serviços
+  'Serviços Profissionais': 'mac_servicos',
+  'Serviços Domésticos': 'mac_servicos',
+  // Seguros
+  'Seguros': 'mac_seguros',
+  'Seguro de Vida': 'mac_seguros',
+  'Seguro Veicular': 'mac_seguros',
+  // Lazer
+  'Lazer e Turismo': 'mac_lazer',
+  'Viagens': 'mac_lazer',
+  'Cinema e Teatro': 'mac_lazer',
+  'Bares e Baladas': 'mac_lazer',
+  'Esportes e Lazer': 'mac_lazer',
+  // Pets
+  'Animais e Pets': 'mac_pets',
+  'Veterinário': 'mac_pets',
+  // Impostos
+  'Impostos e Taxas': 'mac_impostos',
+  'IPTU': 'mac_impostos',
+  'IPVA': 'mac_impostos',
+  // Cuidados pessoais
+  'Cuidados Pessoais': 'mac_cuidados',
+  'Salão de Beleza': 'mac_cuidados',
+  'Bem Estar': 'mac_cuidados',
+  // Receitas
+  'Salário': 'mac_receita_op',
+  'Receita': 'mac_receita_ev',
+  'Outros Créditos': 'mac_receita_ev',
+  // Financeiro
+  'Transferências': 'mac_movfin',
+  'Investimentos': 'mac_movfin',
+  'Empréstimos': 'mac_divida',
+  'Financiamentos': 'mac_divida',
+}
+
+export function pluggyCategoryToMacro(pluggyCategory: string | null): string | null {
+  if (!pluggyCategory) return null
+  return PLUGGY_CAT_MAP[pluggyCategory] ?? null
+}
+
 // ── Map Pluggy raw transactions → app Transaction format ──────────────────────
 
 export interface MapResult {
@@ -202,10 +288,17 @@ export interface MapResult {
   needsReviewCount: number
 }
 
+export interface ConnInfo {
+  accountName: string
+  institutionName: string
+  institutionLogoUrl: string | null
+}
+
 export function mapPluggyToTransactions(
   pluggyTxs: PluggyRawTransaction[],
   accountId: string,
   existingTxs: import('../types').Transaction[],
+  connInfo?: ConnInfo,
 ): MapResult {
   const existingHashes = new Set(existingTxs.map(t => t.importHash).filter(Boolean))
   const existingIds = new Set(existingTxs.map(t => t.id))
@@ -245,11 +338,15 @@ export function mapPluggyToTransactions(
       importHash,
       importBatchId: batchId,
       lastImportedAt: now,
+      pluggyCategory: ptx.category ?? undefined,
+      pluggyAccountName: connInfo?.accountName,
+      pluggyInstitutionName: connInfo?.institutionName,
+      pluggyInstitutionLogoUrl: connInfo?.institutionLogoUrl ?? undefined,
       createdAt: now,
       updatedAt: now,
     }
 
-    // Auto-categorize
+    // Priority 1: history-based (high confidence wins; medium also applied)
     const suggestion = suggestCategoryWithHistory(baseTx, existingTxs)
     if (suggestion && suggestion.classificationType !== 'neutral') {
       return {
@@ -261,6 +358,13 @@ export function mapPluggyToTransactions(
         needsReview: suggestion.confidence !== 'high',
       }
     }
+
+    // Priority 2: Pluggy provider category mapping
+    const pluggyMacro = pluggyCategoryToMacro(ptx.category)
+    if (pluggyMacro) {
+      return { ...baseTx, macroCategoryId: pluggyMacro, needsReview: false }
+    }
+
     return baseTx
   })
 

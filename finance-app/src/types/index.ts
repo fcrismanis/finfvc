@@ -51,8 +51,13 @@ export interface Transaction {
   needsReview?: boolean
   manualCategoryOverride?: boolean
   manualSubCategoryOverride?: boolean
+  manualTextOverride?: boolean
   manualEditedAt?: string
   lastImportedAt?: string
+  pluggyCategory?: string
+  pluggyAccountName?: string
+  pluggyInstitutionName?: string
+  pluggyInstitutionLogoUrl?: string
   group?: string
   tags?: string[]
   notes?: string
