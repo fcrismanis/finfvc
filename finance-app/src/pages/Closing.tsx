@@ -46,6 +46,17 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
       .reduce((s, t) => s + t.amount, 0)
   , [transactions, month])
 
+  const monthTxs = useMemo(() =>
+    transactions.filter(t => t.competenceDate.startsWith(month) && t.status !== 'cancelled')
+  , [transactions, month])
+
+  const pluggyStats = useMemo(() => {
+    const pluggy = monthTxs.filter(t => t.source === 'pluggy')
+    const uncategorized = monthTxs.filter(t => !t.macroCategoryId && t.type === 'expense')
+    const pending = monthTxs.filter(t => t.status === 'pending')
+    return { count: pluggy.length, uncategorized: uncategorized.length, pending: pending.length }
+  }, [monthTxs])
+
   function toggleChecklist(id: string) {
     if (closing.isClosed) return
     const updated = { ...closing, checklist: { ...closing.checklist, [id]: !closing.checklist[id] } }
@@ -249,6 +260,30 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
             </div>
           </div>
         </div>
+
+        {/* ── Pluggy / import stats ── */}
+        {(pluggyStats.count > 0 || pluggyStats.uncategorized > 0) && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 12 }}>Importações e revisão</h3>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {[
+                { label: 'Importados via Pluggy', value: pluggyStats.count, color: pluggyStats.count > 0 ? 'var(--pos)' : 'var(--faint)' },
+                { label: 'Sem categoria', value: pluggyStats.uncategorized, color: pluggyStats.uncategorized > 0 ? 'var(--warn)' : 'var(--pos)' },
+                { label: 'Pendentes', value: pluggyStats.pending, color: pluggyStats.pending > 0 ? 'var(--warn)' : 'var(--pos)' },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</span>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: s.color, fontVariantNumeric: 'tabular-nums' }}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+            {pluggyStats.uncategorized > 0 && (
+              <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 10 }}>
+                {pluggyStats.uncategorized} lançamento{pluggyStats.uncategorized !== 1 ? 's' : ''} sem categoria — classifique antes de fechar o mês.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── Top deviations ── */}
         {topDeviations.length > 0 && (
