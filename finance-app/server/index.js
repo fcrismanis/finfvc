@@ -173,6 +173,12 @@ async function handleClaude(question, month, ctx) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// ── Pluggy: status (lets frontend know if Pluggy is configured) ───────────────
+app.get('/api/pluggy/status', (_req, res) => {
+  const configured = !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET)
+  res.json({ configured, provider: 'pluggy' })
+})
+
 // ── Pluggy: secure connect_token endpoint ─────────────────────────────────────
 app.post('/api/pluggy/token', async (_req, res) => {
   const clientId     = process.env.PLUGGY_CLIENT_ID

@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ImportDropzone } from '../components/import/ImportDropzone'
 import { ImportPreview } from '../components/import/ImportPreview'
 import { ImportSummary } from '../components/import/ImportSummary'
 import { parseAndPreview, confirmImport } from '../services/import.service'
 import { useData } from '../context/DataContext'
+import { getConnectToken } from '../services/pluggy.service'
 import type { ParsedImportItem, ImportSummaryData } from '../importers/types'
 
 type Stage = 'idle' | 'parsing' | 'preview' | 'complete'
 type ImportTab = 'file' | 'pluggy'
+type PluggyBackendStatus = 'checking' | 'configured' | 'not_configured'
+type PluggyConnectStatus = 'idle' | 'loading' | 'error'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -24,6 +27,62 @@ export function Import({ onNavigate }: Props) {
   const [items, setItems] = useState<ParsedImportItem[]>([])
   const [summary, setSummary] = useState<ImportSummaryData | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Pluggy state ───────────────────────────────────────────────────────────
+  const [pluggyStatus, setPluggyStatus] = useState<PluggyBackendStatus>('checking')
+  const [connectStatus, setConnectStatus] = useState<PluggyConnectStatus>('idle')
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const scriptInjected = useRef(false)
+
+  // Probe backend when Pluggy tab is first shown
+  useEffect(() => {
+    if (tab !== 'pluggy' || pluggyStatus !== 'checking') return
+    fetch('/api/pluggy/status')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: { configured: boolean }) => setPluggyStatus(d.configured ? 'configured' : 'not_configured'))
+      .catch(() => setPluggyStatus('not_configured'))
+  }, [tab, pluggyStatus])
+
+  async function handlePluggyConnect() {
+    setConnectStatus('loading')
+    setConnectError(null)
+    try {
+      const token = await getConnectToken('local-user')
+      openPluggyWidget(token)
+      setConnectStatus('idle')
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : 'Erro ao obter token Pluggy')
+      setConnectStatus('error')
+    }
+  }
+
+  function openPluggyWidget(connectToken: string) {
+    // Inject Pluggy Connect CDN script once, then open widget
+    if (!scriptInjected.current) {
+      const script = document.createElement('script')
+      script.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
+      script.onload = () => { scriptInjected.current = true; launchWidget(connectToken) }
+      document.head.appendChild(script)
+    } else {
+      launchWidget(connectToken)
+    }
+  }
+
+  function launchWidget(connectToken: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const PluggyConnect = (window as any).PluggyConnect
+    if (!PluggyConnect) {
+      setConnectError('Widget Pluggy não carregou. Verifique a conexão.')
+      setConnectStatus('error')
+      return
+    }
+    new PluggyConnect({
+      connectToken,
+      onSuccess: () => { setConnectStatus('idle') },
+      onError:   () => { setConnectError('Conexão encerrada com erro.'); setConnectStatus('error') },
+      onClose:   () => { setConnectStatus('idle') },
+    }).init()
+  }
 
   async function handleFile(file: File) {
     setError(null)
@@ -103,23 +162,55 @@ export function Import({ onNavigate }: Props) {
         {tab === 'pluggy' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* Status banner */}
-            <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Backend não configurado</p>
-                <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
-                  Configure o endpoint <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>/api/pluggy/token</code> para ativar a conexão. Ver <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>docs/pluggy-integration.md</code>.
-                </p>
+            {/* Status banner — dynamic */}
+            {pluggyStatus === 'checking' && (
+              <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--faint)', flexShrink: 0 }} />
+                <p style={{ fontSize: 13, color: 'var(--faint)' }}>Verificando configuração do backend…</p>
               </div>
-            </div>
+            )}
 
-            {/* Connection list (mock empty state) */}
+            {pluggyStatus === 'not_configured' && (
+              <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Backend não configurado</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+                    Adicione <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>PLUGGY_CLIENT_ID</code> e <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>PLUGGY_CLIENT_SECRET</code> no <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>server/.env</code>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {pluggyStatus === 'configured' && (
+              <div style={{ padding: '14px 18px', borderRadius: 11, background: 'var(--pos-soft)', border: '1px solid rgba(30,111,73,.28)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pos)', flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Backend configurado</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+                    Pluggy pronto — clique em "+ Conectar banco" para autenticar.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {connectError && (
+              <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--crit-soft)', border: '1px solid var(--crit)', fontSize: 12.5, color: 'var(--crit)' }}>
+                {connectError}
+              </div>
+            )}
+
+            {/* Connection list */}
             <div className="card" style={{ padding: '18px 22px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Conexões ativas</h3>
-                <button className="btn btn-secondary btn-sm" disabled style={{ opacity: 0.4 }}>
-                  + Conectar banco
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={pluggyStatus !== 'configured' || connectStatus === 'loading'}
+                  onClick={handlePluggyConnect}
+                  style={{ opacity: pluggyStatus !== 'configured' ? 0.4 : 1 }}
+                >
+                  {connectStatus === 'loading' ? 'Obtendo token…' : '+ Conectar banco'}
                 </button>
               </div>
               <div style={{ textAlign: 'center', padding: '28px 0', color: 'var(--faint)' }}>
