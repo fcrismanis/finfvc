@@ -4,6 +4,8 @@ import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
+import { getReviewItems } from '../utils/reviewItems'
+import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
 import type { NavFilter } from '../App'
 
@@ -47,10 +49,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [page, setPage] = useState(0)
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
+  const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
 
-  // When navFilter arrives (e.g. funnel drilldown), reset page
+  const isReviewMode = navFilter?.smartFilter === 'review'
+
+  // When navFilter arrives, reset page and review pill
   useEffect(() => {
     setPage(0)
+    setReviewPill('all')
   }, [navFilter])
 
   const allMonths = useMemo(() => {
@@ -58,7 +64,31 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort().reverse()
   }, [transactions])
 
+  const reviewItems = useMemo(
+    () => isReviewMode ? getReviewItems(transactions) : [],
+    [transactions, isReviewMode]
+  )
+
+  const reviewCounts = useMemo(() => {
+    if (!isReviewMode) return null
+    return {
+      all: reviewItems.length,
+      needs_review: reviewItems.filter(i => i.tags.includes('needs_review')).length,
+      no_category: reviewItems.filter(i => i.tags.includes('no_category')).length,
+      pending: reviewItems.filter(i => i.tags.includes('pending')).length,
+      transfer: reviewItems.filter(i => i.tags.includes('transfer')).length,
+      high_value: reviewItems.filter(i => i.tags.includes('high_value')).length,
+    }
+  }, [reviewItems, isReviewMode])
+
   const filtered = useMemo(() => {
+    if (isReviewMode) {
+      const pool = reviewPill === 'all'
+        ? reviewItems
+        : reviewItems.filter(i => i.tags.includes(reviewPill as ReviewReason))
+      return pool.map(i => i.tx)
+    }
+
     let result = transactions
     if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
     if (filterType) result = result.filter(t => t.type === filterType)
@@ -81,7 +111,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, filterMonth, filterType, filterCls, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterCls, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
 
   const summary = useMemo(() => ({
     total: filtered.length,
@@ -177,6 +207,37 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
+        {/* ── Review mode pills ── */}
+        {isReviewMode && reviewCounts && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {([
+              { key: 'all',          label: 'Todos',           count: reviewCounts.all },
+              { key: 'needs_review', label: 'Precisa revisar', count: reviewCounts.needs_review },
+              { key: 'no_category',  label: 'Sem categoria',   count: reviewCounts.no_category },
+              { key: 'pending',      label: 'Pendentes',       count: reviewCounts.pending },
+              { key: 'transfer',     label: 'Transferências',  count: reviewCounts.transfer },
+              { key: 'high_value',   label: 'Alto valor',      count: reviewCounts.high_value },
+            ] as { key: ReviewReason | 'all'; label: string; count: number }[]).map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setReviewPill(f.key); setPage(0) }}
+                className={`filter-pill${reviewPill === f.key ? ' active' : ''}`}
+              >
+                {f.label}
+                {f.count > 0 && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                    background: reviewPill === f.key ? 'rgba(255,255,255,.22)' : 'var(--well)',
+                    color: reviewPill === f.key ? '#fff' : 'var(--faint)',
+                  }}>
+                    {f.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* ── KPI cards ── */}
         <div className="stats-grid-4">
           <TxStatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="var(--pos)" />
@@ -190,8 +251,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           />
         </div>
 
-        {/* ── Filters ── */}
-        <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        {/* ── Filters (hidden in review mode) ── */}
+        {!isReviewMode && <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
             flex: '1 1 180px', border: '1px solid var(--line)', borderRadius: 8,
@@ -237,7 +298,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               Limpar
             </button>
           )}
-        </div>
+        </div>}
 
         {/* ── Ledger table ── */}
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -289,6 +350,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <tbody>
                 {pageItems.map(tx => {
                   const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                  const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                   return (
                     <tr
                       key={tx.id}
@@ -305,6 +367,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         {tx.isAdjustment && (
                           <p style={{ fontSize: 10, color: 'var(--ink-2)', marginTop: 2 }}>ajustado</p>
                         )}
+                        {reviewItem && reviewItem.reasons.map((r, i) => (
+                          <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
+                        ))}
                       </td>
                       <td
                         className="table-td table-th-right"
