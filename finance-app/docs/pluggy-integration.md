@@ -107,20 +107,22 @@ Paginação interna: `pageSize=500`, incrementa `page` até `results.length < pa
 5. Frontend abre widget `react-pluggy-connect` com o token
 6. Usuário autentica no banco
 7. `onSuccess({ item })` no frontend: chama `POST /api/pluggy/connections` com `item.id`
-8. Conexão salva em localStorage via `saveLocalConnection()`
+8. **Todas as contas retornadas são salvas automaticamente** via `saveLocalConnection(conn)`
 
 ---
 
 ## Fluxo de sincronização (Fase 2 — atual)
 
 1. Usuário abre PluggyPage → clica "Sincronizar" na conta desejada
-2. Modal abre direto em estado `fetching` (período padrão: mês corrente)
-3. Frontend chama `POST /api/pluggy/transactions` com `{ accountId, from, to }`
-4. Transações passam por `mapPluggyToTransactions(txs, accountId, existingTxs, connInfo)` — deduplicação + categorização automática
-5. Modal exibe prévia: Novas / Duplicadas / Auto-cat. + lista de transações com badges de categoria
-6. Opção "Mudar período" disponível na prévia (sem reabrir o modal)
-7. Usuário confirma → `appendTransactions(newTxs)` persiste no DataContext
-8. `updateConnectionSyncMeta(itemId, accountId, count)` atualiza `lastSyncAt` + `lastSyncCount` em localStorage
+2. Modal abre em estado `period_select` — usuário escolhe período (mês atual, 30d, 90d, ou personalizado)
+   - Período personalizado: padrão `2024-01-01` até hoje
+3. Usuário clica "Buscar transações" → modal entra em estado `fetching`
+4. Frontend chama `POST /api/pluggy/transactions` com `{ accountId, from, to }`
+5. Transações passam por `mapPluggyToTransactions(txs, accountId, existingTxs, connInfo)` — deduplicação + categorização automática
+6. Modal exibe prévia: Novas / Duplicadas / Auto-cat. + lista de transações com badges de categoria
+7. Opção "← Mudar período" na prévia retorna ao estado `period_select`
+8. Usuário confirma → `appendTransactions(newTxs)` persiste no DataContext
+9. `updateConnectionSyncMeta(itemId, accountId, count)` atualiza `lastSyncAt` + `lastSyncCount` em localStorage
 
 ---
 
@@ -202,14 +204,17 @@ Deduplicação por hash garante que reimports nunca sobrescrevam transações ex
 | 3 | Ledger agrupado por dia com header de data | `Transactions.tsx` |
 | 4 | Edição inline de categoria (clique na célula) | `Transactions.tsx` |
 | 5 | Funil de Clareza contabiliza transações Pluggy | `pluggy.service.ts` (categorização automática) |
-| 6 | Sync inicia direto ao clicar na conta (sem etapas extras) | `PluggyPage.tsx` |
-| 7 | IA local de alta confiança + exportação para clipboard | `Review.tsx`, `categorize.service.ts` |
-| 8 | Badge com nome da conta / logo da instituição no ledger | `Transactions.tsx`, `pluggy.service.ts` |
-| 9 | Paginação configurável (100/250/500/1000) via Configurações | `Settings.tsx`, `Transactions.tsx` |
-| 10 | Mapeamento de categorias Pluggy para macro-categorias FIN | `pluggy.service.ts` (`PLUGGY_CAT_MAP`) |
-| 11 | Subcategoria exibida em destaque; "sem subcat." quando ausente | `Transactions.tsx` |
-| 12 | Edição inline de descrição (duplo clique); `originalDescription` preservada | `Transactions.tsx`, `transactions.service.ts` |
-| 13 | Tags por lançamento: chips, filtro, add/remove no modal | `Transactions.tsx`, `types/index.ts` |
+| 6 | Auto-adicionar todas as contas após conexão (sem seleção manual) | `PluggyPage.tsx` |
+| 7 | Seleção de período antes de buscar transações | `PluggyPage.tsx` (fase `period_select`) |
+| 8 | Logo e nome da instituição na lista de conexões | `PluggyPage.tsx` |
+| 9 | Logo e nome da instituição em Contas e Cartões | `AccountsPage.tsx`, `CardsPage.tsx` |
+| 10 | IA local de alta confiança + exportação para clipboard | `Review.tsx`, `categorize.service.ts` |
+| 11 | Badge com nome da conta / logo da instituição no ledger | `Transactions.tsx`, `pluggy.service.ts` |
+| 12 | Paginação configurável (100/250/500/1000) via Configurações | `Settings.tsx`, `Transactions.tsx` |
+| 13 | Mapeamento de categorias Pluggy para macro-categorias FIN | `pluggy.service.ts` (`PLUGGY_CAT_MAP`) |
+| 14 | Subcategoria exibida em destaque; "sem subcat." quando ausente | `Transactions.tsx` |
+| 15 | Edição inline de descrição (duplo clique); `originalDescription` preservada | `Transactions.tsx`, `transactions.service.ts` |
+| 16 | Tags por lançamento: chips, filtro, add/remove no modal | `Transactions.tsx`, `types/index.ts` |
 
 ---
 
