@@ -11,6 +11,8 @@ export interface IDataProvider {
   load(): Promise<LoadResult>
   /** Persist a transaction patch. Called after UI edit. */
   updateTransaction(id: string, patch: Partial<Transaction>): Promise<void>
+  /** Persist many transaction patches at once (bulk actions, rules, tags). */
+  updateTransactions(items: Array<{ id: string; patch: Partial<Transaction> }>, opts?: { markManual?: boolean }): Promise<void>
   /** Persist a budget record (upsert by id). */
   saveBudget(budget: Budget): Promise<void>
   /** Append new transactions (import flow). Deduplication is provider's responsibility. */

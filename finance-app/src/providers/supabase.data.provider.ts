@@ -120,6 +120,14 @@ export class SupabaseDataProvider implements IDataProvider {
     if (error) throw new Error(`[SupabaseDataProvider] updateTransaction: ${error.message}`)
   }
 
+  async updateTransactions(items: Array<{ id: string; patch: Partial<Transaction> }>, _opts?: { markManual?: boolean }): Promise<void> {
+    if (!this.familyId) return
+    // Sequential upserts keep the snake_case mapping in one place (updateTransaction).
+    for (const { id, patch } of items) {
+      await this.updateTransaction(id, patch)
+    }
+  }
+
   async saveBudget(budget: Budget): Promise<void> {
     if (!this.familyId) return
 

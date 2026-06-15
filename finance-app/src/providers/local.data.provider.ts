@@ -1,6 +1,6 @@
 import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import type { IDataProvider, LoadResult } from './data.provider'
-import { getTransactionsOrMock, updateTransaction as svcUpdateTx } from '../services/transactions.service'
+import { getTransactionsOrMock, updateTransaction as svcUpdateTx, applyTransactionPatches } from '../services/transactions.service'
 import { getBudgetsOrMock, saveBudget as svcSaveBudget } from '../services/budget.service'
 import { getAllClosings, saveClosing } from '../services/closing.service'
 import { loadSubCategories, upsertSubCategory, deleteSubCategory as svcDeleteSub } from '../services/subcategory.service'
@@ -15,6 +15,10 @@ export class LocalDataProvider implements IDataProvider {
 
   async updateTransaction(id: string, patch: Partial<Transaction>): Promise<void> {
     svcUpdateTx(id, patch)
+  }
+
+  async updateTransactions(items: Array<{ id: string; patch: Partial<Transaction> }>, opts?: { markManual?: boolean }): Promise<void> {
+    applyTransactionPatches(items, opts)
   }
 
   async saveBudget(budget: Budget): Promise<void> {

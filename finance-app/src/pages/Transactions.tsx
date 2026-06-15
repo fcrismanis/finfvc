@@ -6,6 +6,10 @@ import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
+import {
+  highValueThreshold, findDuplicateCandidateIds, matchesQuickFilter,
+  type QuickFilterKey,
+} from '../utils/dataQuality'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
@@ -74,10 +78,19 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     onNavigate(route)
   }
 
+  const [quickFilter, setQuickFilter] = useState<QuickFilterKey | ''>('')
+
   useEffect(() => {
     setPage(0)
     setReviewPill('all')
+    if (navFilter?.monthOverride) setFilterMonth(navFilter.monthOverride)
+    if (navFilter?.quickFilter) setQuickFilter(navFilter.quickFilter as QuickFilterKey)
   }, [navFilter])
+
+  const dqCtx = useMemo(() => ({
+    threshold: highValueThreshold(transactions),
+    duplicateIds: findDuplicateCandidateIds(transactions),
+  }), [transactions])
 
   useEffect(() => {
     if (inlineCatEdit && inlineSelectRef.current) inlineSelectRef.current.focus()
@@ -143,6 +156,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       result = result.filter(t => t.macroCategoryId != null && ids.has(t.macroCategoryId))
     }
     if (filterTag) result = result.filter(t => t.tags?.includes(filterTag))
+    if (quickFilter) result = result.filter(t => matchesQuickFilter(t, quickFilter, dqCtx))
     if (search.trim()) {
       const q = search.trim().toUpperCase()
       result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
@@ -155,7 +169,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, navFilter, search, sortField, sortDir])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir])
 
   const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
   const summary = useMemo(() => ({
@@ -247,7 +261,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort()
   }, [transactions, pluggyAccountMap])
 
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution)
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution || quickFilter)
 
   return (
     <main className="page-shell">
@@ -303,7 +317,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <span style={{ color: 'var(--faint)', fontWeight: 400 }}>Filtrado por:</span>
             {navFilter.filterLabel}
             <button
-              onClick={onClearFilter}
+              onClick={() => { setQuickFilter(''); onClearFilter?.() }}
               aria-label="Limpar filtro"
               style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--faint)' }}
             >
@@ -409,7 +423,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
             {hasFilters && (
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setPage(0) }}
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
                 style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
               >
                 Limpar

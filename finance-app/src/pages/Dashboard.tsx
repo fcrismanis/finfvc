@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useDashboard } from '../hooks/useDashboard'
 import { ClarityFunnel } from '../components/dashboard/ClarityFunnel'
+import { DataQualityCard } from '../components/dashboard/DataQualityCard'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import type { BudgetComparison, AlertItem, TopTransaction } from '../types'
@@ -133,6 +134,9 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
           <AlertsCard alerts={alerts} isPartial={isCurrent} daysLeft={daysLeft} />
           <TopCard data={topExpenses} onNavigate={onNavigate} />
         </div>
+
+        {/* ── Qualidade dos dados ── */}
+        <DataQualityCard selectedMonth={selectedMonth} onNavigate={onNavigate} />
 
       </div>
     </main>

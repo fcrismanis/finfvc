@@ -5,6 +5,8 @@ export interface NavFilter {
   categoryIds?: string[]
   filterLabel?: string
   smartFilter?: string
+  quickFilter?: string
+  monthOverride?: string
   sourcePage?: 'dashboard' | 'budget' | 'closing' | 'review'
   sourceLabel?: string
 }

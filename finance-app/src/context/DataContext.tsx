@@ -13,6 +13,7 @@ interface DataContextValue {
   error: string | null
   reload: () => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
+  updateTransactions: (items: Array<{ id: string; patch: Partial<Transaction> }>, opts?: { markManual?: boolean }) => Promise<void>
   saveBudget: (budget: Budget) => void
   saveClosing: (closing: MonthClosing) => void
   appendTransactions: (txns: Transaction[]) => Promise<void>
@@ -66,6 +67,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     void provider.updateTransaction(id, patch).then(() => loadData())
   }, [provider, loadData])
 
+  const updateTransactions = useCallback(async (
+    items: Array<{ id: string; patch: Partial<Transaction> }>,
+    opts?: { markManual?: boolean },
+  ) => {
+    await provider.updateTransactions(items, opts)
+    await loadData(false)  // single silent reload after the whole batch
+  }, [provider, loadData])
+
   const saveBudget = useCallback((budget: Budget) => {
     void provider.saveBudget(budget).then(() => loadData(false))
   }, [provider, loadData])
@@ -94,7 +103,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider value={{
       transactions, budgets, closings, subCategories, isDemo, loading, error,
-      reload, updateTransaction, saveBudget, saveClosing, appendTransactions,
+      reload, updateTransaction, updateTransactions, saveBudget, saveClosing, appendTransactions,
       saveSubCategory, deleteSubCategory,
     }}>
       {children}
