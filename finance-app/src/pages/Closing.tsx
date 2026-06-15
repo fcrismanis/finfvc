@@ -1,16 +1,19 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight, CreditCard, ChevronDown } from 'lucide-react'
 import { useData } from '../context/DataContext'
+import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL, formatPct } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMonthSummary, getBudgetComparison, getRedemptionTotal } from '../engine/calculate'
 import { emptyClosing, CHECKLIST_ITEMS } from '../services/closing.service'
+import type { NavFilter } from '../App'
 
 interface Props {
   selectedMonth: string
+  onNavigate?: (route: string, filter?: NavFilter) => void
 }
 
-export function Closing({ selectedMonth }: Props) {
+export function Closing({ selectedMonth, onNavigate }: Props) {
   const { transactions, budgets, closings, saveClosing } = useData()
   const [month, setMonth] = useState(selectedMonth)
   const [closing, setClosing] = useState(() => closings.find(c => c.month === month) ?? emptyClosing(month))
@@ -74,6 +77,42 @@ export function Closing({ selectedMonth }: Props) {
   const allDone = checklistDone === checklistTotal
 
   const topDeviations = comparison.filter(c => Math.abs(c.deviationPct) > 5).slice(0, 5)
+
+  // Credit card breakdown: paymentMethod === 'card' OR creditCardId is set
+  // Exclude internal transfers and payments that look like bill settlements (fatura/fat.)
+  const creditCardTxs = useMemo(() => {
+    const monthTxs = transactions.filter(t => t.competenceDate.startsWith(month))
+    return monthTxs.filter(t => {
+      if (t.type !== 'expense') return false
+      if (t.isInternalTransfer) return false
+      if (t.classificationType === 'transfer') return false
+      const isCard = t.paymentMethod === 'card' || !!t.creditCardId
+      return isCard
+    })
+  }, [transactions, month])
+
+  const creditCardByMacro = useMemo(() => {
+    const map = new Map<string, { name: string; color: string; total: number; macroId: string }>()
+    for (const tx of creditCardTxs) {
+      const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+      const key = macro?.id ?? 'sem_categoria'
+      const existing = map.get(key)
+      if (existing) {
+        existing.total += tx.amount
+      } else {
+        map.set(key, {
+          macroId: key,
+          name: macro?.name ?? 'Sem categoria',
+          color: macro?.color ?? 'var(--faint)',
+          total: tx.amount,
+        })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  }, [creditCardTxs])
+
+  const creditCardTotal = creditCardTxs.reduce((s, t) => s + t.amount, 0)
+  const [ccExpanded, setCcExpanded] = useState(false)
 
   return (
     <main className="page-shell">
@@ -242,6 +281,81 @@ export function Closing({ selectedMonth }: Props) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ── Credit card breakdown ── */}
+        {creditCardTxs.length > 0 && (
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <button
+              onClick={() => setCcExpanded(e => !e)}
+              style={{
+                width: '100%', padding: '14px 18px 10px',
+                borderBottom: ccExpanded ? '1px solid var(--line)' : 'none',
+                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CreditCard size={15} color="var(--ink-2)" />
+                <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)' }}>Cartões de crédito no mês</h3>
+                <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400 }}>
+                  ({creditCardTxs.length} compras · visão preliminar)
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="num" style={{ fontSize: 14, fontWeight: 800, color: 'var(--crit)' }}>
+                  {formatBRL(creditCardTotal)}
+                </span>
+                <ChevronDown size={14} color="var(--faint)" style={{ transform: ccExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+              </div>
+            </button>
+
+            {ccExpanded && (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th className="table-th">Categoria</th>
+                    <th className="table-th table-th-right">Total</th>
+                    <th className="table-th table-th-right">%</th>
+                    {onNavigate && <th style={{ width: 64 }} />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditCardByMacro.map(row => (
+                    <tr key={row.macroId} className="table-row">
+                      <td className="table-td">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: row.color, flexShrink: 0 }} />
+                          <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{row.name}</span>
+                        </div>
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--crit)' }}>
+                        {formatBRL(row.total)}
+                      </td>
+                      <td className="table-td table-th-right" style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11, color: 'var(--faint)' }}>
+                        {creditCardTotal > 0 ? ((row.total / creditCardTotal) * 100).toFixed(0) : 0}%
+                      </td>
+                      {onNavigate && (
+                        <td className="table-td">
+                          <button
+                            onClick={() => onNavigate('/lancamentos', {
+                              macroCategoryIds: row.macroId !== 'sem_categoria' ? [row.macroId] : [],
+                              filterLabel: `Fechamento › Cartão › ${row.name}`,
+                              sourcePage: 'closing',
+                              sourceLabel: 'Fechamento',
+                            })}
+                            style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                          >
+                            Ver
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
