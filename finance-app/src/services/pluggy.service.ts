@@ -71,16 +71,16 @@ export interface PluggyDeduplicationKey {
 }
 
 export async function getConnectToken(_userId: string): Promise<string> {
-  // Call your backend endpoint: POST /api/pluggy/token
-  // Response: { connectToken: string }
   const res = await fetch('/api/pluggy/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId: _userId }),
   })
-  if (!res.ok) throw new Error('Failed to get Pluggy connect token from backend')
-  const data = await res.json() as { connectToken: string }
-  return data.connectToken
+  const data = await res.json() as { ok: boolean; token?: string; error?: string }
+  if (!res.ok || !data.ok || !data.token) {
+    throw new Error(data.error ?? 'Token Pluggy ausente na resposta do servidor')
+  }
+  return data.token
 }
 
 export async function listConnections(_userId: string): Promise<PluggyConnection[]> {

@@ -173,6 +173,58 @@ async function handleClaude(question, month, ctx) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// ── Pluggy: secure connect_token endpoint ─────────────────────────────────────
+app.post('/api/pluggy/token', async (_req, res) => {
+  const clientId     = process.env.PLUGGY_CLIENT_ID
+  const clientSecret = process.env.PLUGGY_CLIENT_SECRET
+  const apiBase      = process.env.PLUGGY_API_BASE_URL ?? 'https://api.pluggy.ai'
+
+  if (!clientId || !clientSecret) {
+    return res.status(503).json({ ok: false, error: 'Pluggy não configurado no servidor' })
+  }
+
+  try {
+    // Step 1: authenticate → apiKey
+    const authRes = await fetch(`${apiBase}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, clientSecret }),
+    })
+    if (!authRes.ok) {
+      const text = await authRes.text().catch(() => '')
+      console.error('[pluggy] auth failed:', authRes.status, text.slice(0, 120))
+      return res.status(502).json({ ok: false, error: `Autenticação Pluggy falhou (${authRes.status})` })
+    }
+    const { apiKey } = await authRes.json()
+
+    // Step 2: connect_token
+    const tokenRes = await fetch(`${apiBase}/connect_token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey,
+      },
+      body: JSON.stringify({}),
+    })
+    if (!tokenRes.ok) {
+      const text = await tokenRes.text().catch(() => '')
+      console.error('[pluggy] connect_token failed:', tokenRes.status, text.slice(0, 120))
+      return res.status(502).json({ ok: false, error: `Connect token Pluggy falhou (${tokenRes.status})` })
+    }
+    const tokenData = await tokenRes.json()
+
+    return res.json({
+      ok: true,
+      token: tokenData.accessToken,
+      expiresAt: tokenData.expiresAt ?? null,
+      provider: 'pluggy',
+    })
+  } catch (err) {
+    console.error('[pluggy] error:', err.message)
+    return res.status(500).json({ ok: false, error: 'Erro interno ao obter token Pluggy.' })
+  }
+})
+
 const VALID_PROVIDERS = ['mock', 'gpt', 'claude']
 
 // Provider availability — lets the UI disable unconfigured providers
