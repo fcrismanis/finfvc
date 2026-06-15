@@ -30,6 +30,7 @@ export interface Transaction {
   accountId: string
   creditCardId?: string
   categoryId?: string
+  subCategoryId?: string
   macroCategoryId?: string
   paymentMethod: PaymentMethod
   installmentCurrent?: number
@@ -176,3 +177,14 @@ export interface MonthClosing {
 
 export type SortField = 'competenceDate' | 'amount' | 'category' | 'status'
 export type SortDir = 'asc' | 'desc'
+
+export type SubCategoryEssentiality = 'essential' | 'non_essential' | 'inherit'
+
+export interface SubCategory {
+  id: string
+  name: string
+  macroCategoryId: string
+  essentiality: SubCategoryEssentiality
+  active: boolean
+  createdAt: string
+}
