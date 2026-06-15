@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
-import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles, CheckSquare, Square } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
+import { lookupPluggyCategory } from '../services/pluggy.service'
+import { isManualTx } from '../utils/dataQuality'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
@@ -50,11 +52,14 @@ function deriveSuggestionSource(tx: Transaction): string | null {
 }
 
 export function Review({ onNavigate: _onNavigate }: Props) {
-  const { transactions, updateTransaction } = useData()
+  const { transactions, updateTransaction, updateTransactions, subCategories } = useData()
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [applyingAll, setApplyingAll] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => { setSelected(new Set()) }, [activePanel])
 
   const reviewItems = useMemo(() => getReviewItems(transactions), [transactions])
 
@@ -95,18 +100,138 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     })
   }
 
-  function applyAllSuggestions() {
+  /**
+   * Apply every high-confidence suggestion in one batch:
+   *  - history/text suggestions flagged 'high'
+   *  - Pluggy categoryId map (confidence 'high')
+   * Manual overrides are protected (skipped). Auto application → markManual:false.
+   */
+  async function applyAllSuggestions() {
     setApplyingAll(true)
-    for (const [txId, s] of suggestions) {
-      if (s.confidence === 'high') {
-        updateTransaction(txId, {
-          macroCategoryId:    s.macroCategoryId,
-          categoryId:         s.categoryId,
+    const items: Array<{ id: string; patch: Partial<Transaction> }> = []
+    for (const tx of pluggyItems) {
+      if (isManualTx(tx)) continue
+      if (tx.macroCategoryId && !tx.needsReview) continue
+
+      const s = suggestions.get(tx.id)
+      if (s && s.confidence === 'high') {
+        items.push({ id: tx.id, patch: {
+          macroCategoryId: s.macroCategoryId,
+          categoryId: s.categoryId || undefined,
+          subCategoryId: s.subCategoryId,
           classificationType: s.classificationType,
-        })
+          needsReview: false,
+        } })
+        continue
+      }
+      const pluggy = lookupPluggyCategory(tx.pluggyCategoryId ?? null, tx.pluggyCategory ?? null)
+      if (pluggy && pluggy.confidence === 'high') {
+        items.push({ id: tx.id, patch: {
+          macroCategoryId: pluggy.macroCategoryId,
+          subCategoryId: pluggy.subCategoryId,
+          subCategoryNameSuggested: pluggy.subCategoryNameSuggested,
+          classificationType: pluggy.classificationType,
+          includeInOperationalResult: pluggy.includeInOperationalResult,
+          includeInBudget: pluggy.includeInBudget,
+          includeInCashflow: pluggy.includeInCashflow,
+          isInternalTransfer: pluggy.isInternalTransfer ?? false,
+          pluggyCategoryMapped: true,
+          categoryConfidence: 'high',
+          categorySuggestionSource: 'pluggy_id',
+          needsReview: false,
+        } })
       }
     }
+    if (items.length) await updateTransactions(items, { markManual: false })
     setApplyingAll(false)
+  }
+
+  // ── Bulk selection + actions ────────────────────────────────────────────────
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll(ids: string[]) {
+    setSelected(prev => {
+      const allSelected = ids.length > 0 && ids.every(id => prev.has(id))
+      if (allSelected) {
+        const next = new Set(prev)
+        ids.forEach(id => next.delete(id))
+        return next
+      }
+      return new Set([...prev, ...ids])
+    })
+  }
+
+  function clearSelection() { setSelected(new Set()) }
+
+  /** Build + apply a patch over the current selection, then clear it. */
+  async function applyToSelected(
+    build: (tx: Transaction) => Partial<Transaction> | null,
+    opts?: { markManual?: boolean },
+  ) {
+    const items: Array<{ id: string; patch: Partial<Transaction> }> = []
+    for (const id of selected) {
+      const tx = transactions.find(t => t.id === id)
+      if (!tx) continue
+      const patch = build(tx)
+      if (patch) items.push({ id, patch })
+    }
+    if (items.length) await updateTransactions(items, opts)
+    clearSelection()
+  }
+
+  function bulkApplyCategory(macroId: string) {
+    if (!macroId) return
+    void applyToSelected(() => ({ macroCategoryId: macroId, subCategoryId: undefined, needsReview: false }), { markManual: true })
+  }
+
+  function bulkApplySubcategory(subId: string) {
+    if (!subId) return
+    const sub = subCategories.find(s => s.id === subId)
+    void applyToSelected(() => ({
+      subCategoryId: subId,
+      ...(sub ? { macroCategoryId: sub.macroCategoryId } : {}),
+      needsReview: false,
+    }), { markManual: true })
+  }
+
+  function bulkAddTag(tag: string) {
+    const t = tag.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!t) return
+    void applyToSelected(tx => {
+      const tags = [...(tx.tags ?? [])]
+      if (tags.includes(t)) return null
+      tags.push(t)
+      return { tags }
+    })
+  }
+
+  function bulkRemoveTag(tag: string) {
+    const t = tag.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!t) return
+    void applyToSelected(tx => (tx.tags?.includes(t) ? { tags: tx.tags.filter(x => x !== t) } : null))
+  }
+
+  function bulkMarkReviewed() {
+    void applyToSelected(() => ({ needsReview: false }))
+  }
+
+  function bulkMarkNeutral() {
+    void applyToSelected(() => ({
+      classificationType: 'neutral',
+      macroCategoryId: 'mac_movfin',
+      includeInBudget: false,
+      includeInOperationalResult: false,
+      includeInCashflow: true,
+      isInternalTransfer: false,
+      needsReview: false,
+    }), { markManual: true })
   }
 
   function copyPendingToClipboard() {
@@ -300,10 +425,10 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             {/* ── Pluggy import panel ── */}
             {activePanel === 'import_api' && (
               <>
-                {suggestions.size > 0 && (
+                {pluggyItems.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-                      {suggestions.size} com sugestão automática
+                      {suggestions.size} com sugestão de histórico · marque linhas para ações em lote
                     </span>
                     <button
                       onClick={applyAllSuggestions}
@@ -314,7 +439,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                         padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
                       }}
                     >
-                      {applyingAll ? 'Aplicando…' : 'Aplicar de alta confiança'}
+                      {applyingAll ? 'Aplicando…' : 'Aplicar todas de alta confiança'}
                     </button>
                     {pluggyItems.filter(t => !t.macroCategoryId).length > 0 && (
                       <button
@@ -335,6 +460,16 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
                       <thead>
                         <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                          <th className="table-th" style={{ width: 32 }}>
+                            <button
+                              onClick={() => toggleSelectAll(pluggyItems.map(t => t.id))}
+                              aria-label="Selecionar todos"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
+                            >
+                              {pluggyItems.length > 0 && pluggyItems.every(t => selected.has(t.id))
+                                ? <CheckSquare size={15} /> : <Square size={15} />}
+                            </button>
+                          </th>
                           <th className="table-th">Data</th>
                           <th className="table-th">Descrição</th>
                           <th className="table-th table-th-right">Valor</th>
@@ -352,8 +487,18 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           const suggCat   = sugg ? CATEGORIES.find(c => c.id === sugg.categoryId) : null
                           const suggSource = deriveSuggestionSource(tx)
                           const confMeta   = tx.categoryConfidence ? CONFIDENCE_META[tx.categoryConfidence] : null
+                          const isSel = selected.has(tx.id)
                           return (
-                            <tr key={tx.id} className="table-row">
+                            <tr key={tx.id} className="table-row" style={{ background: isSel ? 'var(--accent-soft)' : undefined }}>
+                              <td className="table-td">
+                                <button
+                                  onClick={() => toggleSelect(tx.id)}
+                                  aria-label={isSel ? 'Desmarcar' : 'Selecionar'}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSel ? 'var(--accent)' : 'var(--faint)', padding: 0, display: 'flex' }}
+                                >
+                                  {isSel ? <CheckSquare size={15} /> : <Square size={15} />}
+                                </button>
+                              </td>
                               <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
                                 {new Date(tx.competenceDate + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </td>
@@ -437,7 +582,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           )
                         })}
                         {pluggyItems.length === 0 && (
-                          <tr><td colSpan={7}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
+                          <tr><td colSpan={8}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
                         )}
                       </tbody>
                     </table>
@@ -453,6 +598,16 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
                   <thead>
                     <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                      <th className="table-th" style={{ width: 32 }}>
+                        <button
+                          onClick={() => toggleSelectAll(panelItems.map(i => i.tx.id))}
+                          aria-label="Selecionar todos"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
+                        >
+                          {panelItems.length > 0 && panelItems.every(i => selected.has(i.tx.id))
+                            ? <CheckSquare size={15} /> : <Square size={15} />}
+                        </button>
+                      </th>
                       <th className="table-th">Data</th>
                       <th className="table-th">Descrição</th>
                       <th className="table-th table-th-right">Valor</th>
@@ -464,8 +619,18 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                   <tbody>
                     {panelItems.map(item => {
                       const macro = MACRO_CATEGORIES.find(m => m.id === item.tx.macroCategoryId)
+                      const isSel = selected.has(item.tx.id)
                       return (
-                        <tr key={item.tx.id} className="table-row" style={{ opacity: item.tx.status === 'pending' ? 0.7 : 1 }}>
+                        <tr key={item.tx.id} className="table-row" style={{ opacity: item.tx.status === 'pending' ? 0.7 : 1, background: isSel ? 'var(--accent-soft)' : undefined }}>
+                          <td className="table-td">
+                            <button
+                              onClick={() => toggleSelect(item.tx.id)}
+                              aria-label={isSel ? 'Desmarcar' : 'Selecionar'}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSel ? 'var(--accent)' : 'var(--faint)', padding: 0, display: 'flex' }}
+                            >
+                              {isSel ? <CheckSquare size={15} /> : <Square size={15} />}
+                            </button>
+                          </td>
                           <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5 }}>
                             {item.tx.competenceDate}
                           </td>
@@ -517,7 +682,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                     })}
                     {panelItems.length === 0 && (
                       <tr>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <div className="empty-state">
                             <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhum item nesta categoria</h4>
                           </div>
@@ -549,6 +714,21 @@ export function Review({ onNavigate: _onNavigate }: Props) {
         )}
 
       </div>
+
+      {/* ── Bulk action bar ── */}
+      {selected.size > 0 && (
+        <BulkActionBar
+          count={selected.size}
+          subCategories={subCategories}
+          onApplyCategory={bulkApplyCategory}
+          onApplySubcategory={bulkApplySubcategory}
+          onAddTag={bulkAddTag}
+          onRemoveTag={bulkRemoveTag}
+          onMarkReviewed={bulkMarkReviewed}
+          onMarkNeutral={bulkMarkNeutral}
+          onClear={clearSelection}
+        />
+      )}
 
       {/* ── Edit modal ── */}
       {modalTx && (
@@ -644,6 +824,69 @@ export function Review({ onNavigate: _onNavigate }: Props) {
         </div>
       )}
     </main>
+  )
+}
+
+function BulkActionBar({
+  count, subCategories, onApplyCategory, onApplySubcategory, onAddTag, onRemoveTag,
+  onMarkReviewed, onMarkNeutral, onClear,
+}: {
+  count: number
+  subCategories: import('../types').SubCategory[]
+  onApplyCategory: (macroId: string) => void
+  onApplySubcategory: (subId: string) => void
+  onAddTag: (tag: string) => void
+  onRemoveTag: (tag: string) => void
+  onMarkReviewed: () => void
+  onMarkNeutral: () => void
+  onClear: () => void
+}) {
+  const [tagInput, setTagInput] = useState('')
+  const activeSubs = subCategories.filter(s => s.active)
+
+  return (
+    <div style={{
+      position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 120,
+      background: 'var(--card-bg)', border: '1px solid var(--line)', borderRadius: 12,
+      boxShadow: '0 8px 30px rgba(0,0,0,.18)', padding: '12px 16px',
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: 'min(960px, 94vw)',
+    }}>
+      <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ink)' }}>
+        {count} selecionado{count !== 1 ? 's' : ''}
+      </span>
+
+      <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplyCategory(e.target.value); e.target.value = '' }}>
+        <option value="" disabled>Aplicar categoria…</option>
+        {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+
+      {activeSubs.length > 0 && (
+        <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplySubcategory(e.target.value); e.target.value = '' }}>
+          <option value="" disabled>Aplicar subcategoria…</option>
+          {activeSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <input
+          value={tagInput}
+          onChange={e => setTagInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && tagInput.trim()) { onAddTag(tagInput); setTagInput('') } }}
+          placeholder="tag…"
+          className="login-field"
+          style={{ fontSize: 11.5, width: 90 }}
+        />
+        <button className="btn btn-secondary btn-sm" disabled={!tagInput.trim()} onClick={() => { onAddTag(tagInput); setTagInput('') }}>+ tag</button>
+        <button className="btn btn-secondary btn-sm" disabled={!tagInput.trim()} onClick={() => { onRemoveTag(tagInput); setTagInput('') }}>− tag</button>
+      </div>
+
+      <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed}>Marcar revisado</button>
+      <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed} title="Dispensa a sugestão sem alterar a categoria">Ignorar sugestão</button>
+      <button className="btn btn-secondary btn-sm" onClick={onMarkNeutral}>Marcar neutro</button>
+      <button onClick={onClear} aria-label="Limpar seleção" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', display: 'flex', padding: 4 }}>
+        <X size={15} />
+      </button>
+    </div>
   )
 }
 
