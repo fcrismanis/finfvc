@@ -22,6 +22,10 @@ export function updateTransaction(id: string, patch: Partial<Transaction>): void
     manualFields.manualSubCategoryOverride = true
     manualFields.manualEditedAt = now
   }
+  if ('description' in patch) {
+    manualFields.manualTextOverride = true
+    manualFields.manualEditedAt = now
+  }
 
   const updated = txns.map(tx =>
     tx.id === id

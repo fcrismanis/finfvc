@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -16,7 +16,7 @@ interface Props {
   onClearFilter?: () => void
 }
 
-const PAGE_SIZE = 50
+const DEFAULT_PAGE_SIZE = 500
 
 const CLS_LABELS: Record<ClassificationType, string> = {
   operational_income: 'Receita Op.', extraordinary_income: 'Rec. Eventual',
@@ -41,14 +41,21 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterType, setFilterType] = useState('')
   const [filterMacro, setFilterMacro] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterTag, setFilterTag] = useState('')
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(0)
+  const [pageSize] = useState<number>(() => {
+    const v = localStorage.getItem('fin_transactions_page_size')
+    return v ? parseInt(v, 10) : DEFAULT_PAGE_SIZE
+  })
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
+  const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
   const inlineSelectRef = useRef<HTMLSelectElement>(null)
+  const inlineDescRef = useRef<HTMLInputElement>(null)
 
   const isReviewMode = navFilter?.smartFilter === 'review'
   const drilldownSource = navFilter?.sourcePage ?? null
@@ -71,10 +78,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }, [navFilter])
 
   useEffect(() => {
-    if (inlineCatEdit && inlineSelectRef.current) {
-      inlineSelectRef.current.focus()
-    }
+    if (inlineCatEdit && inlineSelectRef.current) inlineSelectRef.current.focus()
   }, [inlineCatEdit])
+
+  useEffect(() => {
+    if (inlineDescEdit && inlineDescRef.current) inlineDescRef.current.focus()
+  }, [inlineDescEdit])
 
   const allMonths = useMemo(() => {
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
@@ -115,6 +124,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       const ids = new Set(navFilter.macroCategoryIds)
       result = result.filter(t => t.macroCategoryId != null && ids.has(t.macroCategoryId))
     }
+    if (filterTag) result = result.filter(t => t.tags?.includes(filterTag))
     if (search.trim()) {
       const q = search.trim().toUpperCase()
       result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
@@ -127,7 +137,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, navFilter, search, sortField, sortDir])
 
   const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
   const summary = useMemo(() => ({
@@ -138,8 +148,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     pending: filtered.filter(t => t.status === 'pending').length,
   }), [filtered])
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.ceil(filtered.length / pageSize)
+  const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
   // Group page items by transactionDate
   const grouped = useMemo(() => {
@@ -167,6 +177,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       subCategoryId: tx.subCategoryId,
       notes: tx.notes ?? '',
       competenceDate: tx.competenceDate,
+      tags: tx.tags ? [...tx.tags] : [],
     })
   }
 
@@ -188,8 +199,26 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setInlineCatEdit(null)
   }
 
+  function openInlineDesc(tx: Transaction) {
+    setInlineDescEdit({ id: tx.id, value: tx.description })
+  }
+
+  function saveInlineDesc(newDesc: string, txId: string) {
+    const tx = transactions.find(t => t.id === txId)
+    if (tx && newDesc.trim() && newDesc.trim() !== tx.description) {
+      updateTransaction(txId, { description: newDesc.trim() })
+    }
+    setInlineDescEdit(null)
+  }
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of transactions) t.tags?.forEach(tag => set.add(tag))
+    return Array.from(set).sort()
+  }, [transactions])
+
   const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro)
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag)
 
   return (
     <main className="page-shell">
@@ -335,9 +364,16 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
 
+            {allTags.length > 0 && (
+              <select className="ledger-select" value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }} aria-label="Tag">
+                <option value="">Todas as tags</option>
+                {allTags.map(tag => <option key={tag} value={tag}>#{tag}</option>)}
+              </select>
+            )}
+
             {hasFilters && (
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setPage(0) }}
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setPage(0) }}
                 style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
               >
                 Limpar
@@ -405,6 +441,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
                         const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                         const isInlineCat = inlineCatEdit?.id === tx.id
+                        const isInlineDesc = inlineDescEdit?.id === tx.id
+                        const subOptions = macro ? subCategories.filter(s => s.macroCategoryId === macro.id && s.active) : []
 
                         return (
                           <tr
@@ -413,27 +451,67 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                             style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
                           >
                             {/* Description */}
-                            <td className="table-td" style={{ maxWidth: 300 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', maxWidth: 260 }}>
-                                  {tx.description}
-                                </p>
-                                {tx.source === 'pluggy' && (
-                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0 }}>
-                                    Pluggy
-                                  </span>
-                                )}
-                                {tx.manualCategoryOverride && (
-                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
-                                    editado
-                                  </span>
-                                )}
-                                {tx.status === 'pending' && (
-                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
-                                    pendente
-                                  </span>
-                                )}
-                              </div>
+                            <td className="table-td" style={{ maxWidth: 320 }}>
+                              {isInlineDesc ? (
+                                <input
+                                  ref={inlineDescRef}
+                                  value={inlineDescEdit.value}
+                                  onChange={e => setInlineDescEdit(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                  onBlur={() => saveInlineDesc(inlineDescEdit.value, tx.id)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveInlineDesc(inlineDescEdit.value, tx.id)
+                                    if (e.key === 'Escape') setInlineDescEdit(null)
+                                  }}
+                                  style={{ fontSize: 12.5, fontWeight: 600, width: '100%', background: 'var(--paper)', border: '1px solid var(--accent)', borderRadius: 5, padding: '2px 6px', outline: 'none', color: 'var(--ink)', fontFamily: 'var(--ui)' }}
+                                />
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <p
+                                    role="button"
+                                    tabIndex={0}
+                                    title="Clique duplo para editar descrição"
+                                    onDoubleClick={() => openInlineDesc(tx)}
+                                    onKeyDown={e => e.key === 'Enter' && openInlineDesc(tx)}
+                                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', maxWidth: 240, cursor: 'text' }}
+                                  >
+                                    {tx.description}
+                                  </p>
+                                  {tx.source === 'pluggy' && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {tx.pluggyInstitutionLogoUrl ? (
+                                        <img src={tx.pluggyInstitutionLogoUrl} alt="" style={{ width: 10, height: 10, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }} />
+                                      ) : null}
+                                      {tx.pluggyAccountName ?? tx.pluggyInstitutionName ?? 'Pluggy'}
+                                    </span>
+                                  )}
+                                  {(tx.manualCategoryOverride || tx.manualTextOverride) && (
+                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
+                                      editado
+                                    </span>
+                                  )}
+                                  {tx.status === 'pending' && (
+                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
+                                      pendente
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {/* Tags chips (Bloco 6) */}
+                              {tx.tags && tx.tags.length > 0 && (
+                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
+                                  {tx.tags.map(tag => (
+                                    <span
+                                      key={tag}
+                                      onClick={() => setFilterTag(tag)}
+                                      title={`Filtrar por #${tag}`}
+                                      style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                                    >
+                                      <Tag size={7} />
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                               {reviewItem && reviewItem.reasons.map((r, i) => (
                                 <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
                               ))}
@@ -489,9 +567,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       + categoria
                                     </span>
                                   )}
-                                  {sub && (
-                                    <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 500 }}>· {sub.name}</span>
-                                  )}
+                                  {sub ? (
+                                    <span style={{ fontSize: 10.5, color: 'var(--ink-2)', fontWeight: 500 }}>· {sub.name}</span>
+                                  ) : macro && subOptions.length > 0 ? (
+                                    <span style={{ fontSize: 10, color: 'var(--faint)', fontStyle: 'italic' }}>· sem subcat.</span>
+                                  ) : null}
                                 </div>
                               )}
                             </td>
@@ -594,6 +674,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   className="login-field"
                   style={{ fontSize: 13 }}
                 />
+                {modalTx?.originalDescription && modalTx.originalDescription !== modalPatch.description && (
+                  <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 3 }}>
+                    Original: {modalTx.originalDescription}
+                  </p>
+                )}
               </ModalField>
 
               <ModalField label="Data de competência">
@@ -664,6 +749,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 )
               })()}
 
+              <ModalTagsField
+                tags={(modalPatch.tags as string[] | undefined) ?? []}
+                onChange={tags => setModalPatch(p => ({ ...p, tags }))}
+              />
+
               <ModalField label="Observações">
                 <textarea
                   value={modalPatch.notes ?? ''}
@@ -700,6 +790,46 @@ function ModalField({ label, children, style }: { label: string; children: React
       </label>
       {children}
     </div>
+  )
+}
+
+function ModalTagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [input, setInput] = useState('')
+
+  function addTag() {
+    const t = input.trim().toLowerCase().replace(/\s+/g, '_')
+    if (t && !tags.includes(t)) onChange([...tags, t])
+    setInput('')
+  }
+
+  return (
+    <ModalField label="Tags">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: tags.length ? 6 : 0 }}>
+        {tags.map(tag => (
+          <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)' }}>
+            #{tag}
+            <button
+              onClick={() => onChange(tags.filter(t => t !== tag))}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 0, lineHeight: 1, fontSize: 12, fontFamily: 'var(--ui)' }}
+              aria-label={`Remover tag ${tag}`}
+            >×</button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+          placeholder="Nova tag…"
+          className="login-field"
+          style={{ fontSize: 12, flex: 1 }}
+        />
+        <button className="btn btn-secondary btn-sm" onClick={addTag} type="button" disabled={!input.trim()}>
+          + Adicionar
+        </button>
+      </div>
+    </ModalField>
   )
 }
 
