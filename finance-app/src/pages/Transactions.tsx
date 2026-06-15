@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
-import { ESSENTIALITY_LABELS } from '../services/subcategory.service'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
 import type { NavFilter } from '../App'
@@ -410,26 +409,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
                       </td>
                       <td className="table-td">
-                        {macro && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              fontSize: 10, padding: '2px 7px', borderRadius: 4,
-                              border: `1px solid ${macro.color}50`, color: macro.color,
-                              fontWeight: 600, background: `${macro.color}12`, alignSelf: 'flex-start',
-                            }}>
-                              {macro.name}
-                            </span>
-                            {tx.subCategoryId && (() => {
-                              const sub = subCategories.find(s => s.id === tx.subCategoryId)
-                              return sub ? (
-                                <span style={{ fontSize: 9.5, color: 'var(--faint)', paddingLeft: 2 }}>
-                                  ↳ {sub.name}
-                                </span>
-                              ) : null
-                            })()}
-                          </div>
-                        )}
+                        {macro && (() => {
+                          const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                                border: `1px solid ${macro.color}50`, color: macro.color,
+                                fontWeight: 600, background: `${macro.color}12`,
+                              }}>
+                                {macro.name}
+                              </span>
+                              {sub && (
+                                <>
+                                  <span style={{ fontSize: 10, color: 'var(--line)' }}>·</span>
+                                  <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 500 }}>{sub.name}</span>
+                                </>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td className="table-td">
                         <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
@@ -450,9 +450,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                       <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
                         <button
                           onClick={() => openModal(tx)}
-                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                          aria-label="Editar lançamento"
+                          title="Editar"
+                          style={{ display: 'flex', alignItems: 'center', color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 5 }}
                         >
-                          Editar
+                          <Pencil size={14} />
                         </button>
                       </td>
                     </tr>
@@ -616,9 +618,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                     >
                       <option value="">Sem subcategoria</option>
                       {filteredSubs.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({ESSENTIALITY_LABELS[s.essentiality]})
-                        </option>
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
                   </ModalField>

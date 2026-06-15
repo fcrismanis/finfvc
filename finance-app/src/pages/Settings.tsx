@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useCallback } from 'react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { DATA_PROVIDER } from '../config/env'
@@ -37,13 +37,21 @@ export function Settings() {
   // ── Subcategory state ──
   const [editingSub, setEditingSub] = useState<Partial<SubCategory> | null>(null)
   const [subMacroFilter, setSubMacroFilter] = useState('')
+  const [subSaveStatus, setSubSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const PT_MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  function fmtMonth(ym: string): string {
+    const [y, m] = ym.split('-')
+    return `${y}-${PT_MONTHS[parseInt(m, 10) - 1] ?? m}`
+  }
 
   const allMonths = useMemo(() => {
     const set = new Set([
       ...transactions.map(t => t.competenceDate.slice(0, 7)),
-      ...budgets.map(b => b.referenceMonth),
+      ...budgets.map(b => b.referenceMonth.slice(0, 7)),
     ])
-    return Array.from(set).sort().reverse()
+    return Array.from(set).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse()
   }, [transactions, budgets])
 
   const monthImpact = useMemo(() => {
@@ -124,18 +132,48 @@ export function Settings() {
     setClearMonthConfirm('')
   }
 
-  async function saveSub() {
-    if (!editingSub?.name?.trim() || !editingSub.macroCategoryId) return
+  const doSaveSub = useCallback(async (draft: Partial<SubCategory>) => {
+    if (!draft.name?.trim() || !draft.macroCategoryId) return
     const sub: SubCategory = {
-      id: editingSub.id ?? newSubCategoryId(),
-      name: editingSub.name.trim(),
-      macroCategoryId: editingSub.macroCategoryId,
-      essentiality: (editingSub.essentiality ?? 'inherit') as SubCategoryEssentiality,
+      id: draft.id ?? newSubCategoryId(),
+      name: draft.name.trim(),
+      macroCategoryId: draft.macroCategoryId,
+      essentiality: (draft.essentiality ?? 'inherit') as SubCategoryEssentiality,
       active: true,
-      createdAt: editingSub.createdAt ?? new Date().toISOString(),
+      createdAt: draft.createdAt ?? new Date().toISOString(),
     }
     await saveSubCategory(sub)
-    setEditingSub(null)
+  }, [saveSubCategory])
+
+  async function saveSub() {
+    if (!editingSub) return
+    try {
+      await doSaveSub(editingSub)
+      setEditingSub(null)
+    } catch {
+      // error shown to user via alert in DataContext
+    }
+  }
+
+  function handleSubFieldChange(patch: Partial<SubCategory>) {
+    const updated = { ...editingSub, ...patch }
+    setEditingSub(updated)
+
+    // Auto-save only for existing subs
+    if (!updated.id) return
+    if (!updated.name?.trim() || !updated.macroCategoryId) return
+
+    setSubSaveStatus('saving')
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+    saveDebounceRef.current = setTimeout(async () => {
+      try {
+        await doSaveSub(updated)
+        setSubSaveStatus('saved')
+        setTimeout(() => setSubSaveStatus('idle'), 2000)
+      } catch {
+        setSubSaveStatus('error')
+      }
+    }, 600)
   }
 
   async function removeSub(id: string) {
@@ -290,20 +328,30 @@ export function Settings() {
 
           {editingSub && (
             <div style={{ padding: '14px 20px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                {editingSub.id ? 'Editar subcategoria' : 'Nova subcategoria'}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', flex: 1 }}>
+                  {editingSub.id ? 'Editar subcategoria' : 'Nova subcategoria'}
+                </p>
+                {editingSub.id && subSaveStatus !== 'idle' && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: subSaveStatus === 'saved' ? 'var(--pos)' : subSaveStatus === 'error' ? 'var(--crit)' : 'var(--faint)',
+                  }}>
+                    {subSaveStatus === 'saving' ? 'Salvando…' : subSaveStatus === 'saved' ? 'Salvo' : 'Erro ao salvar'}
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <input
                   value={editingSub.name ?? ''}
-                  onChange={e => setEditingSub(s => ({ ...s, name: e.target.value }))}
+                  onChange={e => handleSubFieldChange({ name: e.target.value })}
                   placeholder="Nome da subcategoria"
                   className="login-field"
                   style={{ fontSize: 12, flex: '1 1 160px' }}
                 />
                 <select
                   value={editingSub.macroCategoryId ?? ''}
-                  onChange={e => setEditingSub(s => ({ ...s, macroCategoryId: e.target.value }))}
+                  onChange={e => handleSubFieldChange({ macroCategoryId: e.target.value })}
                   className="ledger-select"
                   style={{ fontSize: 12, flex: '1 1 140px' }}
                 >
@@ -311,7 +359,7 @@ export function Settings() {
                 </select>
                 <select
                   value={editingSub.essentiality ?? 'inherit'}
-                  onChange={e => setEditingSub(s => ({ ...s, essentiality: e.target.value as SubCategoryEssentiality }))}
+                  onChange={e => handleSubFieldChange({ essentiality: e.target.value as SubCategoryEssentiality })}
                   className="ledger-select"
                   style={{ fontSize: 12, flex: '1 1 160px' }}
                 >
@@ -320,9 +368,13 @@ export function Settings() {
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary btn-sm" onClick={saveSub}>Salvar</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setEditingSub(null)}>Cancelar</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {!editingSub.id && (
+                  <button className="btn btn-primary btn-sm" onClick={saveSub}>Adicionar</button>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={() => { setEditingSub(null); setSubSaveStatus('idle') }}>
+                  {editingSub.id ? 'Fechar' : 'Cancelar'}
+                </button>
               </div>
             </div>
           )}
@@ -438,7 +490,7 @@ export function Settings() {
 
               {monthCleared ? (
                 <div style={{ fontSize: 13, color: 'var(--pos)', fontWeight: 600 }}>
-                  Mês {clearMonth} removido. Recarregue a página.
+                  Mês {fmtMonth(clearMonth)} removido. Recarregue a página.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -450,7 +502,7 @@ export function Settings() {
                       style={{ fontSize: 12 }}
                     >
                       <option value="">Selecionar mês…</option>
-                      {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                      {allMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
                     </select>
                     {monthImpact && (
                       <span style={{ fontSize: 11.5, color: 'var(--warn)', fontWeight: 600 }}>
@@ -483,7 +535,7 @@ export function Settings() {
                           fontFamily: 'var(--ui)', width: 'fit-content',
                         }}
                       >
-                        Limpar {clearMonth}
+                        Limpar {fmtMonth(clearMonth)}
                       </button>
                     </>
                   )}
