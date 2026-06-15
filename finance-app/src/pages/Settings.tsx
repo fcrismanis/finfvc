@@ -17,7 +17,7 @@ interface BackupData {
 export function Settings() {
   const {
     transactions, budgets, closings, subCategories,
-    appendTransactions, saveSubCategory, deleteSubCategory,
+    appendTransactions, saveSubCategory, deleteSubCategory, reload,
   } = useData()
   const [confirmClear, setConfirmClear] = useState(false)
   const [cleared, setCleared] = useState(false)
@@ -123,13 +123,14 @@ export function Settings() {
   function handleClearMonth() {
     if (DATA_PROVIDER === 'supabase') return
     const newTxs = transactions.filter(t => !t.competenceDate.startsWith(clearMonth))
-    const newBudgets = budgets.filter(b => b.referenceMonth !== clearMonth)
+    const newBudgets = budgets.filter(b => !b.referenceMonth.startsWith(clearMonth))
     const newClosings = closings.filter(c => c.month !== clearMonth)
     localStorage.setItem('finance_transactions', JSON.stringify(newTxs))
     localStorage.setItem('finance_budgets', JSON.stringify(newBudgets))
     localStorage.setItem('finance_closings', JSON.stringify(newClosings))
     setMonthCleared(true)
     setClearMonthConfirm('')
+    reload()
   }
 
   const doSaveSub = useCallback(async (draft: Partial<SubCategory>) => {
