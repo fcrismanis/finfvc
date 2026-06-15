@@ -1,6 +1,10 @@
 # Backend secrets — never commit .env with real keys
 server/.env
 
+# Debug payload samples — never commit real transaction data
+tmp/
+*.sanitized.json
+
 # Logs
 logs
 *.log

@@ -17,6 +17,8 @@ import { MACRO_CATEGORIES } from '../config/categories'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 
+const IS_DEV = import.meta.env.DEV
+
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
 type SyncPhase = 'period_select' | 'fetching' | 'preview' | 'importing' | 'done' | 'error'
 type PeriodPreset = 'current_month' | 'last_30d' | 'last_90d' | 'custom'
@@ -71,6 +73,8 @@ export function PluggyPage() {
   const [registering, setRegistering] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
   const [sync, setSync] = useState<SyncSession | null>(null)
+  const [debugPayload, setDebugPayload] = useState<object | null>(null)
+  const [debugLoading, setDebugLoading] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
@@ -119,6 +123,24 @@ export function PluggyPage() {
     if (!confirm('Remover esta conexão do FIN? Isso não desconecta o banco na Pluggy.')) return
     removeLocalConnection(itemId)
     setConnections(getLocalConnections())
+  }
+
+  async function handleDebugPayload(accountId: string) {
+    setDebugLoading(accountId)
+    setDebugPayload(null)
+    try {
+      const res = await fetch('/api/pluggy/debug-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, from: '2024-01-01', to: new Date().toISOString().slice(0, 10), limit: 5 }),
+      })
+      const data = await res.json()
+      setDebugPayload(data)
+    } catch (err) {
+      setDebugPayload({ error: err instanceof Error ? err.message : 'Erro desconhecido' })
+    } finally {
+      setDebugLoading(null)
+    }
   }
 
   function buildConnInfo(itemId: string, _accountId: string, accountName: string): ConnInfo | undefined {
@@ -304,6 +326,17 @@ export function PluggyPage() {
                             >
                               Sincronizar
                             </button>
+                            {IS_DEV && (
+                              <button
+                                onClick={() => handleDebugPayload(acc.id)}
+                                disabled={debugLoading === acc.id}
+                                className="btn btn-secondary btn-sm"
+                                style={{ fontSize: 10, whiteSpace: 'nowrap', opacity: 0.7 }}
+                                title="Inspecionar payload raw da Pluggy (apenas dev)"
+                              >
+                                {debugLoading === acc.id ? '…' : 'Debug payload'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -338,11 +371,44 @@ export function PluggyPage() {
           onClose={() => setSync(null)}
         />
       )}
+
+      {debugPayload && (
+        <DebugPayloadModal payload={debugPayload} onClose={() => setDebugPayload(null)} />
+      )}
     </main>
   )
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+function DebugPayloadModal({ payload, onClose }: { payload: object; onClose: () => void }) {
+  const json = JSON.stringify(payload, null, 2)
+  const [copied, setCopied] = useState(false)
+  function handleCopy() {
+    navigator.clipboard.writeText(json).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+  }
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Debug payload Pluggy</p>
+            <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 2 }}>Payload sanitizado para análise de campos. Não contém tokens.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleCopy} className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
+              {copied ? 'Copiado!' : 'Copiar JSON'}
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 20, lineHeight: 1, fontFamily: 'var(--ui)', padding: 4 }}>×</button>
+          </div>
+        </div>
+        <pre style={{ flex: 1, overflow: 'auto', margin: 0, padding: '16px 20px', fontSize: 11, lineHeight: 1.55, color: 'var(--ink-2)', fontFamily: 'var(--mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          {json}
+        </pre>
+      </div>
+    </div>
+  )
+}
 
 function SummaryChip({ label, value }: { label: string; value: string }) {
   return (
