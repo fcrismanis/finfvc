@@ -173,6 +173,26 @@ async function handleClaude(question, month, ctx) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// ── Pluggy: shared auth helper ────────────────────────────────────────────────
+async function pluggyGetApiKey() {
+  const clientId     = process.env.PLUGGY_CLIENT_ID
+  const clientSecret = process.env.PLUGGY_CLIENT_SECRET
+  const apiBase      = process.env.PLUGGY_API_BASE_URL ?? 'https://api.pluggy.ai'
+  if (!clientId || !clientSecret) throw Object.assign(new Error('Pluggy não configurado no servidor'), { status: 503 })
+  const res = await fetch(`${apiBase}/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.error('[pluggy] auth failed:', res.status, text.slice(0, 120))
+    throw Object.assign(new Error(`Autenticação Pluggy falhou (${res.status})`), { status: 502 })
+  }
+  const { apiKey } = await res.json()
+  return { apiKey, apiBase }
+}
+
 // ── Pluggy: status (lets frontend know if Pluggy is configured) ───────────────
 app.get('/api/pluggy/status', (_req, res) => {
   const configured = !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET)
@@ -181,35 +201,12 @@ app.get('/api/pluggy/status', (_req, res) => {
 
 // ── Pluggy: secure connect_token endpoint ─────────────────────────────────────
 app.post('/api/pluggy/token', async (_req, res) => {
-  const clientId     = process.env.PLUGGY_CLIENT_ID
-  const clientSecret = process.env.PLUGGY_CLIENT_SECRET
-  const apiBase      = process.env.PLUGGY_API_BASE_URL ?? 'https://api.pluggy.ai'
-
-  if (!clientId || !clientSecret) {
-    return res.status(503).json({ ok: false, error: 'Pluggy não configurado no servidor' })
-  }
-
   try {
-    // Step 1: authenticate → apiKey
-    const authRes = await fetch(`${apiBase}/auth`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId, clientSecret }),
-    })
-    if (!authRes.ok) {
-      const text = await authRes.text().catch(() => '')
-      console.error('[pluggy] auth failed:', authRes.status, text.slice(0, 120))
-      return res.status(502).json({ ok: false, error: `Autenticação Pluggy falhou (${authRes.status})` })
-    }
-    const { apiKey } = await authRes.json()
+    const { apiKey, apiBase } = await pluggyGetApiKey()
 
-    // Step 2: connect_token
     const tokenRes = await fetch(`${apiBase}/connect_token`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': apiKey },
       body: JSON.stringify({}),
     })
     if (!tokenRes.ok) {
@@ -218,17 +215,74 @@ app.post('/api/pluggy/token', async (_req, res) => {
       return res.status(502).json({ ok: false, error: `Connect token Pluggy falhou (${tokenRes.status})` })
     }
     const tokenData = await tokenRes.json()
-
-    return res.json({
-      ok: true,
-      token: tokenData.accessToken,
-      expiresAt: tokenData.expiresAt ?? null,
-      provider: 'pluggy',
-    })
+    return res.json({ ok: true, token: tokenData.accessToken, expiresAt: tokenData.expiresAt ?? null, provider: 'pluggy' })
   } catch (err) {
-    console.error('[pluggy] error:', err.message)
-    return res.status(500).json({ ok: false, error: 'Erro interno ao obter token Pluggy.' })
+    console.error('[pluggy] token error:', err.message)
+    return res.status(err.status ?? 500).json({ ok: false, error: err.message })
   }
+})
+
+// ── Pluggy: register connection — fetch item + accounts from Pluggy ────────────
+app.post('/api/pluggy/connections', async (req, res) => {
+  const { itemId } = req.body ?? {}
+  if (!itemId || typeof itemId !== 'string') {
+    return res.status(400).json({ ok: false, error: 'itemId obrigatório' })
+  }
+  try {
+    const { apiKey, apiBase } = await pluggyGetApiKey()
+
+    // Fetch item details
+    const itemRes = await fetch(`${apiBase}/items/${encodeURIComponent(itemId)}`, {
+      headers: { 'X-API-KEY': apiKey },
+    })
+    if (!itemRes.ok) {
+      const text = await itemRes.text().catch(() => '')
+      console.error('[pluggy] item fetch failed:', itemRes.status, text.slice(0, 120))
+      return res.status(502).json({ ok: false, error: `Item Pluggy não encontrado (${itemRes.status})` })
+    }
+    const item = await itemRes.json()
+
+    // Fetch accounts for this item
+    const accsRes = await fetch(`${apiBase}/accounts?itemId=${encodeURIComponent(itemId)}`, {
+      headers: { 'X-API-KEY': apiKey },
+    })
+    const accsData = accsRes.ok ? await accsRes.json() : { results: [] }
+    const accounts = Array.isArray(accsData.results) ? accsData.results
+      : Array.isArray(accsData) ? accsData
+      : []
+
+    const connection = {
+      itemId:            item.id,
+      connectorName:     item.connector?.name ?? 'Banco',
+      connectorImageUrl: item.connector?.imageUrl ?? null,
+      status:            item.status ?? 'UPDATED',
+      createdAt:         item.createdAt ?? new Date().toISOString(),
+      lastUpdatedAt:     item.lastUpdatedAt ?? null,
+      accounts: accounts.map(acc => ({
+        id:             acc.id,
+        itemId:         acc.itemId ?? item.id,
+        name:           acc.name,
+        type:           acc.type,           // 'BANK' | 'CREDIT'
+        subtype:        acc.subtype ?? null,
+        balance:        acc.balance ?? 0,
+        currencyCode:   acc.currencyCode ?? 'BRL',
+        limit:          acc.creditData?.creditLimit ?? null,
+        availableLimit: acc.creditData?.availableCreditLimit ?? null,
+        closeDate:      acc.creditData?.balanceCloseDate ?? null,
+        dueDate:        acc.creditData?.balanceDueDate ?? null,
+      })),
+    }
+
+    return res.json({ ok: true, connection })
+  } catch (err) {
+    console.error('[pluggy] connections error:', err.message)
+    return res.status(err.status ?? 500).json({ ok: false, error: err.message })
+  }
+})
+
+// ── Pluggy: list connections (stored client-side; backend acknowledges) ────────
+app.get('/api/pluggy/connections', (_req, res) => {
+  res.json({ ok: true, storageType: 'local', message: 'Conexões persistidas no frontend (localStorage).' })
 })
 
 const VALID_PROVIDERS = ['mock', 'gpt', 'claude']

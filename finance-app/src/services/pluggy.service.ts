@@ -103,3 +103,67 @@ export function makeDeduplicationKey(tx: PluggyTransaction, accountId: string): 
     fallback: `${tx.date}|${Math.abs(tx.amount)}|${tx.description.slice(0, 40).toUpperCase()}|${accountId}`,
   }
 }
+
+// ── Local persistence for connections (localStorage) ──────────────────────────
+
+const CONNECTIONS_KEY = 'fin_pluggy_connections'
+
+export interface PluggyLocalAccount {
+  id: string
+  itemId: string
+  name: string
+  type: 'BANK' | 'CREDIT'
+  subtype: string | null
+  balance: number
+  currencyCode: string
+  limit: number | null
+  availableLimit: number | null
+  closeDate: string | null
+  dueDate: string | null
+}
+
+export interface PluggyLocalConnection {
+  itemId: string
+  connectorName: string
+  connectorImageUrl: string | null
+  status: string
+  createdAt: string
+  lastUpdatedAt: string | null
+  savedAt: string
+  accounts: PluggyLocalAccount[]
+}
+
+export function getLocalConnections(): PluggyLocalConnection[] {
+  try {
+    const raw = localStorage.getItem(CONNECTIONS_KEY)
+    return raw ? (JSON.parse(raw) as PluggyLocalConnection[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalConnection(conn: PluggyLocalConnection): void {
+  const all = getLocalConnections()
+  const idx = all.findIndex(c => c.itemId === conn.itemId)
+  if (idx >= 0) all[idx] = conn
+  else all.push(conn)
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+}
+
+export function removeLocalConnection(itemId: string): void {
+  const updated = getLocalConnections().filter(c => c.itemId !== itemId)
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(updated))
+}
+
+export async function registerConnection(itemId: string): Promise<PluggyLocalConnection> {
+  const res = await fetch('/api/pluggy/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId }),
+  })
+  const data = await res.json() as { ok: boolean; connection?: Omit<PluggyLocalConnection, 'savedAt'>; error?: string }
+  if (!res.ok || !data.ok || !data.connection) {
+    throw new Error(data.error ?? 'Erro ao registrar conexão Pluggy')
+  }
+  return { ...data.connection, savedAt: new Date().toISOString() }
+}
