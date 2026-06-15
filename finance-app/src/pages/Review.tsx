@@ -6,7 +6,7 @@ import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
-import { suggestCategories } from '../services/categorize.service'
+import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
 
 interface Props {
   onNavigate?: (route: string) => void
@@ -71,13 +71,21 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   function applyAllSuggestions() {
     setApplyingAll(true)
     for (const [txId, s] of suggestions) {
-      updateTransaction(txId, {
-        macroCategoryId:    s.macroCategoryId,
-        categoryId:         s.categoryId,
-        classificationType: s.classificationType,
-      })
+      if (s.confidence === 'high') {
+        updateTransaction(txId, {
+          macroCategoryId:    s.macroCategoryId,
+          categoryId:         s.categoryId,
+          classificationType: s.classificationType,
+        })
+      }
     }
     setApplyingAll(false)
+  }
+
+  function copyPendingToClipboard() {
+    const uncategorized = pluggyItems.filter(t => !t.macroCategoryId)
+    const prompt = buildClipboardPrompt(uncategorized)
+    navigator.clipboard.writeText(prompt).catch(() => {/* ignore */})
   }
 
   function openModal(tx: Transaction) {
@@ -266,9 +274,9 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             {activePanel === 'import_api' && (
               <>
                 {suggestions.size > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-                      {suggestions.size} transações com sugestão automática de categoria
+                      {suggestions.size} com sugestão automática
                     </span>
                     <button
                       onClick={applyAllSuggestions}
@@ -279,8 +287,20 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                         padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
                       }}
                     >
-                      {applyingAll ? 'Aplicando…' : `Aplicar todas as ${suggestions.size} sugestões`}
+                      {applyingAll ? 'Aplicando…' : 'Aplicar de alta confiança'}
                     </button>
+                    {pluggyItems.filter(t => !t.macroCategoryId).length > 0 && (
+                      <button
+                        onClick={copyPendingToClipboard}
+                        style={{
+                          fontSize: 11.5, fontWeight: 600, color: 'var(--ink-2)',
+                          background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 7,
+                          padding: '5px 12px', cursor: 'pointer', fontFamily: 'var(--ui)',
+                        }}
+                      >
+                        Copiar pendências para ChatGPT
+                      </button>
+                    )}
                   </div>
                 )}
                 <div className="card" style={{ overflow: 'hidden' }}>
