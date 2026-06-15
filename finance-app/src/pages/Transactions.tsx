@@ -5,6 +5,7 @@ import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
+import { getLocalConnections } from '../services/pluggy.service'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
@@ -89,6 +90,17 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
     return Array.from(set).sort().reverse()
   }, [transactions])
+
+  // Runtime lookup for Pluggy institution info (fallback for transactions imported without connInfo)
+  const pluggyAccountMap = useMemo(() => {
+    const map = new Map<string, { name: string; institutionName: string; logoUrl: string | null }>()
+    for (const conn of getLocalConnections()) {
+      for (const acc of conn.accounts) {
+        map.set(acc.id, { name: acc.name, institutionName: conn.connectorName, logoUrl: conn.connectorImageUrl })
+      }
+    }
+    return map
+  }, [])
 
   const reviewItems = useMemo(
     () => isReviewMode ? getReviewItems(transactions) : [],
@@ -476,14 +488,19 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   >
                                     {tx.description}
                                   </p>
-                                  {tx.source === 'pluggy' && (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {tx.pluggyInstitutionLogoUrl ? (
-                                        <img src={tx.pluggyInstitutionLogoUrl} alt="" style={{ width: 10, height: 10, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }} />
-                                      ) : null}
-                                      {tx.pluggyAccountName ?? tx.pluggyInstitutionName ?? 'Pluggy'}
-                                    </span>
-                                  )}
+                                  {tx.source === 'pluggy' && (() => {
+                                    const pInfo = pluggyAccountMap.get(tx.accountId)
+                                    const label = tx.pluggyAccountName ?? pInfo?.name ?? tx.pluggyInstitutionName ?? pInfo?.institutionName ?? 'Open Finance'
+                                    const logo = tx.pluggyInstitutionLogoUrl ?? pInfo?.logoUrl
+                                    return (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {logo ? (
+                                          <img src={logo} alt="" style={{ width: 10, height: 10, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }} />
+                                        ) : null}
+                                        {label}
+                                      </span>
+                                    )
+                                  })()}
                                   {(tx.manualCategoryOverride || tx.manualTextOverride) && (
                                     <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
                                       editado
@@ -563,8 +580,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       {macro.name}
                                     </span>
                                   ) : (
-                                    <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600, padding: '2px 4px', borderRadius: 4, border: '1px dashed var(--warn)40' }}>
-                                      + categoria
+                                    <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 600, padding: '2px 4px', borderRadius: 4, border: '1px dashed var(--line)', whiteSpace: 'nowrap' }}>
+                                      A classificar
                                     </span>
                                   )}
                                   {sub ? (
