@@ -1,5 +1,13 @@
+import { useState } from 'react'
 import { useData } from '../context/DataContext'
 import { DATA_PROVIDER } from '../config/env'
+
+const PAGE_SIZE_OPTIONS = [
+  { value: '100', label: '100 por página' },
+  { value: '250', label: '250 por página' },
+  { value: '500', label: '500 por página (padrão)' },
+  { value: '1000', label: '1000 por página' },
+]
 
 interface Props {
   onNavigate: (route: string) => void
@@ -7,6 +15,15 @@ interface Props {
 
 export function Settings({ onNavigate }: Props) {
   const { transactions, budgets, closings, subCategories } = useData()
+  const [pageSize, setPageSize] = useState(
+    () => localStorage.getItem('fin_transactions_page_size') ?? '500'
+  )
+
+  function handlePageSizeChange(value: string) {
+    setPageSize(value)
+    localStorage.setItem('fin_transactions_page_size', value)
+  }
+
   return (
     <main className="page-shell">
       <div style={{ margin: '0 auto', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -32,6 +49,29 @@ export function Settings({ onNavigate }: Props) {
             <span><strong style={{ color: 'var(--ink-2)' }}>{budgets.length}</strong> orçamentos</span>
             <span><strong style={{ color: 'var(--ink-2)' }}>{closings.length}</strong> fechamentos</span>
             <span><strong style={{ color: 'var(--ink-2)' }}>{subCategories.length}</strong> subcategorias</span>
+          </div>
+        </div>
+
+        {/* Display preferences */}
+        <div className="card" style={{ padding: '18px 22px' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 14 }}>Preferências de exibição</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>Lançamentos por página</p>
+              <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+                Quantidade exibida no ledger. Valores maiores podem ser mais lentos.
+              </p>
+            </div>
+            <select
+              value={pageSize}
+              onChange={e => handlePageSizeChange(e.target.value)}
+              className="ledger-select"
+              style={{ fontSize: 12, minWidth: 160, flexShrink: 0 }}
+            >
+              {PAGE_SIZE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
