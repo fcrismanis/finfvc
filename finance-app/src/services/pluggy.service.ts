@@ -1,3 +1,5 @@
+import { suggestCategoryWithHistory } from './categorize.service'
+
 /**
  * Pluggy Open Finance service.
  *
@@ -196,6 +198,8 @@ export interface MapResult {
   duplicateCount: number
   incomeCount: number
   expenseCount: number
+  autoCategorizedCount: number
+  needsReviewCount: number
 }
 
 export function mapPluggyToTransactions(
@@ -214,16 +218,16 @@ export function mapPluggyToTransactions(
       : `${(ptx.date ?? '').slice(0, 10)}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
 
     const type: import('../types').TransactionType = ptx.type === 'CREDIT' ? 'income' : 'expense'
-    const classificationType: import('../types').ClassificationType =
+    const defaultClassification: import('../types').ClassificationType =
       type === 'income' ? 'operational_income' : 'operational_expense'
 
-    return {
+    const baseTx: import('../types').Transaction = {
       id: `pluggy_${ptx.id}`,
       description: ptx.description ?? '',
       originalDescription: ptx.description ?? '',
       amount: Math.abs(ptx.amount),
       type,
-      classificationType,
+      classificationType: defaultClassification,
       transactionDate: (ptx.date ?? now).slice(0, 10),
       competenceDate: (ptx.date ?? now).slice(0, 10),
       status: ptx.status === 'POSTED' ? 'paid' : 'pending',
@@ -240,20 +244,40 @@ export function mapPluggyToTransactions(
       needsReview: true,
       importHash,
       importBatchId: batchId,
+      lastImportedAt: now,
       createdAt: now,
       updatedAt: now,
     }
+
+    // Auto-categorize
+    const suggestion = suggestCategoryWithHistory(baseTx, existingTxs)
+    if (suggestion && suggestion.classificationType !== 'neutral') {
+      return {
+        ...baseTx,
+        macroCategoryId: suggestion.macroCategoryId,
+        categoryId: suggestion.categoryId || undefined,
+        subCategoryId: suggestion.subCategoryId,
+        classificationType: suggestion.classificationType,
+        needsReview: suggestion.confidence !== 'high',
+      }
+    }
+    return baseTx
   })
 
   const newTxs = allMapped.filter(t =>
     !existingIds.has(t.id) && !(t.importHash && existingHashes.has(t.importHash))
   )
 
+  const autoCategorizedCount = newTxs.filter(t => t.macroCategoryId && !t.needsReview).length
+  const needsReviewCount = newTxs.filter(t => t.needsReview).length
+
   return {
     newTxs,
     duplicateCount: allMapped.length - newTxs.length,
     incomeCount: newTxs.filter(t => t.type === 'income').length,
     expenseCount: newTxs.filter(t => t.type === 'expense').length,
+    autoCategorizedCount,
+    needsReviewCount,
   }
 }
 

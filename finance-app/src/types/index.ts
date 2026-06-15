@@ -49,6 +49,10 @@ export interface Transaction {
   origin: 'import_xlsx' | 'import_api' | 'manual_entry' | 'manual_adjustment'
   source?: string
   needsReview?: boolean
+  manualCategoryOverride?: boolean
+  manualSubCategoryOverride?: boolean
+  manualEditedAt?: string
+  lastImportedAt?: string
   group?: string
   tags?: string[]
   notes?: string

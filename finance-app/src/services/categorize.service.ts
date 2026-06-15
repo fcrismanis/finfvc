@@ -6,6 +6,7 @@ interface CategorySuggestion {
   classificationType: ClassificationType
   confidence: 'high' | 'medium'
   reason: string
+  subCategoryId?: string
 }
 
 interface Rule {
@@ -104,4 +105,42 @@ export function suggestCategories(transactions: Transaction[]): Map<string, Cate
     if (suggestion) result.set(tx.id, suggestion)
   }
   return result
+}
+
+export function suggestCategoryWithHistory(
+  tx: Transaction,
+  existingTxs: Transaction[],
+): CategorySuggestion | null {
+  if (tx.categoryId || tx.macroCategoryId) return null
+
+  const descUpper = tx.description.trim().toUpperCase()
+  const origUpper = (tx.originalDescription ?? '').trim().toUpperCase()
+
+  for (const existing of existingTxs) {
+    if (!existing.macroCategoryId || existing.needsReview || existing.id === tx.id) continue
+    if (existing.type !== tx.type) continue
+    const eDesc = existing.description.trim().toUpperCase()
+    const eOrig = (existing.originalDescription ?? '').trim().toUpperCase()
+    if (eDesc === descUpper || eOrig === origUpper || (descUpper.length > 8 && eDesc === descUpper)) {
+      return {
+        categoryId: existing.categoryId ?? '',
+        macroCategoryId: existing.macroCategoryId,
+        classificationType: existing.classificationType,
+        confidence: 'high',
+        reason: 'Histórico: mesma descrição já categorizada',
+        subCategoryId: existing.subCategoryId,
+      }
+    }
+  }
+
+  return suggestCategory(tx)
+}
+
+export function buildClipboardPrompt(txs: Transaction[]): string {
+  const lines = txs
+    .slice(0, 60)
+    .map(t => `- ${t.transactionDate} | ${t.type === 'income' ? '+' : '-'}R$${t.amount.toFixed(2)} | ${t.description}`)
+    .join('\n')
+
+  return `Categorize as transações abaixo em grupos: Alimentação, Casa, Saúde, Transporte, Assinaturas, Compras, Dívida, Receita Operacional, Receita Eventual, Neutro/Transferência.\n\nResposta: JSON com { id (desc hash), categoria }.\n\n${lines}`
 }
