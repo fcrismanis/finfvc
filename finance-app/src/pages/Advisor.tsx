@@ -12,6 +12,8 @@ interface Props {
   onNavigate: (route: string) => void
 }
 
+interface ProviderStatus { mock: boolean; gpt: boolean; claude: boolean }
+
 export function Advisor({ selectedMonth, onNavigate }: Props) {
   const { transactions, budgets } = useData()
   const month = selectedMonth ?? currentYearMonth()
@@ -20,7 +22,15 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/advisor')
+      .then(r => r.ok ? r.json() as Promise<ProviderStatus> : null)
+      .then(s => { if (s) setProviderStatus(s) })
+      .catch(() => { /* backend offline — keep null, show warning */ })
+  }, [])
 
   const summary = useMemo(
     () => getMonthSummary(transactions, month, budgets),
@@ -91,15 +101,47 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
               style={{ fontSize: 12 }}
             >
               <option value="simulated">Simulado (local)</option>
-              <option value="gpt">GPT (requer backend)</option>
-              <option value="claude">Claude (requer backend)</option>
+              <option value="gpt" disabled={providerStatus !== null && !providerStatus.gpt}>
+                {`GPT${providerStatus && !providerStatus.gpt ? ' — sem chave' : providerStatus?.gpt ? ' ✓' : ' (requer backend)'}`}
+              </option>
+              <option value="claude" disabled={providerStatus !== null && !providerStatus.claude}>
+                {`Claude${providerStatus && !providerStatus.claude ? ' — sem chave' : providerStatus?.claude ? ' ✓' : ' (requer backend)'}`}
+              </option>
             </select>
           </div>
         </div>
 
-        {provider !== 'simulated' && (
+        {/* Backend offline */}
+        {providerStatus === null && provider !== 'simulated' && (
           <div style={{ padding: '10px 14px', background: 'var(--well)', border: '1px solid var(--warn)', borderRadius: 9, fontSize: 12, color: 'var(--ink-2)' }}>
-            <strong style={{ color: 'var(--ink)' }}>Backend necessário</strong> — configure o endpoint <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>/api/advisor</code> com a chave de API. Ver <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>docs/ai-advisor-integration.md</code>.
+            <strong style={{ color: 'var(--ink)' }}>Backend offline</strong> — inicie o servidor:{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>cd finance-app/server && npm run dev</code>
+          </div>
+        )}
+
+        {/* Claude not configured */}
+        {providerStatus !== null && provider === 'claude' && !providerStatus.claude && (
+          <div style={{ padding: '10px 14px', background: 'var(--well)', border: '1px solid var(--crit)', borderRadius: 9, fontSize: 12, color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--crit)' }}>Claude não configurado</strong> — adicione{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>ANTHROPIC_API_KEY</code> em{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>server/.env</code>. Obtenha em console.anthropic.com.
+          </div>
+        )}
+
+        {/* GPT not configured */}
+        {providerStatus !== null && provider === 'gpt' && !providerStatus.gpt && (
+          <div style={{ padding: '10px 14px', background: 'var(--well)', border: '1px solid var(--crit)', borderRadius: 9, fontSize: 12, color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--crit)' }}>GPT não configurado</strong> — adicione{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>OPENAI_API_KEY</code> em{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>server/.env</code>. Obtenha em platform.openai.com/api-keys.
+          </div>
+        )}
+
+        {/* GPT configured but may have quota issues */}
+        {providerStatus?.gpt && provider === 'gpt' && (
+          <div style={{ padding: '10px 14px', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 9, fontSize: 12, color: 'var(--faint)' }}>
+            Usando GPT via backend seguro. Se receber erro de cota, adicione créditos em{' '}
+            <strong style={{ color: 'var(--ink-2)' }}>platform.openai.com/settings/billing</strong>.
           </div>
         )}
 

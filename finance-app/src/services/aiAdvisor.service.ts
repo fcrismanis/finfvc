@@ -60,13 +60,16 @@ export async function askAdvisor(
     throw new Error('Não foi possível conectar ao backend. Inicie o servidor com: cd server && npm run dev')
   }
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string }
+  let body: { answer?: string; error?: string; details?: string; warnings?: string[] }
+  try {
+    body = await res.json()
+  } catch {
+    throw new Error(`Resposta inválida do backend (HTTP ${res.status})`)
+  }
+  if (!res.ok || body.error) {
     throw new Error(body.error ?? `Erro ${res.status} no endpoint /api/advisor`)
   }
-  const data = await res.json() as { answer: string; error?: string }
-  if (data.error) throw new Error(data.error)
-  return { answer: data.answer, provider }
+  return { answer: body.answer ?? '', provider }
 }
 
 function simulatedResponse(prompt: string, ctx: AdvisorContext): Promise<AdvisorResponse> {

@@ -18,6 +18,11 @@ app.use(cors({
   methods: ['POST', 'GET', 'OPTIONS'],
 }))
 
+// ── Global uncaught handler — never crash the process ─────────────────────────
+process.on('unhandledRejection', (reason) => {
+  console.error('[advisor] unhandledRejection:', reason instanceof Error ? reason.message : reason)
+})
+
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Você é um consultor financeiro familiar.
 Responda sempre em português do Brasil.
@@ -28,6 +33,15 @@ Não faça recomendações de investimento de alto risco.
 Não trate suas respostas como aconselhamento financeiro profissional formal.`
 
 const MAX_TRANSACTIONS = 50
+
+// ── Provider availability ─────────────────────────────────────────────────────
+function getProviderStatus() {
+  return {
+    mock: true,
+    gpt: !!(process.env.OPENAI_API_KEY),
+    claude: !!(process.env.ANTHROPIC_API_KEY),
+  }
+}
 
 // ── Build user content block ──────────────────────────────────────────────────
 function buildContent(question, month, ctx) {
@@ -85,6 +99,19 @@ async function handleGPT(question, month, ctx) {
 
   if (!res.ok) {
     const text = await res.text()
+    // 429 = quota/billing issue — controlled error, not a crash
+    if (res.status === 429) {
+      return {
+        provider: 'gpt',
+        answer: '',
+        error: 'Cota da OpenAI excedida ou saldo insuficiente. Adicione créditos em platform.openai.com/settings/billing.',
+        warnings: ['HTTP 429 — quota exceeded'],
+      }
+    }
+    // 401 = bad key
+    if (res.status === 401) {
+      return { provider: 'gpt', answer: '', error: 'OPENAI_API_KEY inválida ou expirada.' }
+    }
     throw new Error(`OpenAI ${res.status}: ${text.slice(0, 200)}`)
   }
 
@@ -103,7 +130,7 @@ async function handleGPT(question, month, ctx) {
 async function handleClaude(question, month, ctx) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return { provider: 'claude', answer: '', error: 'ANTHROPIC_API_KEY não configurada no backend.' }
+    return { provider: 'claude', answer: '', error: 'ANTHROPIC_API_KEY não configurada no backend. Obtenha em console.anthropic.com.' }
   }
 
   const model = process.env.ADVISOR_CLAUDE_MODEL ?? 'claude-sonnet-4-5'
@@ -126,6 +153,12 @@ async function handleClaude(question, month, ctx) {
 
   if (!res.ok) {
     const text = await res.text()
+    if (res.status === 429) {
+      return { provider: 'claude', answer: '', error: 'Cota da Anthropic excedida. Verifique o plano em console.anthropic.com.' }
+    }
+    if (res.status === 401) {
+      return { provider: 'claude', answer: '', error: 'ANTHROPIC_API_KEY inválida ou expirada.' }
+    }
     throw new Error(`Anthropic ${res.status}: ${text.slice(0, 200)}`)
   }
 
@@ -138,9 +171,14 @@ async function handleClaude(question, month, ctx) {
   return { provider: 'claude', answer }
 }
 
-// ── Route ─────────────────────────────────────────────────────────────────────
+// ── Routes ────────────────────────────────────────────────────────────────────
 
 const VALID_PROVIDERS = ['mock', 'gpt', 'claude']
+
+// Provider availability — lets the UI disable unconfigured providers
+app.get('/api/advisor', (_req, res) => {
+  res.json(getProviderStatus())
+})
 
 app.post('/api/advisor', async (req, res) => {
   const { provider, question, month, context } = req.body ?? {}
@@ -164,19 +202,20 @@ app.post('/api/advisor', async (req, res) => {
     else if (provider === 'gpt') result = await handleGPT(question, month, context)
     else result = await handleClaude(question, month, context)
 
+    // Controlled errors (missing key, quota) → 503
     if (result.error) return res.status(503).json(result)
     return res.json(result)
   } catch (err) {
-    // Log only the error message, never the financial payload
-    console.error('[advisor] handler error:', err.message)
+    console.error('[advisor] error:', err.message)
     return res.status(500).json({ error: 'Erro interno ao consultar IA.', details: err.message })
   }
 })
 
-app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }))
+app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString(), providers: getProviderStatus() }))
 
 app.listen(PORT, () => {
+  const s = getProviderStatus()
   console.log(`[advisor] http://localhost:${PORT}`)
-  console.log(`[advisor] GPT:    ${process.env.OPENAI_API_KEY ? '✓ configurado' : '✗ OPENAI_API_KEY ausente'}`)
-  console.log(`[advisor] Claude: ${process.env.ANTHROPIC_API_KEY ? '✓ configurado' : '✗ ANTHROPIC_API_KEY ausente'}`)
+  console.log(`[advisor] GPT:    ${s.gpt ? '✓ configurado' : '✗ OPENAI_API_KEY ausente'}`)
+  console.log(`[advisor] Claude: ${s.claude ? '✓ configurado' : '✗ ANTHROPIC_API_KEY ausente'}`)
 })

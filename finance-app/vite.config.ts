@@ -7,7 +7,10 @@ export default defineConfig({
   server: {
     proxy: {
       // /api/* → backend during local dev; in production Nginx/Traefik routes this
-      '/api': 'http://localhost:8787',
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
     },
   },
 })
