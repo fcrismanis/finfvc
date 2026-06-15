@@ -22,6 +22,33 @@ const CLS_LABELS: Record<ClassificationType, string> = {
   adjustment: 'Ajuste', neutral: 'Neutro',
 }
 
+const SUGGESTION_SOURCE_LABEL: Record<NonNullable<Transaction['categorySuggestionSource']>, string> = {
+  pluggy_id:      'Pluggy categoryId',
+  pluggy_name:    'Pluggy category',
+  text_inference: 'Inferência por texto',
+  history:        'Histórico',
+  manual:         'Manual',
+  none:           '—',
+}
+
+const CONFIDENCE_META: Record<NonNullable<Transaction['categoryConfidence']>, { label: string; color: string }> = {
+  high:   { label: 'alta confiança',  color: 'var(--pos)' },
+  medium: { label: 'média confiança', color: 'var(--warn)' },
+  low:    { label: 'baixa confiança', color: 'var(--faint)' },
+}
+
+/** Deriva a origem da sugestão; usa o campo persistido e cai para heurística em lançamentos legados. */
+function deriveSuggestionSource(tx: Transaction): string | null {
+  if (tx.categorySuggestionSource && tx.categorySuggestionSource !== 'none') {
+    return SUGGESTION_SOURCE_LABEL[tx.categorySuggestionSource]
+  }
+  if (tx.manualCategoryOverride || tx.manualSubCategoryOverride) return SUGGESTION_SOURCE_LABEL.manual
+  if (tx.pluggyCategoryMapped && tx.pluggyCategoryId) return SUGGESTION_SOURCE_LABEL.pluggy_id
+  if (tx.pluggyCategoryMapped && tx.pluggyCategory)   return SUGGESTION_SOURCE_LABEL.pluggy_name
+  if (tx.categoryConfidence === 'low')                return SUGGESTION_SOURCE_LABEL.text_inference
+  return null
+}
+
 export function Review({ onNavigate: _onNavigate }: Props) {
   const { transactions, updateTransaction } = useData()
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
@@ -323,6 +350,8 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           const sugg    = suggestions.get(tx.id)
                           const suggMacro = sugg ? MACRO_CATEGORIES.find(m => m.id === sugg.macroCategoryId) : null
                           const suggCat   = sugg ? CATEGORIES.find(c => c.id === sugg.categoryId) : null
+                          const suggSource = deriveSuggestionSource(tx)
+                          const confMeta   = tx.categoryConfidence ? CONFIDENCE_META[tx.categoryConfidence] : null
                           return (
                             <tr key={tx.id} className="table-row">
                               <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
@@ -369,7 +398,19 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                                       {suggCat?.name ?? suggMacro.name}
                                     </span>
                                     <span style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
-                                      {sugg.reason} · {sugg.confidence === 'high' ? 'alta confiança' : 'média'}
+                                      Histórico · {sugg.reason} · {sugg.confidence === 'high' ? 'alta confiança' : 'média confiança'}
+                                    </span>
+                                  </div>
+                                ) : (tx.subCategoryNameSuggested || confMeta || suggSource) ? (
+                                  <div>
+                                    {tx.subCategoryNameSuggested && (
+                                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px dashed var(--line)', color: 'var(--ink-2)', fontWeight: 600, background: 'var(--well)' }}>
+                                        {tx.subCategoryNameSuggested}
+                                      </span>
+                                    )}
+                                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+                                      {suggSource ?? 'Sugestão'}
+                                      {confMeta && <> · <span style={{ color: confMeta.color, fontWeight: 600 }}>{confMeta.label}</span></>}
                                     </span>
                                   </div>
                                 ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
