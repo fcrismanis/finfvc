@@ -1,12 +1,12 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import type { ReviewReason } from '../utils/reviewItems'
-import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
+import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -18,8 +18,6 @@ interface Props {
 
 const PAGE_SIZE = 50
 
-const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
-
 const CLS_LABELS: Record<ClassificationType, string> = {
   operational_income: 'Receita Op.', extraordinary_income: 'Rec. Eventual',
   operational_expense: 'Desp. Op.', debt_cost: 'Dívida',
@@ -28,11 +26,11 @@ const CLS_LABELS: Record<ClassificationType, string> = {
   adjustment: 'Ajuste', neutral: 'Neutro',
 }
 
-function clsColor(cls: ClassificationType): string {
-  if (cls === 'operational_income' || cls === 'extraordinary_income') return 'var(--pos)'
-  if (cls === 'debt_cost') return 'var(--crit)'
-  if (NEUTRAL_TYPES.has(cls)) return 'var(--faint)'
-  return 'var(--ink-2)'
+const MONTHS_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+
+function fmtGroupDate(isoDate: string): string {
+  const d = new Date(isoDate + 'T12:00:00')
+  return `${d.getDate()} ${MONTHS_PT[d.getMonth()]} ${d.getFullYear()}`
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
@@ -41,7 +39,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [search, setSearch] = useState('')
   const [filterMonth, setFilterMonth] = useState(selectedMonth)
   const [filterType, setFilterType] = useState('')
-  const [filterCls, setFilterCls] = useState('')
   const [filterMacro, setFilterMacro] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [sortField, setSortField] = useState<SortField>('competenceDate')
@@ -50,6 +47,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
+  const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
+  const inlineSelectRef = useRef<HTMLSelectElement>(null)
 
   const isReviewMode = navFilter?.smartFilter === 'review'
   const drilldownSource = navFilter?.sourcePage ?? null
@@ -66,11 +65,16 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     onNavigate(route)
   }
 
-  // When navFilter arrives, reset page and review pill
   useEffect(() => {
     setPage(0)
     setReviewPill('all')
   }, [navFilter])
+
+  useEffect(() => {
+    if (inlineCatEdit && inlineSelectRef.current) {
+      inlineSelectRef.current.focus()
+    }
+  }, [inlineCatEdit])
 
   const allMonths = useMemo(() => {
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
@@ -105,7 +109,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     let result = transactions
     if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
     if (filterType) result = result.filter(t => t.type === filterType)
-    if (filterCls) result = result.filter(t => t.classificationType === filterCls)
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
     if (navFilter?.macroCategoryIds?.length) {
@@ -118,14 +121,15 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     }
     return [...result].sort((a, b) => {
       let cmp = 0
-      if (sortField === 'competenceDate') cmp = a.competenceDate.localeCompare(b.competenceDate)
+      if (sortField === 'competenceDate') cmp = a.transactionDate.localeCompare(b.transactionDate)
       else if (sortField === 'amount') cmp = a.amount - b.amount
       else if (sortField === 'status') cmp = a.status.localeCompare(b.status)
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterCls, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
 
+  const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
   const summary = useMemo(() => ({
     total: filtered.length,
     income: filtered.filter(t => t.type === 'income' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
@@ -137,21 +141,21 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  function toggleSort(field: SortField) {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('desc') }
-    setPage(0)
-  }
-
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ChevronDown size={11} color="var(--line)" />
-    return sortDir === 'asc'
-      ? <ChevronUp size={11} color="var(--ink)" />
-      : <ChevronDown size={11} color="var(--ink)" />
-  }
-
-  const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterCls)
+  // Group page items by transactionDate
+  const grouped = useMemo(() => {
+    const groups: { date: string; items: Transaction[] }[] = []
+    const map = new Map<string, Transaction[]>()
+    for (const tx of pageItems) {
+      const d = tx.transactionDate
+      if (!map.has(d)) {
+        const arr: Transaction[] = []
+        map.set(d, arr)
+        groups.push({ date: d, items: arr })
+      }
+      map.get(d)!.push(tx)
+    }
+    return groups
+  }, [pageItems])
 
   function openModal(tx: Transaction) {
     setModalTx(tx)
@@ -172,11 +176,25 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setModalTx(null)
   }
 
+  function openInlineCat(tx: Transaction) {
+    setInlineCatEdit({ id: tx.id, catId: tx.macroCategoryId ?? '' })
+  }
+
+  function saveInlineCat(newCatId: string, txId: string) {
+    const tx = transactions.find(t => t.id === txId)
+    if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
+      updateTransaction(txId, { macroCategoryId: newCatId || undefined, subCategoryId: undefined })
+    }
+    setInlineCatEdit(null)
+  }
+
+  const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro)
+
   return (
     <main className="page-shell">
       <div className="page-content section-gap">
 
-        {/* ── Back button (drilldown) ── */}
         {drilldownSource && (
           <button
             onClick={goBack}
@@ -193,7 +211,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </button>
         )}
 
-        {/* ── Page header ── */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Lançamentos</h1>
@@ -217,7 +234,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           )}
         </div>
 
-        {/* ── Nav filter chip ── */}
         {navFilter?.filterLabel && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -238,7 +254,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
-        {/* ── Review mode pills ── */}
         {isReviewMode && reviewCounts && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {([
@@ -269,7 +284,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
-        {/* ── KPI cards ── */}
         <div className="stats-grid-4">
           <TxStatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="var(--pos)" />
           <TxStatCard label="Despesas" value={`−${formatBRL(summary.expense)}`} color="var(--crit)" />
@@ -282,200 +296,226 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           />
         </div>
 
-        {/* ── Filters (hidden in review mode) ── */}
-        {!isReviewMode && <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            flex: '1 1 180px', border: '1px solid var(--line)', borderRadius: 8,
-            padding: '5px 10px', background: 'var(--paper)',
-          }}>
-            <Search size={12} color="var(--faint)" />
-            <input
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(0) }}
-              placeholder="Buscar por descrição…"
-              style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
-            />
+        {!isReviewMode && (
+          <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              flex: '1 1 180px', border: '1px solid var(--line)', borderRadius: 8,
+              padding: '5px 10px', background: 'var(--paper)',
+            }}>
+              <Search size={12} color="var(--faint)" />
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(0) }}
+                placeholder="Buscar por descrição…"
+                style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
+              />
+            </div>
+
+            <select className="ledger-select" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(0) }} aria-label="Mês">
+              <option value="">Todos os meses</option>
+              {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+
+            <select className="ledger-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(0) }} aria-label="Tipo">
+              <option value="">Todos</option>
+              <option value="income">Receita</option>
+              <option value="expense">Despesa</option>
+            </select>
+
+            <select className="ledger-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0) }} aria-label="Status">
+              <option value="">Todos</option>
+              <option value="paid">Pago</option>
+              <option value="pending">Pendente</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+
+            <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Categoria">
+              <option value="">Todas categorias</option>
+              {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+
+            {hasFilters && (
+              <button
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setPage(0) }}
+                style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
+              >
+                Limpar
+              </button>
+            )}
           </div>
+        )}
 
-          <select className="ledger-select" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(0) }} aria-label="Mês">
-            <option value="">Todos os meses</option>
-            {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-
-          <select className="ledger-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(0) }} aria-label="Tipo">
-            <option value="">Todos</option>
-            <option value="income">Receita</option>
-            <option value="expense">Despesa</option>
-          </select>
-
-          <select className="ledger-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0) }} aria-label="Status">
-            <option value="">Todos</option>
-            <option value="paid">Pago</option>
-            <option value="pending">Pendente</option>
-            <option value="cancelled">Cancelado</option>
-          </select>
-
-          <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Macro">
-            <option value="">Todas</option>
-            {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-
-          {hasFilters && (
-            <button
-              onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterCls(''); setPage(0) }}
-              style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
-            >
-              Limpar
-            </button>
-          )}
-        </div>}
-
-        {/* ── Ledger table ── */}
+        {/* ── Ledger grouped by day ── */}
         <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-              <thead>
-                <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
-                  <th
-                    className="table-th"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => toggleSort('competenceDate')}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Data <SortIcon field="competenceDate" />
-                    </span>
-                  </th>
-                  <th className="table-th">Descrição</th>
-                  <th
-                    className="table-th table-th-right"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => toggleSort('amount')}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                      Valor <SortIcon field="amount" />
-                    </span>
-                  </th>
-                  <th
-                    className="table-th"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => toggleSort('category')}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Categoria <SortIcon field="category" />
-                    </span>
-                  </th>
-                  <th className="table-th">Classificação</th>
-                  <th
-                    className="table-th"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => toggleSort('status')}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Status <SortIcon field="status" />
-                    </span>
-                  </th>
-                  <th style={{ width: 72 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {pageItems.map(tx => {
-                  const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
-                  const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
-                  return (
-                    <tr
-                      key={tx.id}
-                      className="table-row"
-                      style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
-                    >
-                      <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                        {tx.competenceDate}
-                      </td>
-                      <td className="table-td" style={{ maxWidth: 280 }}>
-                        <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
-                          {tx.description}
-                        </p>
-                        {tx.isAdjustment && (
-                          <p style={{ fontSize: 10, color: 'var(--ink-2)', marginTop: 2 }}>ajustado</p>
-                        )}
-                        {reviewItem && reviewItem.reasons.map((r, i) => (
-                          <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
-                        ))}
-                      </td>
-                      <td
-                        className="table-td table-th-right"
-                        style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: clsColor(tx.classificationType) }}
-                      >
-                        {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
-                      </td>
-                      <td className="table-td">
-                        {macro && (() => {
-                          const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
-                          return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 10, padding: '2px 7px', borderRadius: 4,
-                                border: `1px solid ${macro.color}50`, color: macro.color,
-                                fontWeight: 600, background: `${macro.color}12`,
-                              }}>
-                                {macro.name}
-                              </span>
-                              {sub && (
-                                <>
-                                  <span style={{ fontSize: 10, color: 'var(--line)' }}>·</span>
-                                  <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 500 }}>{sub.name}</span>
-                                </>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </td>
-                      <td className="table-td">
-                        <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-                          {CLS_LABELS[tx.classificationType] ?? tx.classificationType}
-                        </span>
-                      </td>
-                      <td className="table-td">
-                        {tx.status === 'paid' && (
-                          <span className="chip chip-pos">Pago</span>
-                        )}
-                        {tx.status === 'pending' && (
-                          <span className="chip chip-warn">Pendente</span>
-                        )}
-                        {tx.status === 'cancelled' && (
-                          <span className="chip chip-neutral">Cancelado</span>
-                        )}
-                      </td>
-                      <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                        <button
-                          onClick={() => openModal(tx)}
-                          aria-label="Editar lançamento"
-                          title="Editar"
-                          style={{ display: 'flex', alignItems: 'center', color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 5 }}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {pageItems.length === 0 && (
-                  <tr>
-                    <td colSpan={7}>
-                      <div className="empty-state">
-                        <div className="empty-glyph" />
-                        <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento encontrado</h4>
-                        <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 220 }}>
-                          Ajuste os filtros ou importe um extrato.
-                        </p>
-                      </div>
-                    </td>
+          {grouped.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-glyph" />
+              <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento encontrado</h4>
+              <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 220 }}>
+                Ajuste os filtros ou importe um extrato.
+              </p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+                <thead>
+                  <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th className="table-th" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+                      if (sortField === 'competenceDate') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      else { setSortField('competenceDate'); setSortDir('desc') }
+                      setPage(0)
+                    }}>Descrição</th>
+                    <th className="table-th table-th-right" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+                      if (sortField === 'amount') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      else { setSortField('amount'); setSortDir('desc') }
+                      setPage(0)
+                    }}>Valor</th>
+                    <th className="table-th" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+                      if (sortField === 'category') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      else { setSortField('category'); setSortDir('desc') }
+                      setPage(0)
+                    }}>Categoria</th>
+                    <th style={{ width: 40 }} />
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {grouped.map(({ date, items }) => (
+                    <>
+                      {/* Day group header */}
+                      <tr key={`g-${date}`} style={{ background: 'var(--well)' }}>
+                        <td
+                          colSpan={4}
+                          style={{
+                            padding: '5px 16px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: 'var(--ink-2)',
+                            letterSpacing: '.03em',
+                            borderBottom: '1px solid var(--line)',
+                            borderTop: '1px solid var(--line)',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {fmtGroupDate(date)}
+                        </td>
+                      </tr>
+                      {items.map(tx => {
+                        const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                        const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
+                        const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
+                        const isInlineCat = inlineCatEdit?.id === tx.id
+
+                        return (
+                          <tr
+                            key={tx.id}
+                            className="table-row"
+                            style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
+                          >
+                            {/* Description */}
+                            <td className="table-td" style={{ maxWidth: 300 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', maxWidth: 260 }}>
+                                  {tx.description}
+                                </p>
+                                {tx.source === 'pluggy' && (
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)30', flexShrink: 0 }}>
+                                    Pluggy
+                                  </span>
+                                )}
+                                {tx.manualCategoryOverride && (
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
+                                    editado
+                                  </span>
+                                )}
+                                {tx.status === 'pending' && (
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
+                                    pendente
+                                  </span>
+                                )}
+                              </div>
+                              {reviewItem && reviewItem.reasons.map((r, i) => (
+                                <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
+                              ))}
+                            </td>
+
+                            {/* Amount */}
+                            <td
+                              className="table-td table-th-right"
+                              style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13,
+                                color: tx.type === 'income' ? 'var(--pos)' : (tx.classificationType === 'debt_cost' ? 'var(--crit)' : 'var(--ink)') }}
+                            >
+                              {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
+                            </td>
+
+                            {/* Category (inline editable) */}
+                            <td className="table-td">
+                              {isInlineCat ? (
+                                <select
+                                  ref={inlineSelectRef}
+                                  value={inlineCatEdit.catId}
+                                  onChange={e => setInlineCatEdit(prev => prev ? { ...prev, catId: e.target.value } : null)}
+                                  onBlur={() => saveInlineCat(inlineCatEdit.catId, tx.id)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveInlineCat(inlineCatEdit.catId, tx.id)
+                                    if (e.key === 'Escape') setInlineCatEdit(null)
+                                  }}
+                                  className="ledger-select"
+                                  style={{ fontSize: 11, minWidth: 130 }}
+                                >
+                                  <option value="">Sem categoria</option>
+                                  {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                              ) : (
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => openInlineCat(tx)}
+                                  onKeyDown={e => e.key === 'Enter' && openInlineCat(tx)}
+                                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}
+                                  title="Clique para editar categoria"
+                                >
+                                  {macro ? (
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                                      border: `1px solid ${macro.color}50`, color: macro.color,
+                                      fontWeight: 600, background: `${macro.color}12`,
+                                    }}>
+                                      {macro.name}
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600, padding: '2px 4px', borderRadius: 4, border: '1px dashed var(--warn)40' }}>
+                                      + categoria
+                                    </span>
+                                  )}
+                                  {sub && (
+                                    <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 500 }}>· {sub.name}</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Edit button */}
+                            <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                              <button
+                                onClick={() => openModal(tx)}
+                                aria-label="Editar lançamento"
+                                title="Editar"
+                                style={{ display: 'flex', alignItems: 'center', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 5px', borderRadius: 5 }}
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* ── Pagination ── */}
@@ -504,7 +544,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
-        {/* ── Footer back button ── */}
         {drilldownSource && (
           <div style={{ paddingBottom: 8 }}>
             <button
