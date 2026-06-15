@@ -21,6 +21,7 @@ const GROUPS: readonly { id: string; label: string; color: string; macroIds: rea
   { id: 'subscriptions', label: 'Assinaturas',          color: '#F59E0B', macroIds: ['mac_assinaturas'] },
   { id: 'shopping',      label: 'Compras e lazer',      color: '#F43F5E', macroIds: ['mac_compras', 'mac_lazer', 'mac_pets', 'mac_presentes', 'mac_doacoes', 'mac_cuidados', 'mac_servicos'] },
   { id: 'debt',          label: 'Dívidas e juros',      color: '#DC2626', macroIds: ['mac_divida'], isCritical: true },
+  { id: 'uncat',         label: 'A classificar',        color: '#9CA3AF', macroIds: ['mac_uncat'] },
 ]
 
 export function buildFunnelSteps(

@@ -19,6 +19,7 @@ const SEG_COLORS: Record<string, string> = {
   subscriptions: '#8a7d68',
   shopping:      CRITICAL_CLAY,
   debt:          '#7A1D1D',
+  uncat:         '#9CA3AF',
   saldo:         ENTRY_GREEN,
 }
 
@@ -30,13 +31,15 @@ const SHORT_LABELS: Record<string, string> = {
   subscriptions: 'Assinaturas',
   shopping:      'Compras',
   debt:          'Dívidas',
+  uncat:         'A classif.',
 }
 
 const EXEC_GROUPS = [
-  { id: 'fixed',     label: 'Fixos',     microcopy: 'essencial',       stepIds: ['fixed'],                                           color: '#1B1A16' },
-  { id: 'variaveis', label: 'Variáveis', microcopy: 'modo de vida',    stepIds: ['food', 'transport', 'health_edu', 'subscriptions'], color: '#8C6716' },
-  { id: 'compras',   label: 'Compras',   microcopy: 'lazer & consumo', stepIds: ['shopping'],                                        color: CRITICAL_CLAY },
-  { id: 'dividas',   label: 'Dívidas',   microcopy: 'revisar urgente', stepIds: ['debt'],                                            color: '#7A1D1D' },
+  { id: 'fixed',       label: 'Fixos',         microcopy: 'essencial',       stepIds: ['fixed'],                                           color: '#1B1A16' },
+  { id: 'variaveis',   label: 'Variáveis',     microcopy: 'modo de vida',    stepIds: ['food', 'transport', 'health_edu', 'subscriptions'], color: '#8C6716' },
+  { id: 'compras',     label: 'Compras',       microcopy: 'lazer & consumo', stepIds: ['shopping'],                                        color: CRITICAL_CLAY },
+  { id: 'dividas',     label: 'Dívidas',       microcopy: 'revisar urgente', stepIds: ['debt'],                                            color: '#7A1D1D' },
+  { id: 'classificar', label: 'A classificar', microcopy: 'requer revisão',  stepIds: ['uncat'],                                           color: '#9CA3AF' },
 ] as const
 
 // ── Helpers ────────────────────────────────────────────────────────────────

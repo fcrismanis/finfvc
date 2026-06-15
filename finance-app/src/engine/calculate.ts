@@ -88,7 +88,7 @@ export function getMacroCategoryTotals(txns: Transaction[], month: string): Macr
   )
   const totalExpenses = monthTxns.reduce((s, tx) => s + tx.amount, 0)
 
-  return expenseMacros
+  const categorized = expenseMacros
     .map(macro => {
       const total = monthTxns
         .filter(tx => tx.macroCategoryId === macro.id)
@@ -110,6 +110,25 @@ export function getMacroCategoryTotals(txns: Transaction[], month: string): Macr
     })
     .filter((m): m is MacroCategoryTotal => m !== null)
     .sort((a, b) => b.total - a.total)
+
+  // Uncategorized bucket — catches Pluggy and other imports without macroCategoryId
+  const uncatTotal = monthTxns
+    .filter(tx => !tx.macroCategoryId)
+    .reduce((s, tx) => s + tx.amount, 0)
+  if (uncatTotal > 0) {
+    categorized.push({
+      macroCategoryId: 'mac_uncat',
+      name: 'A classificar',
+      total: uncatTotal,
+      percentage: totalExpenses > 0 ? (uncatTotal / totalExpenses) * 100 : 0,
+      color: '#9CA3AF',
+      icon: 'help-circle',
+      avgLast3m: 0,
+      isAboveAverage: false,
+    })
+  }
+
+  return categorized
 }
 
 function getAvgMacroExpense(txns: Transaction[], refMonth: string, macroId: string, n: number): number {
