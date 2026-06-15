@@ -4,7 +4,7 @@
 
 ```env
 PLUGGY_CLIENT_ID=seu_client_id
-PLUGGY_CLIENT_SECRET=seu_client_secret   # NUNCA exponha no frontend
+PLUGGY_CLIENT_SECRET=<seu-secret>   # NUNCA exponha no frontend
 ```
 
 ## Endpoints backend necessários

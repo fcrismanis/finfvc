@@ -12,10 +12,10 @@ Frontend → POST /api/advisor { prompt, context } → Backend (chave segura) �
 
 ```env
 # Para Claude
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=<sua-chave>
 
 # Para GPT
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=<sua-chave>
 
 # Qual usar (claude | gpt)
 AI_PROVIDER=claude
