@@ -5,6 +5,7 @@ import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
 import { lookupPluggyCategory } from '../services/pluggy.service'
+import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { isManualTx } from '../utils/dataQuality'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
@@ -61,6 +62,8 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => { setSelected(new Set()) }, [activePanel])
+
+  const tagCtx = useMemo(() => buildTagContext(transactions), [transactions])
 
   const reviewItems = useMemo(() => getReviewItems(transactions), [transactions])
 
@@ -233,6 +236,14 @@ export function Review({ onNavigate: _onNavigate }: Props) {
       isInternalTransfer: false,
       needsReview: false,
     }), { markManual: true })
+  }
+
+  function bulkApplySuggestedTags() {
+    void applyToSelected(tx => {
+      const sugg = suggestTags(tx, tagCtx)
+      if (sugg.length === 0) return null
+      return { tags: Array.from(new Set([...(tx.tags ?? []), ...sugg])) }
+    })
   }
 
   function copyPendingToClipboard() {
@@ -727,6 +738,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
           onRemoveTag={bulkRemoveTag}
           onMarkReviewed={bulkMarkReviewed}
           onMarkNeutral={bulkMarkNeutral}
+          onApplySuggestedTags={bulkApplySuggestedTags}
           onClear={clearSelection}
         />
       )}
@@ -830,7 +842,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
 
 function BulkActionBar({
   count, subCategories, onApplyCategory, onApplySubcategory, onAddTag, onRemoveTag,
-  onMarkReviewed, onMarkNeutral, onClear,
+  onMarkReviewed, onMarkNeutral, onApplySuggestedTags, onClear,
 }: {
   count: number
   subCategories: import('../types').SubCategory[]
@@ -840,6 +852,7 @@ function BulkActionBar({
   onRemoveTag: (tag: string) => void
   onMarkReviewed: () => void
   onMarkNeutral: () => void
+  onApplySuggestedTags: () => void
   onClear: () => void
 }) {
   const [tagInput, setTagInput] = useState('')
@@ -880,6 +893,8 @@ function BulkActionBar({
         <button className="btn btn-secondary btn-sm" disabled={!tagInput.trim()} onClick={() => { onAddTag(tagInput); setTagInput('') }}>+ tag</button>
         <button className="btn btn-secondary btn-sm" disabled={!tagInput.trim()} onClick={() => { onRemoveTag(tagInput); setTagInput('') }}>− tag</button>
       </div>
+
+      <button className="btn btn-secondary btn-sm" onClick={onApplySuggestedTags} title="Aplica as tags sugeridas a cada selecionado">Tags sugeridas</button>
 
       <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed}>Marcar revisado</button>
       <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed} title="Dispensa a sugestão sem alterar a categoria">Ignorar sugestão</button>

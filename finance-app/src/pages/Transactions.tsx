@@ -10,6 +10,7 @@ import {
   highValueThreshold, findDuplicateCandidateIds, matchesQuickFilter,
   type QuickFilterKey,
 } from '../utils/dataQuality'
+import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
@@ -91,6 +92,15 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     threshold: highValueThreshold(transactions),
     duplicateIds: findDuplicateCandidateIds(transactions),
   }), [transactions])
+
+  const tagCtx = useMemo(() => buildTagContext(transactions), [transactions])
+
+  function applySuggestedTag(tx: Transaction, tag: string) {
+    const tags = [...(tx.tags ?? [])]
+    if (tags.includes(tag)) return
+    tags.push(tag)
+    updateTransaction(tx.id, { tags })
+  }
 
   useEffect(() => {
     if (inlineCatEdit && inlineSelectRef.current) inlineSelectRef.current.focus()
@@ -571,6 +581,25 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   ))}
                                 </div>
                               )}
+                              {/* Suggested tags — click to apply (append, never overwrites) */}
+                              {(() => {
+                                const suggested = suggestTags(tx, tagCtx).slice(0, 3)
+                                if (suggested.length === 0) return null
+                                return (
+                                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
+                                    {suggested.map(tag => (
+                                      <button
+                                        key={tag}
+                                        onClick={() => applySuggestedTag(tx, tag)}
+                                        title={`Adicionar tag sugerida #${tag}`}
+                                        style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--ui)' }}
+                                      >
+                                        + {tag}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )
+                              })()}
                               {reviewItem && reviewItem.reasons.map((r, i) => (
                                 <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
                               ))}
