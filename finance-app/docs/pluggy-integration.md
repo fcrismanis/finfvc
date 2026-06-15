@@ -218,6 +218,44 @@ Deduplicação por hash garante que reimports nunca sobrescrevam transações ex
 
 ---
 
+## Correções de validação visual (Fase 2 — rodada 3)
+
+| Item | Causa raiz | Correção |
+|------|-----------|----------|
+| Funil da Clareza vazio | `getMacroCategoryTotals` excluía txs sem `macroCategoryId` | Bucket `mac_uncat` adicionado; grupo `uncat` no Funil |
+| Orçamento Realizado R$ 0,00 | `realized` dependia de `macroCategoryId`; Pluggy sem categoria ignorado | Linha "A classificar" exibe total sem categoria |
+| Fechamento sem dados Pluggy | Checklist 100% manual, sem métricas reais | Card "Importações e revisão" com contagem Pluggy/sem-cat/pendentes |
+| Badge "Pluggy" nos lançamentos | `connInfo` ausente na sync → `pluggyAccountName` undefined | Fallback runtime lê `localStorage` via `pluggyAccountMap` |
+| "+ categoria" confuso | Label de warning solto sem contexto | Substituído por "A classificar" com estilo neutro |
+| Conta/instituição ausente em Contas e Cartões | `connectorImageUrl` não propagava para as páginas | `connectorImageUrl` incluído no enrich de cada conta |
+
+---
+
+## Direção visual — próxima rodada
+
+### Orçamento
+- Layout por meta/categoria/subcategoria com barras de progresso
+- Cards superiores: total orçado, total realizado, saldo disponível, utilização %
+- Status por linha: no limite / atenção / estourado / sem meta
+- Drilldown por categoria → Lançamentos filtrados
+
+### Clareza Financeira
+- Matriz mensal por categoria (linhas = categoria, colunas = meses)
+- Sparklines de tendência por grupo
+- Comparação mês-a-mês com variação %
+
+### Lançamentos
+- Lista compacta por dia com chips de categoria e status discreto
+- Edição rápida inline sem modal para categoria/subcategoria
+- Filtro por tag, instituição e status lado a lado
+
+### Futuro / Patrimônio
+- Gráficos de evolução patrimonial (área)
+- Metas de investimento com barra de progresso
+- Projeção de saldo por cenário
+
+---
+
 ## Pendências para produção
 
 | Item | Status | Notas |
