@@ -1,5 +1,6 @@
 import { suggestCategoryWithHistory } from './categorize.service'
 import { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap'
+import { suggestFromRules } from './categoryRules.service'
 
 /**
  * Pluggy Open Finance service.
@@ -311,7 +312,23 @@ export function mapPluggyToTransactions(
       }
     }
 
-    // Priority 2: Pluggy provider category (by ID first, then by name)
+    // Priority 2: learned rule (user corrections persisted as fin_category_rules)
+    const ruleSugg = suggestFromRules(baseTx)
+    if (ruleSugg) {
+      return {
+        ...baseTx,
+        macroCategoryId:          ruleSugg.macroCategoryId,
+        subCategoryId:            ruleSugg.subCategoryId,
+        classificationType:       ruleSugg.classificationType ?? baseTx.classificationType,
+        tags:                     ruleSugg.tags && ruleSugg.tags.length ? ruleSugg.tags : undefined,
+        pluggyCategoryMapped:     true,
+        categoryConfidence:       'high',
+        categorySuggestionSource: 'rule',
+        needsReview:              false,
+      }
+    }
+
+    // Priority 3: Pluggy provider category (by ID first, then by name)
     const catResult = lookupPluggyCategory(ptx.categoryId, ptx.category)
     if (catResult) {
       return {

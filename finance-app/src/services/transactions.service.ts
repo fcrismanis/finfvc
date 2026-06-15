@@ -1,6 +1,7 @@
 import type { Transaction } from '../types'
 import { MOCK_TRANSACTIONS } from '../mock/transactions'
 import { localAdapter } from '../adapters/local.adapter'
+import { learnRuleFromTransaction } from './categoryRules.service'
 
 export function getTransactionsOrMock(): { transactions: Transaction[]; isDemo: boolean } {
   const raw = localStorage.getItem('finance_transactions')
@@ -27,19 +28,24 @@ export function updateTransaction(id: string, patch: Partial<Transaction>): void
     manualFields.manualEditedAt = now
   }
 
-  const updated = txns.map(tx =>
-    tx.id === id
-      ? {
-          ...tx,
-          ...patch,
-          ...manualFields,
-          isAdjustment: true,
-          adjustmentReason: (patch as Transaction).adjustmentReason ?? 'manual_reclassification',
-          updatedAt: now,
-        }
-      : tx
-  )
+  let learnedFrom: Transaction | null = null
+  const updated = txns.map(tx => {
+    if (tx.id !== id) return tx
+    const next: Transaction = {
+      ...tx,
+      ...patch,
+      ...manualFields,
+      isAdjustment: true,
+      adjustmentReason: (patch as Transaction).adjustmentReason ?? 'manual_reclassification',
+      updatedAt: now,
+    }
+    if (manualFields.manualCategoryOverride || manualFields.manualSubCategoryOverride) learnedFrom = next
+    return next
+  })
   localAdapter.replaceAllTransactions(updated)
+
+  // Learn a reusable rule from the manual correction (safe-guards inside).
+  if (learnedFrom) learnRuleFromTransaction(learnedFrom, 'manual')
 }
 
 /**
@@ -64,6 +70,7 @@ export function applyTransactionPatches(
   const now = new Date().toISOString()
   const patchById = new Map(items.map(i => [i.id, i.patch]))
 
+  const learned: Transaction[] = []
   const updated = txns.map(tx => {
     const patch = patchById.get(tx.id)
     if (!patch) return tx
@@ -84,8 +91,13 @@ export function applyTransactionPatches(
       }
     }
 
-    return { ...tx, ...patch, ...manualFields, updatedAt: now }
+    const next = { ...tx, ...patch, ...manualFields, updatedAt: now }
+    if (manualFields.manualCategoryOverride || manualFields.manualSubCategoryOverride) learned.push(next)
+    return next
   })
 
   localAdapter.replaceAllTransactions(updated)
+
+  // Learn rules from explicit bulk corrections (markManual path only).
+  for (const tx of learned) learnRuleFromTransaction(tx, 'manual')
 }

@@ -2,7 +2,7 @@ import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
   Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
   Tag, Tags, Upload, Link2, Bot, Settings,
-  Archive, AlertTriangle, LogOut, X,
+  Archive, AlertTriangle, LogOut, X, Wand2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { DATA_PROVIDER } from '../../config/env'
@@ -42,6 +42,7 @@ const CADASTROS: NavEntry[] = [
   { route: '/cartoes', label: 'Cartões', icon: CreditCard },
   { route: '/categorias', label: 'Categorias', icon: Tag },
   { route: '/subcategorias', label: 'Subcategorias', icon: Tags },
+  { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
 ]
 
 const INTEGRACOES: NavEntry[] = [

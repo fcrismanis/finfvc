@@ -29,6 +29,7 @@ const SUGGESTION_SOURCE_LABEL: Record<NonNullable<Transaction['categorySuggestio
   pluggy_name:    'Pluggy category',
   text_inference: 'Inferência por texto',
   history:        'Histórico',
+  rule:           'Regra aprendida',
   manual:         'Manual',
   none:           '—',
 }

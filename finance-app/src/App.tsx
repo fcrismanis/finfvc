@@ -33,6 +33,7 @@ const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ defau
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
 const SubcategoriesPage = lazy(() => import('./pages/SubcategoriesPage').then(m => ({ default: m.SubcategoriesPage })))
+const CategoryRulesPage = lazy(() => import('./pages/CategoryRulesPage').then(m => ({ default: m.CategoryRulesPage })))
 const AccountsPage     = lazy(() => import('./pages/AccountsPage').then(m => ({ default: m.AccountsPage })))
 const CardsPage        = lazy(() => import('./pages/CardsPage').then(m => ({ default: m.CardsPage })))
 const PluggyPage       = lazy(() => import('./pages/PluggyPage').then(m => ({ default: m.PluggyPage })))
@@ -132,6 +133,7 @@ function AppShell() {
       case '/configuracoes': return <Settings onNavigate={navigate} />
       case '/categorias':    return <CategoriesPage onNavigate={navigate} />
       case '/subcategorias': return <SubcategoriesPage />
+      case '/regras':        return <CategoryRulesPage />
       case '/contas':        return <AccountsPage onNavigate={navigate} />
       case '/cartoes':       return <CardsPage onNavigate={navigate} />
       case '/pluggy':        return <PluggyPage />
