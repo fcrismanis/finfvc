@@ -89,7 +89,8 @@ export function AccountsPage({ onNavigate }: Props) {
                     <th className="table-th">Conta</th>
                     <th className="table-th">Banco</th>
                     <th className="table-th" style={{ textAlign: 'right' }}>Saldo</th>
-                    <th className="table-th">Origem</th>
+                    <th className="table-th">Última Sync</th>
+                    <th style={{ width: 90 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -108,9 +109,28 @@ export function AccountsPage({ onNavigate }: Props) {
                         {fmtBRL(acc.balance)}
                       </td>
                       <td className="table-td">
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)40' }}>
-                          Pluggy
-                        </span>
+                        {acc.lastSyncAt ? (
+                          <div>
+                            <span style={{ fontSize: 11, color: 'var(--ink-2)', display: 'block' }}>
+                              {new Date(acc.lastSyncAt).toLocaleDateString('pt-BR')}
+                            </span>
+                            {acc.lastSyncCount != null && (
+                              <span style={{ fontSize: 10, color: 'var(--faint)' }}>
+                                {acc.lastSyncCount} lançamentos
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>
+                        )}
+                      </td>
+                      <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => onNavigate('/pluggy')}
+                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                        >
+                          Sincronizar
+                        </button>
                       </td>
                     </tr>
                   ))}

@@ -95,6 +95,8 @@ export function CardsPage({ onNavigate }: Props) {
                     <th className="table-th">Banco</th>
                     <th className="table-th" style={{ textAlign: 'right' }}>Fatura</th>
                     <th className="table-th" style={{ textAlign: 'right' }}>Limite</th>
+                    <th className="table-th">Última Sync</th>
+                    <th style={{ width: 90 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -116,6 +118,30 @@ export function CardsPage({ onNavigate }: Props) {
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--ink-2)' }}>
                         {card.limit != null ? fmtBRL(card.limit) : '—'}
+                      </td>
+                      <td className="table-td">
+                        {card.lastSyncAt ? (
+                          <div>
+                            <span style={{ fontSize: 11, color: 'var(--ink-2)', display: 'block' }}>
+                              {new Date(card.lastSyncAt).toLocaleDateString('pt-BR')}
+                            </span>
+                            {card.lastSyncCount != null && (
+                              <span style={{ fontSize: 10, color: 'var(--faint)' }}>
+                                {card.lastSyncCount} lançamentos
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>
+                        )}
+                      </td>
+                      <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => onNavigate('/pluggy')}
+                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                        >
+                          Sincronizar
+                        </button>
                       </td>
                     </tr>
                   ))}
