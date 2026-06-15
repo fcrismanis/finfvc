@@ -344,6 +344,35 @@ body {
   .funnel-mobile  { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
 }
 
+/* Esteira (horizontal-lane) */
+.funnel-lane-desktop {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+  margin-top: 4px;
+}
+.funnel-lane-mobile {
+  display: none;
+  margin-top: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+@media (max-width: 899px) {
+  .funnel-lane-desktop { display: none; }
+  .funnel-lane-mobile  { display: block; }
+}
+
+/* Executivo (executive-strip) chips grid */
+.funnel-exec-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+@media (max-width: 899px) {
+  .funnel-exec-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── Empty state (sem emoji) ── */
 .empty-state {
   padding: 46px 24px;
