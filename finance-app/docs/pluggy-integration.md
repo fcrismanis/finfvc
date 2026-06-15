@@ -111,15 +111,16 @@ Paginação interna: `pageSize=500`, incrementa `page` até `results.length < pa
 
 ---
 
-## Fluxo de sincronização (Fase 2)
+## Fluxo de sincronização (Fase 2 — atual)
 
-1. Usuário abre PluggyPage → seleciona conta → clica "Sincronizar"
-2. Modal abre: usuário escolhe período (mês corrente / 30d / 90d / personalizado)
+1. Usuário abre PluggyPage → clica "Sincronizar" na conta desejada
+2. Modal abre direto em estado `fetching` (período padrão: mês corrente)
 3. Frontend chama `POST /api/pluggy/transactions` com `{ accountId, from, to }`
-4. Transações retornadas passam por `mapPluggyToTransactions()` → deduplicação
-5. Modal exibe prévia: novos / duplicados / receitas / despesas
-6. Usuário confirma → `appendTransactions(newTxs)` persiste no DataContext
-7. `updateConnectionSyncMeta(itemId, accountId, count)` atualiza `lastSyncAt` + `lastSyncCount` em localStorage
+4. Transações passam por `mapPluggyToTransactions(txs, accountId, existingTxs, connInfo)` — deduplicação + categorização automática
+5. Modal exibe prévia: Novas / Duplicadas / Auto-cat. + lista de transações com badges de categoria
+6. Opção "Mudar período" disponível na prévia (sem reabrir o modal)
+7. Usuário confirma → `appendTransactions(newTxs)` persiste no DataContext
+8. `updateConnectionSyncMeta(itemId, accountId, count)` atualiza `lastSyncAt` + `lastSyncCount` em localStorage
 
 ---
 
@@ -139,34 +140,76 @@ Execuções repetidas da sync no mesmo período são seguras — duplicatas são
 
 ## Mapeamento Pluggy → Transaction (FIN)
 
-| Campo Pluggy         | Campo Transaction        | Notas                                        |
-|---------------------|--------------------------|----------------------------------------------|
-| `id`                | `id`                     | prefixado: `pluggy_${id}`                    |
-| `date`              | `transactionDate`        | ISO date (YYYY-MM-DD)                        |
-| `date`              | `competenceDate`         | igual a transactionDate                      |
-| `description`       | `description`            | texto original                               |
-| `description`       | `originalDescription`    | cópia para histórico                         |
-| `abs(amount)`       | `amount`                 | sempre positivo                              |
-| `type === 'DEBIT'`  | `type = 'expense'`       | classificationType = `operational_expense`   |
-| `type === 'CREDIT'` | `type = 'income'`        | classificationType = `operational_income`    |
-| `POSTED`            | `status = 'paid'`        |                                              |
-| `PENDING`           | `status = 'pending'`     |                                              |
-| `providerCode`      | `importHash`             | chave de dedup principal                     |
-| —                   | `origin = 'import_api'`  | fixo para Pluggy                             |
-| —                   | `source = 'pluggy'`      | para filtros na tela de Revisão              |
-| —                   | `needsReview = true`     | aparece na central de Revisão                |
-| —                   | `paymentMethod = 'account'` |                                           |
+| Campo Pluggy              | Campo Transaction           | Notas                                              |
+|--------------------------|-----------------------------|----------------------------------------------------|
+| `id`                     | `id`                        | prefixado: `pluggy_${id}`                          |
+| `date`                   | `transactionDate`           | ISO date (YYYY-MM-DD)                              |
+| `date`                   | `competenceDate`            | igual a transactionDate                            |
+| `description`            | `description`               | texto original                                     |
+| `description`            | `originalDescription`       | cópia imutável para histórico                      |
+| `abs(amount)`            | `amount`                    | sempre positivo                                    |
+| `type === 'DEBIT'`       | `type = 'expense'`          | classificationType = `operational_expense`         |
+| `type === 'CREDIT'`      | `type = 'income'`           | classificationType = `operational_income`          |
+| `POSTED`                 | `status = 'paid'`           |                                                    |
+| `PENDING`                | `status = 'pending'`        |                                                    |
+| `providerCode`           | `importHash`                | chave de dedup principal                           |
+| `category`               | `pluggyCategory`            | label bruto da Pluggy, salvo para referência       |
+| —                        | `pluggyAccountName`         | nome da conta (ex: "Conta Corrente")               |
+| —                        | `pluggyInstitutionName`     | nome do banco (ex: "Nubank")                       |
+| —                        | `pluggyInstitutionLogoUrl`  | URL do logo do banco                               |
+| —                        | `origin = 'import_api'`     | fixo para Pluggy                                   |
+| —                        | `source = 'pluggy'`         | para filtros na tela de Revisão                    |
+| —                        | `needsReview`               | `false` se categorizado; `true` se pendente revisão |
+| —                        | `paymentMethod = 'account'` |                                                    |
+
+### Prioridade de categorização automática
+
+1. **Histórico** — descrição exata encontrada em transações revisadas anteriormente (match por `description.toUpperCase()`)
+2. **Categoria Pluggy** — `ptx.category` mapeada para `macroCategoryId` via `PLUGGY_CAT_MAP` em `pluggy.service.ts`
+3. **Heurísticas locais** — regras regex em `categorize.service.ts` (supermercados, farmácias, etc.)
+4. **Sem categoria** — `needsReview = true`, aparece na central de Revisão
+
+### Proteções contra sobrescrita
+
+| Flag                     | Quando definido                              | Efeito                                            |
+|--------------------------|----------------------------------------------|---------------------------------------------------|
+| `manualCategoryOverride` | Usuário edita macroCategoria ou categoria    | Badge "editado" no ledger                         |
+| `manualSubCategoryOverride` | Usuário edita subcategoria               | Parte de `manualEditedAt`                         |
+| `manualTextOverride`     | Usuário edita descrição                      | Badge "editado"; `originalDescription` preservada |
+
+Deduplicação por hash garante que reimports nunca sobrescrevam transações existentes.
 
 ---
 
 ## Persistência local (localStorage)
 
-| Chave                    | Conteúdo                                   |
-|-------------------------|--------------------------------------------|
-| `fin_pluggy_connections` | `PluggyLocalConnection[]` com `accounts[]` |
-| `finance_transactions`   | `Transaction[]` (inclui importadas)        |
+| Chave                         | Conteúdo                                                      |
+|------------------------------|---------------------------------------------------------------|
+| `fin_pluggy_connections`      | `PluggyLocalConnection[]` com `accounts[]`                    |
+| `finance_transactions`        | `Transaction[]` (inclui importadas Pluggy)                    |
+| `fin_transactions_page_size`  | Tamanho de página no ledger (100/250/500/1000, padrão: 500)   |
 
 `PluggyLocalAccount` inclui `lastSyncAt?: string` e `lastSyncCount?: number` atualizados a cada sync.
+
+---
+
+## Funcionalidades implementadas (Fase 2)
+
+| Bloco | Funcionalidade | Arquivo(s) |
+|-------|---------------|------------|
+| 1 | Categorização automática na importação (heurísticas + histórico) | `pluggy.service.ts`, `categorize.service.ts` |
+| 2 | Proteção de edições manuais contra reimport | `transactions.service.ts`, `types/index.ts` |
+| 3 | Ledger agrupado por dia com header de data | `Transactions.tsx` |
+| 4 | Edição inline de categoria (clique na célula) | `Transactions.tsx` |
+| 5 | Funil de Clareza contabiliza transações Pluggy | `pluggy.service.ts` (categorização automática) |
+| 6 | Sync inicia direto ao clicar na conta (sem etapas extras) | `PluggyPage.tsx` |
+| 7 | IA local de alta confiança + exportação para clipboard | `Review.tsx`, `categorize.service.ts` |
+| 8 | Badge com nome da conta / logo da instituição no ledger | `Transactions.tsx`, `pluggy.service.ts` |
+| 9 | Paginação configurável (100/250/500/1000) via Configurações | `Settings.tsx`, `Transactions.tsx` |
+| 10 | Mapeamento de categorias Pluggy para macro-categorias FIN | `pluggy.service.ts` (`PLUGGY_CAT_MAP`) |
+| 11 | Subcategoria exibida em destaque; "sem subcat." quando ausente | `Transactions.tsx` |
+| 12 | Edição inline de descrição (duplo clique); `originalDescription` preservada | `Transactions.tsx`, `transactions.service.ts` |
+| 13 | Tags por lançamento: chips, filtro, add/remove no modal | `Transactions.tsx`, `types/index.ts` |
 
 ---
 
