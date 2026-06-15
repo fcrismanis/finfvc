@@ -9,7 +9,8 @@ import {
   registerConnection,
   fetchPluggyTransactions,
   mapPluggyToTransactions,
-  pluggyCategoryToResult,
+  lookupPluggyCategory,
+  inferCategoryFromText,
   updateConnectionSyncMeta,
   getPeriodDates,
   type ConnInfo,
@@ -20,45 +21,120 @@ import type { Transaction } from '../types'
 
 const IS_DEV = import.meta.env.DEV
 
+interface ReclassExample {
+  description: string
+  before: string
+  after: string
+  source: string
+  confidence: string
+}
+
 interface ReclassPreview {
   total: number
+  fromPluggyCat: number
+  fromInference: number
   willReclassify: number
   willSkip: number
   noMap: number
   byMacro: Record<string, number>
+  examples: ReclassExample[]
   patches: Array<{ id: string; patch: Partial<Transaction> }>
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  id:        'Pluggy categoryId',
+  name:      'Pluggy category',
+  inference: 'Inferência por texto',
+}
+
+const CONFIDENCE_LABEL: Record<string, string> = {
+  high:   'alta',
+  medium: 'média',
+  low:    'baixa',
 }
 
 function buildReclassPreview(pluggyTxs: Transaction[]): ReclassPreview {
   const patches: ReclassPreview['patches'] = []
   const byMacro: Record<string, number> = {}
+  const examples: ReclassExample[] = []
   let noMap = 0
   let willSkip = 0
+  let fromPluggyCat = 0
+  let fromInference = 0
+  const now = new Date().toISOString()
 
   for (const tx of pluggyTxs) {
+    // Protege ajustes manuais
     if (tx.manualCategoryOverride || tx.manualSubCategoryOverride || (tx.manualEditedAt && tx.macroCategoryId)) {
       willSkip++
       continue
     }
-    const result = pluggyCategoryToResult(tx.pluggyCategoryId ?? null, tx.pluggyCategory ?? null)
+    // Só reclassifica sem categoria ou marcado "a revisar"
+    if (tx.macroCategoryId && !tx.needsReview) continue
+
+    // 1) mapa Pluggy (categoryId → category name)
+    let result = lookupPluggyCategory(tx.pluggyCategoryId ?? null, tx.pluggyCategory ?? null)
+    // 2) fallback: inferência por texto (descrição, contraparte, operação)
+    if (!result) {
+      const descParts = [tx.description, tx.originalDescription, tx.pluggyOperationType, tx.pluggyPaymentMethod]
+        .filter(Boolean).join(' ')
+      result = inferCategoryFromText(descParts, tx.pluggyReceiverName ?? null, tx.pluggyPayerName ?? null)
+    }
     if (!result) { noMap++; continue }
+
+    if (result.source === 'inference') fromInference++
+    else fromPluggyCat++
+
     byMacro[result.macroCategoryId] = (byMacro[result.macroCategoryId] ?? 0) + 1
+
+    const suggestionSource: Transaction['categorySuggestionSource'] =
+      result.source === 'id' ? 'pluggy_id' : result.source === 'name' ? 'pluggy_name' : 'text_inference'
+
     patches.push({
       id: tx.id,
       patch: {
-        macroCategoryId:           result.macroCategoryId,
-        classificationType:        result.classificationType,
+        macroCategoryId:            result.macroCategoryId,
+        subCategoryId:              result.subCategoryId,
+        subCategoryNameSuggested:   result.subCategoryNameSuggested,
+        classificationType:         result.classificationType,
         includeInOperationalResult: result.includeInOperationalResult ?? true,
-        includeInBudget:           result.includeInBudget ?? true,
-        includeInCashflow:         result.includeInCashflow ?? true,
-        isInternalTransfer:        result.isInternalTransfer ?? false,
-        needsReview: false,
-        updatedAt: new Date().toISOString(),
+        includeInBudget:            result.includeInBudget ?? true,
+        includeInCashflow:          result.includeInCashflow ?? true,
+        isInternalTransfer:         result.isInternalTransfer ?? false,
+        pluggyCategoryMapped:       result.source !== 'inference',
+        categoryConfidence:         result.confidence,
+        categorySuggestionSource:   suggestionSource,
+        needsReview:                result.confidence !== 'high',
+        updatedAt: now,
       },
     })
+
+    if (examples.length < 5) {
+      const beforeMacro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+      const afterMacro = MACRO_CATEGORIES.find(m => m.id === result.macroCategoryId)
+      examples.push({
+        description: tx.description,
+        before: beforeMacro?.name ?? 'A classificar',
+        after: result.subCategoryNameSuggested
+          ? `${afterMacro?.name ?? result.macroCategoryId} · ${result.subCategoryNameSuggested}`
+          : (afterMacro?.name ?? result.macroCategoryId),
+        source: SOURCE_LABEL[result.source] ?? result.source,
+        confidence: CONFIDENCE_LABEL[result.confidence] ?? result.confidence,
+      })
+    }
   }
 
-  return { total: pluggyTxs.length, willReclassify: patches.length, willSkip, noMap, byMacro, patches }
+  return {
+    total: pluggyTxs.length,
+    fromPluggyCat,
+    fromInference,
+    willReclassify: patches.length,
+    willSkip,
+    noMap,
+    byMacro,
+    examples,
+    patches,
+  }
 }
 
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
@@ -189,7 +265,7 @@ export function PluggyPage() {
 
   function handleReclassPreview() {
     const pluggyTxs = transactions.filter(
-      t => (t.source === 'pluggy' || t.origin === 'import_api') && (t.pluggyCategory || t.pluggyCategoryId)
+      t => t.source === 'pluggy' || t.origin === 'import_api'
     )
     setReclassPreview(buildReclassPreview(pluggyTxs))
   }
@@ -423,12 +499,12 @@ export function PluggyPage() {
         )}
 
         {/* Reclassify imported */}
-        {transactions.some(t => (t.source === 'pluggy' || t.origin === 'import_api') && (t.pluggyCategory || t.pluggyCategoryId)) && (
+        {transactions.some(t => t.source === 'pluggy' || t.origin === 'import_api') && (
           <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
               <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>Lançamentos Pluggy já importados</p>
               <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
-                Aplica o mapeamento de categorias atualizado nos lançamentos importados sem categoria manual.
+                Aplica o mapeamento de categorias atualizado (Pluggy + inferência por texto) nos importados sem categoria manual.
               </p>
             </div>
             <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleReclassPreview}>
@@ -479,16 +555,19 @@ function ReclassModal({ preview, running, onConfirm, onClose }: {
 }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => !running && e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 480, boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
           <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Reclassificar lançamentos Pluggy</p>
-          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>Aplica mapeamento atualizado. Não sobrescreve categorias manuais.</p>
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>Aplica mapa Pluggy + inferência por texto. Não sobrescreve categorias manuais.</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
           {([
-            ['Total Pluggy', String(preview.total), 'var(--ink-2)'],
-            ['Serão cat.', String(preview.willReclassify), 'var(--pos)'],
+            ['Analisados', String(preview.total), 'var(--ink-2)'],
+            ['Via Pluggy', String(preview.fromPluggyCat), 'var(--pos)'],
+            ['Via texto', String(preview.fromInference), 'var(--accent)'],
+            ['Ignor. manual', String(preview.willSkip), 'var(--faint)'],
             ['Sem mapa', String(preview.noMap), 'var(--warn)'],
+            ['Total a aplicar', String(preview.willReclassify), 'var(--pos)'],
           ] as [string,string,string][]).map(([l,v,c]) => (
             <div key={l} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
               <p style={{ fontSize: 18, fontWeight: 800, color: c, fontVariantNumeric: 'tabular-nums' }}>{v}</p>
@@ -496,13 +575,10 @@ function ReclassModal({ preview, running, onConfirm, onClose }: {
             </div>
           ))}
         </div>
-        {preview.willSkip > 0 && (
-          <p style={{ fontSize: 11.5, color: 'var(--faint)' }}>{preview.willSkip} com categoria manual — não serão alterados.</p>
-        )}
         {Object.keys(preview.byMacro).length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Distribuição</p>
-            {Object.entries(preview.byMacro).map(([macroId, count]) => {
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Distribuição por macro</p>
+            {Object.entries(preview.byMacro).sort((a, b) => b[1] - a[1]).map(([macroId, count]) => {
               const macro = MACRO_CATEGORIES.find(m => m.id === macroId)
               return (
                 <div key={macroId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-2)' }}>
@@ -511,6 +587,24 @@ function ReclassModal({ preview, running, onConfirm, onClose }: {
                 </div>
               )
             })}
+          </div>
+        )}
+        {preview.examples.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Exemplos (antes → depois)</p>
+            {preview.examples.map((ex, i) => (
+              <div key={i} style={{ padding: '7px 10px', borderRadius: 7, background: 'var(--well)', border: '1px solid var(--line)' }}>
+                <p style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.description}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, fontSize: 11, color: 'var(--ink-2)', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--faint)' }}>{ex.before}</span>
+                  <span style={{ color: 'var(--faint)' }}>→</span>
+                  <span style={{ fontWeight: 700 }}>{ex.after}</span>
+                  <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 3, background: 'var(--card-bg)', border: '1px solid var(--line)', color: 'var(--faint)' }}>
+                    {ex.source} · conf. {ex.confidence}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>

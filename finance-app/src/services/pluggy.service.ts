@@ -306,6 +306,7 @@ export function mapPluggyToTransactions(
         categoryId: suggestion.categoryId || undefined,
         subCategoryId: suggestion.subCategoryId,
         classificationType: suggestion.classificationType,
+        categorySuggestionSource: 'history',
         needsReview: suggestion.confidence !== 'high',
       }
     }
@@ -325,6 +326,7 @@ export function mapPluggyToTransactions(
         isInternalTransfer:         catResult.isInternalTransfer ?? false,
         pluggyCategoryMapped:       true,
         categoryConfidence:         catResult.confidence,
+        categorySuggestionSource:   catResult.source === 'id' ? 'pluggy_id' : 'pluggy_name',
         needsReview:                catResult.confidence !== 'high',
       }
     }
@@ -345,8 +347,8 @@ export function mapPluggyToTransactions(
         includeInOperationalResult: inferred.includeInOperationalResult ?? true,
         includeInBudget:            inferred.includeInBudget ?? true,
         includeInCashflow:          inferred.includeInCashflow ?? true,
-        isInternalTransfer:         inferred.isInternalTransfer ?? false,
         categoryConfidence:         'low',
+        categorySuggestionSource:   'text_inference',
         needsReview:                true,
       }
     }
