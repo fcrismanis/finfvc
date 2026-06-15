@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "finance-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "npx vite --port ${PORT:-5175}"],
+      "autoPort": true,
+      "cwd": "/Users/fcrismanis/FINFVC/finance-app"
     },
     {
       "name": "finance-supabase",
