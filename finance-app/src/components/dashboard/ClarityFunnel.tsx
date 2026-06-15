@@ -7,6 +7,7 @@ interface Props {
   isPartial?: boolean
   partialDay?: number
   partialTotal?: number
+  onStepClick?: (step: FunnelStep) => void
 }
 
 const ENTRY_GREEN  = '#1E6F49'
@@ -30,7 +31,7 @@ function compactBRL(v: number): string {
   return formatBRL(abs)
 }
 
-export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTotal }: Props) {
+export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTotal, onStepClick }: Props) {
   const stepsWithData = steps.filter(s => s.hasData)
   const finalBalance = stepsWithData.length > 0
     ? stepsWithData[stepsWithData.length - 1].runningBalance
@@ -51,7 +52,7 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
     )
   }
 
-  type Col = { key: string; label: string; topLabel: string; color: string; top: number; height: number; isCritical?: boolean }
+  type Col = { key: string; label: string; topLabel: string; color: string; top: number; height: number; isCritical?: boolean; step?: FunnelStep }
   const H = 260
   const scale = income > 0 ? H / income : 0
 
@@ -77,6 +78,7 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
       top,
       height,
       isCritical: s.isCritical,
+      step: s,
     })
   })
 
@@ -144,9 +146,15 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
           {cols.map((c, i) => {
             const next = cols[i + 1]
             const showConnector = !!next && c.key !== 'entry'
+            const clickable = !!c.step && !!onStepClick
             return (
               <div key={c.key} style={{ flex: 1, position: 'relative' }}>
                 <div
+                  role={clickable ? 'button' : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  aria-label={clickable ? `Ver lançamentos de ${c.label}` : undefined}
+                  onClick={clickable ? () => onStepClick!(c.step!) : undefined}
+                  onKeyDown={clickable ? (e) => e.key === 'Enter' && onStepClick!(c.step!) : undefined}
                   style={{
                     position: 'absolute',
                     left: '11%',
@@ -155,8 +163,12 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
                     height: c.height,
                     background: c.color,
                     borderRadius: 9,
-                    transition: 'top .4s ease, height .4s ease',
+                    transition: 'top .4s ease, height .4s ease, opacity .15s',
+                    cursor: clickable ? 'pointer' : 'default',
+                    outline: 'none',
                   }}
+                  onMouseEnter={clickable ? e => { (e.currentTarget as HTMLElement).style.opacity = '0.8' } : undefined}
+                  onMouseLeave={clickable ? e => { (e.currentTarget as HTMLElement).style.opacity = '1' } : undefined}
                 />
                 {showConnector && (
                   <div style={{
@@ -208,6 +220,7 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
             color={stepColor(idx, s.isCritical)}
             running={s.runningBalance}
             critical={s.isCritical}
+            onClick={onStepClick ? () => onStepClick(s) : undefined}
           />
         ))}
         <FunnelRow label="Saldo" amount={finalBalance} color={SALDO_GREEN} saldo />
@@ -216,13 +229,20 @@ export function ClarityFunnel({ income, steps, isPartial, partialDay, partialTot
   )
 }
 
-function FunnelRow({ label, amount, color, running, income, saldo, critical }: {
+function FunnelRow({ label, amount, color, running, income, saldo, critical, onClick }: {
   label: string; amount: number; color: string; running?: number;
-  income?: boolean; saldo?: boolean; critical?: boolean
+  income?: boolean; saldo?: boolean; critical?: boolean; onClick?: () => void
 }) {
   const bg = income ? 'var(--pos-soft)' : saldo ? 'var(--pos-soft)' : critical ? 'var(--crit-soft)' : 'var(--well)'
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 14px', borderRadius: 11, background: bg }}>
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, padding: '11px 14px', borderRadius: 11, background: bg,
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
         <span style={{ fontSize: 13, fontWeight: income || saldo ? 700 : 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>

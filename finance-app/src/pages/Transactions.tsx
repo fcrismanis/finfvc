@@ -1,14 +1,17 @@
-import { useState, useMemo } from 'react'
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, X } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth } from '../utils/date'
 import type { Transaction, ClassificationType, SortField, SortDir } from '../types'
+import type { NavFilter } from '../App'
 
 interface Props {
   selectedMonth: string
   onNavigate: (route: string) => void
+  navFilter?: NavFilter | null
+  onClearFilter?: () => void
 }
 
 const PAGE_SIZE = 50
@@ -30,7 +33,7 @@ function clsColor(cls: ClassificationType): string {
   return 'var(--ink-2)'
 }
 
-export function Transactions({ selectedMonth, onNavigate }: Props) {
+export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
   const { transactions, isDemo, updateTransaction } = useData()
 
   const [search, setSearch] = useState('')
@@ -42,8 +45,13 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(0)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editPatch, setEditPatch] = useState<Partial<Transaction>>({})
+  const [modalTx, setModalTx] = useState<Transaction | null>(null)
+  const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
+
+  // When navFilter arrives (e.g. funnel drilldown), reset page
+  useEffect(() => {
+    setPage(0)
+  }, [navFilter])
 
   const allMonths = useMemo(() => {
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
@@ -57,6 +65,10 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
     if (filterCls) result = result.filter(t => t.classificationType === filterCls)
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
+    if (navFilter?.macroCategoryIds?.length) {
+      const ids = new Set(navFilter.macroCategoryIds)
+      result = result.filter(t => t.macroCategoryId != null && ids.has(t.macroCategoryId))
+    }
     if (search.trim()) {
       const q = search.trim().toUpperCase()
       result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
@@ -69,7 +81,7 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, filterMonth, filterType, filterCls, filterMacro, filterStatus, search, sortField, sortDir])
+  }, [transactions, filterMonth, filterType, filterCls, filterMacro, filterStatus, navFilter, search, sortField, sortDir])
 
   const summary = useMemo(() => ({
     total: filtered.length,
@@ -95,18 +107,26 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
       : <ChevronDown size={11} color="var(--ink)" />
   }
 
-  function startEdit(tx: Transaction) {
-    setEditingId(tx.id)
-    setEditPatch({ classificationType: tx.classificationType, macroCategoryId: tx.macroCategoryId, notes: tx.notes })
-  }
-
-  function saveEdit(id: string) {
-    updateTransaction(id, editPatch)
-    setEditingId(null)
-  }
-
   const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
   const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterCls)
+
+  function openModal(tx: Transaction) {
+    setModalTx(tx)
+    setModalPatch({
+      description: tx.description,
+      status: tx.status,
+      classificationType: tx.classificationType,
+      macroCategoryId: tx.macroCategoryId,
+      notes: tx.notes ?? '',
+      competenceDate: tx.competenceDate,
+    })
+  }
+
+  function saveModal() {
+    if (!modalTx) return
+    updateTransaction(modalTx.id, modalPatch)
+    setModalTx(null)
+  }
 
   return (
     <main className="page-shell">
@@ -135,6 +155,27 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
             </div>
           )}
         </div>
+
+        {/* ── Nav filter chip ── */}
+        {navFilter?.filterLabel && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', borderRadius: 8,
+            background: 'var(--accent-soft)', border: '1px solid var(--line)',
+            fontSize: 12.5, color: 'var(--ink)', fontWeight: 600,
+            alignSelf: 'flex-start',
+          }}>
+            <span style={{ color: 'var(--faint)', fontWeight: 400 }}>Filtrado por:</span>
+            {navFilter.filterLabel}
+            <button
+              onClick={onClearFilter}
+              aria-label="Limpar filtro"
+              style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--faint)' }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
 
         {/* ── KPI cards ── */}
         <div className="stats-grid-4">
@@ -248,7 +289,6 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
               <tbody>
                 {pageItems.map(tx => {
                   const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
-                  const isEditing = editingId === tx.id
                   return (
                     <tr
                       key={tx.id}
@@ -285,19 +325,9 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
                         )}
                       </td>
                       <td className="table-td">
-                        {isEditing ? (
-                          <select
-                            value={editPatch.classificationType as string}
-                            onChange={e => setEditPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
-                            style={{ fontSize: 11, border: '1px solid var(--line)', borderRadius: 6, padding: '3px 6px', background: 'var(--card-bg)', color: 'var(--ink)', outline: 'none', fontFamily: 'var(--ui)' }}
-                          >
-                            {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                          </select>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-                            {CLS_LABELS[tx.classificationType] ?? tx.classificationType}
-                          </span>
-                        )}
+                        <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+                          {CLS_LABELS[tx.classificationType] ?? tx.classificationType}
+                        </span>
                       </td>
                       <td className="table-td">
                         {tx.status === 'paid' && (
@@ -311,19 +341,12 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
                         )}
                       </td>
                       <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                        {isEditing ? (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button className="btn btn-primary btn-sm" onClick={() => saveEdit(tx.id)}>Salvar</button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>✕</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startEdit(tx)}
-                            style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
-                          >
-                            Editar
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openModal(tx)}
+                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                        >
+                          Editar
+                        </button>
                       </td>
                     </tr>
                   )
@@ -373,7 +396,123 @@ export function Transactions({ selectedMonth, onNavigate }: Props) {
         )}
 
       </div>
+
+      {/* ── Edit modal ── */}
+      {modalTx && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(16,15,10,.45)', backdropFilter: 'blur(2px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={e => e.target === e.currentTarget && setModalTx(null)}
+        >
+          <div style={{
+            background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px',
+            width: '100%', maxWidth: 480, boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+            display: 'flex', flexDirection: 'column', gap: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>Editar lançamento</h2>
+              <button onClick={() => setModalTx(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <ModalField label="Descrição">
+                <input
+                  value={modalPatch.description ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, description: e.target.value }))}
+                  className="login-field"
+                  style={{ fontSize: 13 }}
+                />
+              </ModalField>
+
+              <ModalField label="Data de competência">
+                <input
+                  type="date"
+                  value={modalPatch.competenceDate ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, competenceDate: e.target.value }))}
+                  className="login-field"
+                  style={{ fontSize: 13 }}
+                />
+              </ModalField>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <ModalField label="Classificação" style={{ flex: 1 }}>
+                  <select
+                    value={modalPatch.classificationType as string ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
+                    className="ledger-select"
+                    style={{ width: '100%', fontSize: 12 }}
+                  >
+                    {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </ModalField>
+
+                <ModalField label="Status" style={{ flex: 1 }}>
+                  <select
+                    value={modalPatch.status ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, status: e.target.value as Transaction['status'] }))}
+                    className="ledger-select"
+                    style={{ width: '100%', fontSize: 12 }}
+                  >
+                    <option value="paid">Pago</option>
+                    <option value="pending">Pendente</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </ModalField>
+              </div>
+
+              <ModalField label="Categoria">
+                <select
+                  value={modalPatch.macroCategoryId ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined }))}
+                  className="ledger-select"
+                  style={{ width: '100%', fontSize: 12 }}
+                >
+                  <option value="">Sem categoria</option>
+                  {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </ModalField>
+
+              <ModalField label="Observações">
+                <textarea
+                  value={modalPatch.notes ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Notas opcionais…"
+                  style={{
+                    width: '100%', fontSize: 12.5, lineHeight: 1.5,
+                    border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px',
+                    resize: 'none', outline: 'none', background: 'var(--paper)',
+                    fontFamily: 'var(--ui)', boxSizing: 'border-box', color: 'var(--ink)',
+                  } as React.CSSProperties}
+                />
+              </ModalField>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+              <button className="btn btn-primary" onClick={saveModal}>Salvar alterações</button>
+              <button className="btn btn-secondary" onClick={() => setModalTx(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
+  )
+}
+
+function ModalField({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, ...style }}>
+      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+        {label}
+      </label>
+      {children}
+    </div>
   )
 }
 

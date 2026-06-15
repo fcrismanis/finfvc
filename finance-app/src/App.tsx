@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
+
+export interface NavFilter {
+  macroCategoryIds?: string[]
+  filterLabel?: string
+  smartFilter?: string
+}
 import { MigrationPage } from './pages/MigrationPage'
 import { Menu } from 'lucide-react'
 import './index.css'
@@ -84,6 +90,7 @@ function AppShell() {
   const [activeRoute, setActiveRoute] = useState('/')
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [navFilter, setNavFilter] = useState<NavFilter | null>(null)
   const { loading, error, reload, transactions } = useData()
   const didInitMonth = useRef(false)
 
@@ -101,16 +108,17 @@ function AppShell() {
 
   const placeholder = PLACEHOLDER_PAGES[activeRoute]
 
-  function navigate(route: string) {
+  function navigate(route: string, filter?: NavFilter) {
     setActiveRoute(route)
-    setSidebarOpen(false) // close mobile sidebar on nav
+    setNavFilter(filter ?? null)
+    setSidebarOpen(false)
   }
 
   function renderPage() {
     switch (activeRoute) {
       case '/':            return <Dashboard selectedMonth={selectedMonth} onNavigate={navigate} onMonthChange={setSelectedMonth} />
       case '/conectar':    return <Import onNavigate={navigate} />
-      case '/lancamentos': return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/lancamentos': return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
       case '/orcamento':   return <Budget selectedMonth={selectedMonth} />
       case '/revisao':     return <Review onNavigate={navigate} />
       case '/fechamento':  return <Closing selectedMonth={selectedMonth} />

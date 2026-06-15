@@ -4,10 +4,12 @@ import { ClarityFunnel } from '../components/dashboard/ClarityFunnel'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import type { BudgetComparison, AlertItem, TopTransaction } from '../types'
+import type { FunnelStep } from '../utils/funnelSteps'
+import type { NavFilter } from '../App'
 
 interface Props {
   selectedMonth: string
-  onNavigate: (route: string) => void
+  onNavigate: (route: string, filter?: NavFilter) => void
   onMonthChange: (m: string) => void
 }
 
@@ -115,6 +117,10 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
             isPartial={isCurrent}
             partialDay={day}
             partialTotal={totalDays}
+            onStepClick={(step: FunnelStep) => onNavigate('/lancamentos', {
+              macroCategoryIds: step.macroIds,
+              filterLabel: step.label,
+            })}
           />
           <PlanejadoCard data={budgetComparison} isPartial={isCurrent} onNavigate={onNavigate} />
         </div>
