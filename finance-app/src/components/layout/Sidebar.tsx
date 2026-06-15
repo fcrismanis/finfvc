@@ -1,7 +1,11 @@
 import {
-  LayoutDashboard, List, Target, Lock,
-  Link2, Bot, Settings, ClipboardCheck, X,
+  LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
+  Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
+  Tag, Tags, Upload, Link2, Bot, Settings,
+  Archive, AlertTriangle, LogOut, X,
 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { DATA_PROVIDER } from '../../config/env'
 
 interface SidebarProps {
   activeRoute: string
@@ -9,24 +13,63 @@ interface SidebarProps {
   onClose?: () => void
 }
 
-const primary = [
-  { route: '/', label: 'Visão geral', icon: LayoutDashboard },
-  { route: '/lancamentos', label: 'Lançamentos', icon: List },
-  { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
-  { route: '/orcamento', label: 'Orçamento', icon: Target },
-  { route: '/fechamento', label: 'Fechamento', icon: Lock },
-  { route: '/conectar', label: 'Importação', icon: Link2 },
+type NavEntry = {
+  route: string
+  label: string
+  icon: React.ComponentType<{ size?: number; color?: string }>
+  phase2?: true
+}
+
+const PRINCIPAL: NavEntry[] = [
+  { route: '/', label: 'Visão Geral', icon: LayoutDashboard },
+  { route: '/clareza', label: 'Clareza Financeira', icon: BarChart2, phase2: true },
 ]
 
-const tools = [
+const GESTAO: NavEntry[] = [
+  { route: '/lancamentos', label: 'Lançamentos', icon: List },
+  { route: '/orcamento', label: 'Orçamento', icon: Target },
+  { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
+  { route: '/fechamento', label: 'Fechamento', icon: Lock },
+  { route: '/futuro', label: 'Futuro', icon: Calendar, phase2: true },
+  { route: '/investimentos', label: 'Investimentos', icon: TrendingUp, phase2: true },
+  { route: '/patrimonio', label: 'Patrimônio', icon: Home, phase2: true },
+  { route: '/dividas', label: 'Dívidas', icon: CreditCard, phase2: true },
+  { route: '/lembretes', label: 'Lembretes', icon: Bell, phase2: true },
+]
+
+const CADASTROS: NavEntry[] = [
+  { route: '/contas', label: 'Contas', icon: Landmark },
+  { route: '/cartoes', label: 'Cartões', icon: CreditCard },
+  { route: '/categorias', label: 'Categorias', icon: Tag },
+  { route: '/subcategorias', label: 'Subcategorias', icon: Tags },
+]
+
+const INTEGRACOES: NavEntry[] = [
+  { route: '/conectar', label: 'Importação', icon: Upload },
+  { route: '/pluggy', label: 'Pluggy', icon: Link2 },
   { route: '/consultor', label: 'Consultor IA', icon: Bot },
+]
+
+const SISTEMA: NavEntry[] = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
+  { route: '/backup', label: 'Backup', icon: Archive },
+  { route: '/zona-perigo', label: 'Zona de Perigo', icon: AlertTriangle },
+]
+
+const GROUPS = [
+  { label: 'Principal', items: PRINCIPAL },
+  { label: 'Gestão', items: GESTAO },
+  { label: 'Cadastros', items: CADASTROS },
+  { label: 'Integrações', items: INTEGRACOES },
+  { label: 'Sistema', items: SISTEMA },
 ]
 
 const DARK = '#211F1B'
 const DARK_BORDER = 'rgba(255,255,255,.08)'
 
 export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
+  const { signOut } = useAuth()
+
   return (
     <aside
       className="flex flex-col h-full"
@@ -63,29 +106,39 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-[14px] overflow-y-auto">
-        {primary.map(item => (
-          <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
+      <nav className="flex-1 py-2 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        {GROUPS.map(group => (
+          <div key={group.label} style={{ marginBottom: 4 }}>
+            <div style={{
+              fontFamily: "'Geist Mono', ui-monospace, monospace",
+              fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase',
+              color: 'rgba(255,255,255,.32)', padding: '8px 20px 3px',
+            }}>
+              {group.label}
+            </div>
+            {group.items.map(item => (
+              <NavItem
+                key={item.route}
+                {...item}
+                active={activeRoute === item.route}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
         ))}
 
-        {/* Separador FERRAMENTAS */}
-        <div
-          style={{
-            fontFamily: "'Geist Mono', ui-monospace, monospace",
-            fontSize: 9,
-            letterSpacing: '.16em',
-            textTransform: 'uppercase' as const,
-            color: 'rgba(255,255,255,.32)',
-            padding: '6px 20px',
-            marginTop: 8,
-          }}
-        >
-          Ferramentas
-        </div>
-
-        {tools.map(item => (
-          <NavItem key={item.route} {...item} active={activeRoute === item.route} onNavigate={onNavigate} />
-        ))}
+        {DATA_PROVIDER === 'supabase' && (
+          <div style={{ marginTop: 4 }}>
+            <button
+              onClick={signOut}
+              className="nav-item"
+              style={{ opacity: 0.65 }}
+            >
+              <LogOut size={16} />
+              Sair
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* User */}
@@ -108,17 +161,25 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   )
 }
 
-function NavItem({ route, label, icon: Icon, active, onNavigate }: {
-  route: string
-  label: string
-  icon: React.ComponentType<{ size?: number; color?: string }>
+function NavItem({ route, label, icon: Icon, active, phase2, onNavigate }: NavEntry & {
   active: boolean
   onNavigate: (r: string) => void
 }) {
   return (
-    <button onClick={() => onNavigate(route)} className={`nav-item${active ? ' active' : ''}`}>
+    <button
+      onClick={() => onNavigate(route)}
+      className={`nav-item${active ? ' active' : ''}`}
+      style={phase2 ? { opacity: 0.45 } : undefined}
+    >
       <Icon size={16} />
-      {label}
+      <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>
+      {phase2 && (
+        <span style={{
+          fontSize: 8, fontWeight: 700, letterSpacing: '.06em',
+          padding: '1px 4px', borderRadius: 3,
+          background: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.5)',
+        }}>F2</span>
+      )}
     </button>
   )
 }
