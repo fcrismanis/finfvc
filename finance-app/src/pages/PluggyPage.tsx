@@ -12,11 +12,12 @@ import {
   updateConnectionSyncMeta,
   getPeriodDates,
 } from '../services/pluggy.service'
+import { MACRO_CATEGORIES } from '../config/categories'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
-type SyncPhase = 'idle' | 'fetching' | 'preview' | 'importing' | 'done' | 'error'
+type SyncPhase = 'fetching' | 'preview' | 'importing' | 'done' | 'error'
 type PeriodPreset = 'current_month' | 'last_30d' | 'last_90d' | 'custom'
 
 interface SyncSession {
@@ -119,13 +120,21 @@ export function PluggyPage() {
     setConnections(getLocalConnections())
   }
 
-  function openSync(itemId: string, accountId: string, accountName: string) {
-    setSync({ itemId, accountId, accountName, period: 'current_month', customFrom: '', customTo: '', phase: 'idle' })
+  // Start sync and immediately fetch (current_month default)
+  async function startSync(itemId: string, accountId: string, accountName: string, period: PeriodPreset = 'current_month') {
+    const dates = getPeriodDates(period)
+    setSync({ itemId, accountId, accountName, period, customFrom: '', customTo: '', phase: 'fetching' })
+    try {
+      const raw = await fetchPluggyTransactions({ accountId, from: dates.from, to: dates.to })
+      const result = mapPluggyToTransactions(raw, accountId, transactions)
+      setSync(s => s ? { ...s, phase: 'preview', result } : s)
+    } catch (err) {
+      setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
+    }
   }
 
-  async function runFetch() {
+  async function refetch(period: PeriodPreset, customFrom: string, customTo: string) {
     if (!sync) return
-    const { period, customFrom, customTo, accountId } = sync
     let from: string; let to: string
     if (period === 'custom') {
       if (!customFrom || !customTo) return
@@ -134,10 +143,10 @@ export function PluggyPage() {
       const dates = getPeriodDates(period)
       from = dates.from; to = dates.to
     }
-    setSync(s => s ? { ...s, phase: 'fetching', error: undefined, result: undefined } : s)
+    setSync(s => s ? { ...s, period, customFrom, customTo, phase: 'fetching', result: undefined } : s)
     try {
-      const raw = await fetchPluggyTransactions({ accountId, from, to })
-      const result = mapPluggyToTransactions(raw, accountId, transactions)
+      const raw = await fetchPluggyTransactions({ accountId: sync.accountId, from, to })
+      const result = mapPluggyToTransactions(raw, sync.accountId, transactions)
       setSync(s => s ? { ...s, phase: 'preview', result } : s)
     } catch (err) {
       setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
@@ -173,19 +182,13 @@ export function PluggyPage() {
           </div>
         </div>
 
-        {/* Backend status */}
-        {backendStatus === 'checking' && <StatusBanner dot="var(--faint)" text="Verificando configuração do backend…" />}
         {backendStatus === 'not_configured' && (
-          <StatusBanner dot="var(--warn)" title="Backend não configurado">
-            Adicione <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>PLUGGY_CLIENT_ID</code> e{' '}
+          <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--faint)' }}>
+            <strong style={{ color: 'var(--ink-2)' }}>Backend não configurado</strong> — adicione{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>PLUGGY_CLIENT_ID</code> e{' '}
             <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>PLUGGY_CLIENT_SECRET</code> no{' '}
             <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>server/.env</code>.
-          </StatusBanner>
-        )}
-        {backendStatus === 'configured' && connections.length === 0 && (
-          <StatusBanner dot="var(--pos)" color="var(--pos-soft)" border="rgba(30,111,73,.28)">
-            <strong>Backend configurado</strong> — clique em &ldquo;+ Conectar banco&rdquo; para autenticar.
-          </StatusBanner>
+          </div>
         )}
 
         {tokenError && (
@@ -195,7 +198,7 @@ export function PluggyPage() {
         )}
         {registering && (
           <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--well)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--faint)' }}>
-            Salvando conexão e buscando contas na Pluggy…
+            Buscando contas na Pluggy…
           </div>
         )}
 
@@ -216,7 +219,7 @@ export function PluggyPage() {
               onClick={handleConnect}
               style={{ opacity: backendStatus !== 'configured' ? 0.4 : 1 }}
             >
-              {fetchingToken ? 'Obtendo token…' : '+ Conectar banco'}
+              {fetchingToken ? 'Obtendo token…' : '+ Conectar banco/cartão'}
             </button>
           </div>
 
@@ -226,7 +229,7 @@ export function PluggyPage() {
                 <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
               </svg>
               <p style={{ fontSize: 12.5 }}>Nenhuma conexão ativa</p>
-              <p style={{ fontSize: 11.5, marginTop: 4, opacity: 0.7 }}>Clique em &ldquo;+ Conectar banco&rdquo; para adicionar</p>
+              <p style={{ fontSize: 11.5, marginTop: 4, opacity: 0.7 }}>Clique em &ldquo;+ Conectar banco/cartão&rdquo; para adicionar</p>
             </div>
           ) : (
             <div>
@@ -275,7 +278,7 @@ export function PluggyPage() {
                             {acc.lastSyncAt && (
                               <p style={{ fontSize: 10.5, color: 'var(--faint)' }}>
                                 Última sync: {fmtDate(acc.lastSyncAt)}
-                                {acc.lastSyncCount != null && ` · ${acc.lastSyncCount} importados no total`}
+                                {acc.lastSyncCount != null && ` · ${acc.lastSyncCount} importados`}
                               </p>
                             )}
                           </div>
@@ -286,7 +289,11 @@ export function PluggyPage() {
                                 <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Limite: {fmtBRL(acc.limit)}</p>
                               )}
                             </div>
-                            <button onClick={() => openSync(conn.itemId, acc.id, acc.name)} className="btn btn-secondary btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                            <button
+                              onClick={() => startSync(conn.itemId, acc.id, acc.name)}
+                              className="btn btn-primary btn-sm"
+                              style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+                            >
                               Sincronizar
                             </button>
                           </div>
@@ -308,31 +315,6 @@ export function PluggyPage() {
           </div>
         )}
 
-        {/* How it works */}
-        <div className="card" style={{ padding: '18px 22px' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 14 }}>Como funciona</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['1','Clique em "+ Conectar banco"'],['2','Backend gera connect_token via Pluggy (server-side)'],['3','Widget Pluggy abre — autentique com credenciais bancárias'],['4','FIN salva a conexão e contas localmente'],['5','Clique em "Sincronizar" por conta para importar transações'],['6','Revise categorias em Revisão → lançamentos entram no Dashboard']].map(([n, t]) => (
-              <div key={n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12.5, color: 'var(--ink-2)' }}>
-                <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0, color: 'var(--faint)' }}>{n}</span>
-                {t}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--well)', borderRadius: 8, border: '1px solid var(--line)', fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--ink-2)' }}>Segurança:</strong> credenciais bancárias nunca passam pelo FIN. O backend usa apenas o connect_token de curta duração.
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: '16px 22px' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Suporte estimado</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {['Itaú','Bradesco','Santander','BB','Nubank','C6 Bank','BTG','XP','Inter','+ 300 mais'].map(b => (
-              <span key={b} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)' }}>{b}</span>
-            ))}
-          </div>
-        </div>
-
       </div>
 
       {connectToken && (
@@ -342,10 +324,7 @@ export function PluggyPage() {
       {sync && (
         <SyncModal
           sync={sync}
-          onPeriodChange={p => setSync(s => s ? { ...s, period: p, result: undefined } : s)}
-          onCustomFromChange={v => setSync(s => s ? { ...s, customFrom: v } : s)}
-          onCustomToChange={v => setSync(s => s ? { ...s, customTo: v } : s)}
-          onFetch={runFetch}
+          onPeriodChange={(p, from, to) => refetch(p, from ?? '', to ?? '')}
           onImport={runImport}
           onClose={() => setSync(null)}
         />
@@ -355,21 +334,6 @@ export function PluggyPage() {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-
-function StatusBanner({ dot, color, border, title, text, children }: {
-  dot: string; color?: string; border?: string; title?: string; text?: string; children?: React.ReactNode
-}) {
-  return (
-    <div style={{ padding: '14px 18px', borderRadius: 11, background: color ?? 'var(--well)', border: `1px solid ${border ?? 'var(--line)'}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-      <div>
-        {title && <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{title}</p>}
-        {text && <p style={{ fontSize: 13, color: 'var(--faint)' }}>{text}</p>}
-        {children && <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: title ? 2 : 0 }}>{children}</p>}
-      </div>
-    </div>
-  )
-}
 
 function SummaryChip({ label, value }: { label: string; value: string }) {
   return (
@@ -382,71 +346,69 @@ function SummaryChip({ label, value }: { label: string; value: string }) {
 
 interface SyncModalProps {
   sync: SyncSession
-  onPeriodChange: (p: PeriodPreset) => void
-  onCustomFromChange: (v: string) => void
-  onCustomToChange: (v: string) => void
-  onFetch: () => void
+  onPeriodChange: (p: PeriodPreset, from?: string, to?: string) => void
   onImport: () => void
   onClose: () => void
 }
 
-function SyncModal({ sync, onPeriodChange, onCustomFromChange, onCustomToChange, onFetch, onImport, onClose }: SyncModalProps) {
-  const { phase, result, error, period, customFrom, customTo, accountName } = sync
+function SyncModal({ sync, onPeriodChange, onImport, onClose }: SyncModalProps) {
+  const { phase, result, error, period, accountName } = sync
+  const [customFrom, setCustomFrom] = useState(sync.customFrom)
+  const [customTo, setCustomTo] = useState(sync.customTo)
+  const [showPeriod, setShowPeriod] = useState(false)
   const localFmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+  const isWorking = phase === 'fetching' || phase === 'importing'
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,15,10,.45)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,15,10,.45)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => e.target === e.currentTarget && !isWorking && onClose()}>
       <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 520, boxShadow: '0 8px 32px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>Sincronizar transações</h2>
-            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>{accountName}</p>
+            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>{accountName} · {PERIOD_LABELS[period]}</p>
           </div>
-          {phase !== 'importing' && (
+          {!isWorking && (
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 20, lineHeight: 1, fontFamily: 'var(--ui)', padding: 4 }}>×</button>
           )}
         </div>
 
-        {/* Period selector — shown when not actively working */}
-        {(phase === 'idle' || phase === 'error' || phase === 'preview') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Período</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(['current_month','last_30d','last_90d','custom'] as PeriodPreset[]).map(p => (
-                <button key={p} onClick={() => onPeriodChange(p)} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'var(--ui)', fontWeight: period === p ? 700 : 400, background: period === p ? 'var(--accent-soft)' : 'var(--well)', border: `1px solid ${period === p ? 'var(--accent)' : 'var(--line)'}`, color: period === p ? 'var(--accent)' : 'var(--ink-2)' }}>
-                  {PERIOD_LABELS[p]}
-                </button>
-              ))}
-            </div>
-            {period === 'custom' && (
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input type="date" value={customFrom} onChange={e => onCustomFromChange(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
-                <span style={{ fontSize: 12, color: 'var(--faint)' }}>até</span>
-                <input type="date" value={customTo} onChange={e => onCustomToChange(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
-              </div>
-            )}
+        {/* Fetching */}
+        {phase === 'fetching' && (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--faint)' }}>Buscando transações na Pluggy…</p>
           </div>
         )}
 
-        {phase === 'fetching' && <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--faint)', fontSize: 13 }}>Buscando transações na Pluggy…</div>}
-        {phase === 'importing' && <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--faint)', fontSize: 13 }}>Importando lançamentos…</div>}
+        {/* Importing */}
+        {phase === 'importing' && (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--faint)' }}>Importando lançamentos…</p>
+          </div>
+        )}
 
+        {/* Error */}
         {phase === 'error' && error && (
           <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)', fontSize: 12.5, color: 'var(--crit)' }}>{error}</div>
         )}
 
+        {/* Preview */}
         {phase === 'preview' && result && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Preview</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {([['Novas', String(result.newTxs.length), 'var(--pos)'],['Duplicadas', String(result.duplicateCount), 'var(--faint)'],['Total Pluggy', String(result.newTxs.length + result.duplicateCount), 'var(--ink-2)']] as [string,string,string][]).map(([label, val, color]) => (
+              {([
+                ['Novas', String(result.newTxs.length), 'var(--pos)'],
+                ['Duplicadas', String(result.duplicateCount), 'var(--faint)'],
+                ['Auto-cat.', String(result.autoCategorizedCount), 'var(--ink-2)'],
+              ] as [string,string,string][]).map(([label, val, color]) => (
                 <div key={label} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
                   <p style={{ fontSize: 18, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</p>
                   <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{label}</p>
                 </div>
               ))}
             </div>
+
             {result.newTxs.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)30' }}>
@@ -459,31 +421,91 @@ function SyncModal({ sync, onPeriodChange, onCustomFromChange, onCustomToChange,
                 </div>
               </div>
             )}
-            {result.newTxs.length === 0 && <p style={{ fontSize: 12.5, color: 'var(--faint)', textAlign: 'center', padding: '8px 0' }}>Nenhuma transação nova — todas já importadas ou período sem dados.</p>}
+
+            {result.newTxs.length === 0 && (
+              <p style={{ fontSize: 12.5, color: 'var(--faint)', textAlign: 'center', padding: '8px 0' }}>
+                Nenhuma transação nova — todas já importadas ou período sem dados.
+              </p>
+            )}
+
             {result.newTxs.length > 0 && (
-              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
-                {result.newTxs.slice(0, 20).map(tx => (
-                  <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
-                      <p style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</p>
-                      <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>{tx.transactionDate} · {tx.status === 'paid' ? 'Pago' : 'Pendente'}</p>
+              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                {result.newTxs.slice(0, 25).map(tx => {
+                  const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                  return (
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{tx.transactionDate}</span>
+                          {macro && (
+                            <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 3, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12` }}>
+                              {macro.name}
+                            </span>
+                          )}
+                          {tx.needsReview && !macro && (
+                            <span style={{ fontSize: 9.5, color: 'var(--warn)', fontWeight: 600 }}>revisar</span>
+                          )}
+                        </div>
+                      </div>
+                      <span style={{ fontWeight: 700, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                        {tx.type === 'income' ? '+' : '−'}{localFmtBRL(tx.amount)}
+                      </span>
                     </div>
-                    <span style={{ fontWeight: 700, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                      {tx.type === 'income' ? '+' : '−'}{localFmtBRL(tx.amount)}
-                    </span>
+                  )
+                })}
+                {result.newTxs.length > 25 && (
+                  <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', padding: '8px 0' }}>+{result.newTxs.length - 25} mais</p>
+                )}
+              </div>
+            )}
+
+            {/* Period change option */}
+            {!showPeriod ? (
+              <button
+                onClick={() => setShowPeriod(true)}
+                style={{ fontSize: 11, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--ui)', padding: 0 }}
+              >
+                Mudar período (atual: {PERIOD_LABELS[period]})
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(['current_month','last_30d','last_90d','custom'] as PeriodPreset[]).map(p => (
+                    <button key={p} onClick={() => { if (p !== 'custom') { setShowPeriod(false); onPeriodChange(p) } }} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'var(--ui)', fontWeight: period === p ? 700 : 400, background: period === p ? 'var(--accent-soft)' : 'var(--well)', border: `1px solid ${period === p ? 'var(--accent)' : 'var(--line)'}`, color: period === p ? 'var(--accent)' : 'var(--ink-2)' }}>
+                      {PERIOD_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
+                {period === 'custom' && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
+                    <span style={{ fontSize: 12, color: 'var(--faint)' }}>até</span>
+                    <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={!customFrom || !customTo}
+                      onClick={() => { setShowPeriod(false); onPeriodChange('custom', customFrom, customTo) }}
+                    >Buscar</button>
                   </div>
-                ))}
-                {result.newTxs.length > 20 && <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', padding: '8px 0' }}>+{result.newTxs.length - 20} mais</p>}
+                )}
               </div>
             )}
           </div>
         )}
 
+        {/* Done */}
         {phase === 'done' && result && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             <p style={{ fontSize: 22, marginBottom: 8 }}>✓</p>
-            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)' }}>{result.newTxs.length} lançamento{result.newTxs.length !== 1 ? 's' : ''} importado{result.newTxs.length !== 1 ? 's' : ''}</p>
-            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 4 }}>{result.duplicateCount > 0 && `${result.duplicateCount} duplicados ignorados · `}Acesse Revisão para categorizar</p>
+            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)' }}>
+              {result.newTxs.length} lançamento{result.newTxs.length !== 1 ? 's' : ''} importado{result.newTxs.length !== 1 ? 's' : ''}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 4 }}>
+              {result.autoCategorizedCount > 0 && `${result.autoCategorizedCount} categorizados automaticamente · `}
+              {result.needsReviewCount > 0 && `${result.needsReviewCount} aguardando revisão · `}
+              {result.duplicateCount > 0 && `${result.duplicateCount} duplicados ignorados`}
+            </p>
           </div>
         )}
 
@@ -492,15 +514,16 @@ function SyncModal({ sync, onPeriodChange, onCustomFromChange, onCustomToChange,
             <button className="btn btn-primary" onClick={onClose}>Fechar</button>
           ) : phase === 'preview' && result && result.newTxs.length > 0 ? (
             <>
-              <button className="btn btn-primary" onClick={onImport}>Importar {result.newTxs.length} lançamento{result.newTxs.length !== 1 ? 's' : ''}</button>
+              <button className="btn btn-primary" onClick={onImport}>
+                Importar {result.newTxs.length} lançamento{result.newTxs.length !== 1 ? 's' : ''}
+              </button>
               <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             </>
           ) : phase === 'preview' && result && result.newTxs.length === 0 ? (
             <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
-          ) : (phase === 'idle' || phase === 'error') ? (
+          ) : phase === 'error' ? (
             <>
-              <button className="btn btn-primary" onClick={onFetch} disabled={period === 'custom' && (!customFrom || !customTo)}>Buscar transações</button>
-              <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+              <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
             </>
           ) : null}
         </div>
