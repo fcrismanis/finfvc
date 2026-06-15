@@ -6,13 +6,47 @@ import {
   saveLocalConnection,
   removeLocalConnection,
   registerConnection,
+  fetchPluggyTransactions,
+  getPeriodDates,
 } from '../services/pluggy.service'
-import type { PluggyLocalConnection } from '../services/pluggy.service'
+import type { PluggyLocalConnection, PluggyRawTransaction } from '../services/pluggy.service'
+import { useData } from '../context/DataContext'
+import type { Transaction } from '../types'
 
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
 
 const fmtBRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+function mapPluggyToTransaction(raw: PluggyRawTransaction, batchId: string): Transaction {
+  const isExpense = raw.type === 'DEBIT'
+  const dateStr = raw.date.slice(0, 10)
+  const hash = raw.providerCode ?? `${dateStr}|${raw.amount}|${raw.description.slice(0, 40).toUpperCase()}|${raw.accountId}`
+  return {
+    id: `pluggy_${raw.id}`,
+    description: raw.description,
+    originalDescription: raw.description,
+    amount: raw.amount,
+    type: isExpense ? 'expense' : 'income',
+    classificationType: isExpense ? 'operational_expense' : 'operational_income',
+    transactionDate: dateStr,
+    competenceDate: dateStr,
+    status: raw.status === 'PENDING' ? 'pending' : 'paid',
+    accountId: raw.accountId,
+    paymentMethod: raw.accountType === 'CREDIT' ? 'card' : 'account',
+    isRecurring: false,
+    includeInOperationalResult: true,
+    includeInCashflow: true,
+    includeInBudget: isExpense,
+    isInternalTransfer: false,
+    isAdjustment: false,
+    importHash: hash,
+    importBatchId: batchId,
+    origin: 'import_api',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+}
 
 const STATUS_LABEL: Record<string, string> = {
   UPDATED:           'Atualizado',
@@ -30,13 +64,24 @@ const STATUS_COLOR: Record<string, string> = {
   OUTDATED:          'var(--crit)',
 }
 
+interface SyncPreview {
+  itemId: string
+  raw: PluggyRawTransaction[]
+  mapped: Transaction[]
+}
+
 export function PluggyPage() {
+  const { appendTransactions } = useData()
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
   const [connectToken, setConnectToken] = useState<string | null>(null)
   const [fetchingToken, setFetchingToken] = useState(false)
   const [registering, setRegistering] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
+  const [syncingItemId, setSyncingItemId] = useState<string | null>(null)
+  const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ itemId: string; count: number } | null>(null)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
@@ -87,6 +132,36 @@ export function PluggyPage() {
     if (!confirm('Remover esta conexão do FIN? Isso não desconecta o banco na Pluggy.')) return
     removeLocalConnection(itemId)
     setConnections(getLocalConnections())
+  }
+
+  async function handleSyncTransactions(itemId: string) {
+    setSyncingItemId(itemId)
+    setTokenError(null)
+    try {
+      const { from, to } = getPeriodDates('last_90d')
+    const raw = await fetchPluggyTransactions({ itemId, from, to })
+      const batchId = `pluggy_${itemId}_${Date.now()}`
+      const mapped = raw.map(r => mapPluggyToTransaction(r, batchId))
+      setSyncPreview({ itemId, raw, mapped })
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : 'Erro ao buscar transações')
+    } finally {
+      setSyncingItemId(null)
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!syncPreview) return
+    setImporting(true)
+    try {
+      await appendTransactions(syncPreview.mapped)
+      setImportResult({ itemId: syncPreview.itemId, count: syncPreview.mapped.length })
+      setSyncPreview(null)
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : 'Erro ao importar transações')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const bankAccounts = connections.flatMap(c => c.accounts.filter(a => a.type === 'BANK'))
@@ -247,11 +322,21 @@ export function PluggyPage() {
                     </div>
                   )}
 
-                  {(conn.status === 'UPDATING' || conn.accounts.length === 0) && (
-                    <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 8, fontWeight: 600 }}>
-                      Conexão criada. Sincronização de transações será a próxima etapa.
-                    </p>
-                  )}
+                  {/* Sync transactions */}
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={syncingItemId === conn.itemId || importing}
+                      onClick={() => handleSyncTransactions(conn.itemId)}
+                    >
+                      {syncingItemId === conn.itemId ? 'Buscando…' : 'Sincronizar transações'}
+                    </button>
+                    {importResult?.itemId === conn.itemId && (
+                      <span style={{ fontSize: 11.5, color: 'var(--pos)', fontWeight: 600 }}>
+                        {importResult.count} transações importadas
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -322,6 +407,83 @@ export function PluggyPage() {
           onError={handleError}
           onClose={handleClose}
         />
+      )}
+
+      {/* Sync preview modal */}
+      {syncPreview && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.48)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9000, padding: 16,
+        }}>
+          <div style={{
+            background: 'var(--paper)', borderRadius: 14, padding: '24px 28px',
+            maxWidth: 560, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 16,
+            boxShadow: '0 20px 60px rgba(0,0,0,.25)',
+          }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
+                Pré-visualização de importação
+              </h3>
+              <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>
+                {syncPreview.mapped.length} transações encontradas. Duplicatas já existentes serão ignoradas.
+              </p>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, border: '1px solid var(--line)', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Data</th>
+                    <th style={{ padding: '7px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Descrição</th>
+                    <th style={{ padding: '7px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncPreview.mapped.slice(0, 50).map(tx => (
+                    <tr key={tx.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '6px 12px', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                        {new Date(tx.transactionDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      </td>
+                      <td style={{ padding: '6px 12px', color: 'var(--ink)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {tx.description}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: tx.type === 'expense' ? 'var(--crit)' : 'var(--pos)', whiteSpace: 'nowrap' }}>
+                        {tx.type === 'expense' ? '−' : '+'}{fmtBRL(tx.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {syncPreview.mapped.length > 50 && (
+                <p style={{ textAlign: 'center', padding: '8px', fontSize: 11, color: 'var(--faint)' }}>
+                  + {syncPreview.mapped.length - 50} mais não exibidas
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSyncPreview(null)}
+                disabled={importing}
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={importing}
+                onClick={handleConfirmImport}
+                style={{
+                  fontSize: 12, fontWeight: 700, color: '#fff',
+                  background: 'var(--ink)', border: 'none', borderRadius: 8,
+                  padding: '7px 18px', cursor: 'pointer', fontFamily: 'var(--ui)',
+                }}
+              >
+                {importing ? 'Importando…' : `Importar ${syncPreview.mapped.length} transações`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )

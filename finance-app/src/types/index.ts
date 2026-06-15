@@ -47,6 +47,8 @@ export interface Transaction {
   importBatchId?: string
   importHash?: string
   origin: 'import_xlsx' | 'import_api' | 'manual_entry' | 'manual_adjustment'
+  source?: string
+  needsReview?: boolean
   group?: string
   tags?: string[]
   notes?: string

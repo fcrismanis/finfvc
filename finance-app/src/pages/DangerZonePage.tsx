@@ -3,12 +3,10 @@ import { useData } from '../context/DataContext'
 import { DATA_PROVIDER } from '../config/env'
 
 export function DangerZonePage() {
-  const { transactions, budgets, closings, reload } = useData()
+  const { transactions, budgets, closings } = useData()
   const [confirmClear, setConfirmClear] = useState(false)
-  const [cleared, setCleared] = useState(false)
   const [clearMonth, setClearMonth] = useState('')
   const [clearMonthConfirm, setClearMonthConfirm] = useState('')
-  const [monthCleared, setMonthCleared] = useState(false)
 
   const PT_MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
   function fmtMonth(ym: string): string {
@@ -19,15 +17,19 @@ export function DangerZonePage() {
   const allMonths = useMemo(() => {
     const set = new Set([
       ...transactions.map(t => t.competenceDate.slice(0, 7)),
+      ...transactions.map(t => t.transactionDate.slice(0, 7)),
       ...budgets.map(b => b.referenceMonth.slice(0, 7)),
     ])
     return Array.from(set).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse()
   }, [transactions, budgets])
 
+  const txInMonth = (t: { competenceDate: string; transactionDate: string }, month: string) =>
+    t.competenceDate.startsWith(month) || t.transactionDate.startsWith(month)
+
   const monthImpact = useMemo(() => {
     if (!clearMonth) return null
     return {
-      transactions: transactions.filter(t => t.competenceDate.startsWith(clearMonth)).length,
+      transactions: transactions.filter(t => txInMonth(t, clearMonth)).length,
       budgets: budgets.filter(b => b.referenceMonth.startsWith(clearMonth)).length,
       closings: closings.filter(c => c.month === clearMonth).length,
     }
@@ -35,7 +37,7 @@ export function DangerZonePage() {
 
   function handleClearMonth() {
     if (DATA_PROVIDER === 'supabase') return
-    const newTxs = transactions.filter(t => !t.competenceDate.startsWith(clearMonth))
+    const newTxs = transactions.filter(t => !txInMonth(t, clearMonth))
     const newBudgets = budgets.filter(b => !b.referenceMonth.startsWith(clearMonth))
     const newClosings = closings.filter(c => c.month !== clearMonth)
     localStorage.setItem('finance_transactions', JSON.stringify(newTxs))
@@ -71,10 +73,6 @@ export function DangerZonePage() {
             <p style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6 }}>
               Indisponível no modo Supabase. Para remover dados de um mês, execute uma SQL segura diretamente no painel do Supabase com cláusula WHERE.
             </p>
-          ) : monthCleared ? (
-            <div style={{ fontSize: 13, color: 'var(--pos)', fontWeight: 600 }}>
-              Mês {fmtMonth(clearMonth)} removido com sucesso.
-            </div>
           ) : (
             <>
               <p style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 12, lineHeight: 1.6 }}>
@@ -135,11 +133,7 @@ export function DangerZonePage() {
         {DATA_PROVIDER !== 'supabase' && (
           <div className="card" style={{ padding: '18px 22px', border: '1px solid var(--crit)' }}>
             <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Limpar todos os dados locais</h3>
-            {cleared ? (
-              <div style={{ fontSize: 13, color: 'var(--pos)', fontWeight: 600 }}>
-                Dados locais removidos. Recarregue a página para reiniciar.
-              </div>
-            ) : confirmClear ? (
+            {confirmClear ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <p style={{ fontSize: 12.5, color: 'var(--crit)', fontWeight: 600 }}>
                   Esta ação remove todos os dados locais permanentemente. Exporte um backup antes?

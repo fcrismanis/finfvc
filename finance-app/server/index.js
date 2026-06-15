@@ -285,6 +285,87 @@ app.get('/api/pluggy/connections', (_req, res) => {
   res.json({ ok: true, storageType: 'local', message: 'Conexões persistidas no frontend (localStorage).' })
 })
 
+// ── Pluggy: fetch transactions for an account or item with period ─────────────
+// POST /api/pluggy/transactions
+// Body: { accountId, from, to } OR { itemId, from, to }
+// Response: { ok, transactions, count, provider }
+app.post('/api/pluggy/transactions', async (req, res) => {
+  const { accountId, itemId, from, to } = req.body ?? {}
+
+  if (!accountId && !itemId) {
+    return res.status(400).json({ ok: false, error: 'accountId ou itemId obrigatório' })
+  }
+  if (!from || !to) {
+    return res.status(400).json({ ok: false, error: 'from e to obrigatórios (YYYY-MM-DD)' })
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ ok: false, error: 'from e to devem estar no formato YYYY-MM-DD' })
+  }
+
+  try {
+    const { apiKey, apiBase } = await pluggyGetApiKey()
+
+    // Resolve account IDs
+    let accountIds = []
+    if (accountId) {
+      accountIds = [accountId]
+    } else {
+      const accsRes = await fetch(`${apiBase}/accounts?itemId=${encodeURIComponent(itemId)}`, {
+        headers: { 'X-API-KEY': apiKey },
+      })
+      if (!accsRes.ok) {
+        return res.status(502).json({ ok: false, error: `Falha ao buscar contas do item (${accsRes.status})` })
+      }
+      const accsData = await accsRes.json()
+      const accs = Array.isArray(accsData.results) ? accsData.results
+        : Array.isArray(accsData) ? accsData : []
+      accountIds = accs.map(a => a.id)
+    }
+
+    const allTransactions = []
+    for (const accId of accountIds) {
+      let page = 1
+      const pageSize = 500
+      while (true) {
+        const url = new URL(`${apiBase}/transactions`)
+        url.searchParams.set('accountId', accId)
+        url.searchParams.set('from', from)
+        url.searchParams.set('to', to)
+        url.searchParams.set('pageSize', String(pageSize))
+        url.searchParams.set('page', String(page))
+
+        const txRes = await fetch(url.toString(), { headers: { 'X-API-KEY': apiKey } })
+        if (!txRes.ok) {
+          console.error('[pluggy] tx fetch failed:', txRes.status, 'accId:', accId)
+          break
+        }
+        const txData = await txRes.json()
+        const results = Array.isArray(txData.results) ? txData.results : []
+        for (const tx of results) {
+          allTransactions.push({
+            id:           tx.id,
+            accountId:    accId,
+            date:         tx.date,
+            description:  tx.description ?? tx.descriptionRaw ?? '',
+            amount:       tx.amount ?? 0,
+            type:         tx.type,        // 'DEBIT' | 'CREDIT'
+            status:       tx.status,      // 'POSTED' | 'PENDING'
+            providerCode: tx.providerCode ?? null,
+            category:     tx.category ?? null,
+          })
+        }
+        if (results.length < pageSize) break
+        page++
+      }
+    }
+
+    return res.json({ ok: true, transactions: allTransactions, count: allTransactions.length, provider: 'pluggy' })
+  } catch (err) {
+    console.error('[pluggy] transactions error:', err.message)
+    return res.status(err.status ?? 500).json({ ok: false, error: err.message })
+  }
+})
+
 const VALID_PROVIDERS = ['mock', 'gpt', 'claude']
 
 // Provider availability — lets the UI disable unconfigured providers

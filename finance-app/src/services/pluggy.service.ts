@@ -90,11 +90,30 @@ export async function listConnections(_userId: string): Promise<PluggyConnection
   return res.json() as Promise<PluggyConnection[]>
 }
 
-export async function syncTransactions(_itemId: string): Promise<{ queued: boolean }> {
-  // Call your backend: POST /api/pluggy/sync/:itemId
-  const res = await fetch(`/api/pluggy/sync/${_itemId}`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to trigger Pluggy sync')
-  return res.json() as Promise<{ queued: boolean }>
+export interface PluggyRawTransaction {
+  id: string
+  accountId: string
+  accountType: 'BANK' | 'CREDIT'
+  date: string
+  description: string
+  amount: number
+  type: 'DEBIT' | 'CREDIT'
+  status: 'POSTED' | 'PENDING'
+  providerCode: string | null
+  category: string | null
+}
+
+export async function fetchPluggyTransactions(
+  params: { accountId: string; from: string; to: string } | { itemId: string; from: string; to: string }
+): Promise<PluggyRawTransaction[]> {
+  const res = await fetch('/api/pluggy/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await res.json() as { ok: boolean; transactions?: PluggyRawTransaction[]; error?: string }
+  if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao buscar transações Pluggy')
+  return data.transactions ?? []
 }
 
 export function makeDeduplicationKey(tx: PluggyTransaction, accountId: string): PluggyDeduplicationKey {
@@ -120,6 +139,8 @@ export interface PluggyLocalAccount {
   availableLimit: number | null
   closeDate: string | null
   dueDate: string | null
+  lastSyncAt?: string
+  lastSyncCount?: number
 }
 
 export interface PluggyLocalConnection {
@@ -166,4 +187,110 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
     throw new Error(data.error ?? 'Erro ao registrar conexão Pluggy')
   }
   return { ...data.connection, savedAt: new Date().toISOString() }
+}
+
+// ── Map Pluggy raw transactions → app Transaction format ──────────────────────
+
+export interface MapResult {
+  newTxs: import('../types').Transaction[]
+  duplicateCount: number
+  incomeCount: number
+  expenseCount: number
+}
+
+export function mapPluggyToTransactions(
+  pluggyTxs: PluggyRawTransaction[],
+  accountId: string,
+  existingTxs: import('../types').Transaction[],
+): MapResult {
+  const existingHashes = new Set(existingTxs.map(t => t.importHash).filter(Boolean))
+  const existingIds = new Set(existingTxs.map(t => t.id))
+  const batchId = `pluggy_${Date.now().toString(36)}`
+  const now = new Date().toISOString()
+
+  const allMapped: import('../types').Transaction[] = pluggyTxs.map(ptx => {
+    const importHash = ptx.providerCode
+      ? `pluggy_${ptx.providerCode}`
+      : `${(ptx.date ?? '').slice(0, 10)}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
+
+    const type: import('../types').TransactionType = ptx.type === 'CREDIT' ? 'income' : 'expense'
+    const classificationType: import('../types').ClassificationType =
+      type === 'income' ? 'operational_income' : 'operational_expense'
+
+    return {
+      id: `pluggy_${ptx.id}`,
+      description: ptx.description ?? '',
+      originalDescription: ptx.description ?? '',
+      amount: Math.abs(ptx.amount),
+      type,
+      classificationType,
+      transactionDate: (ptx.date ?? now).slice(0, 10),
+      competenceDate: (ptx.date ?? now).slice(0, 10),
+      status: ptx.status === 'POSTED' ? 'paid' : 'pending',
+      accountId,
+      paymentMethod: 'account' as import('../types').PaymentMethod,
+      isRecurring: false,
+      includeInOperationalResult: true,
+      includeInCashflow: true,
+      includeInBudget: true,
+      isInternalTransfer: false,
+      isAdjustment: false,
+      origin: 'import_api' as const,
+      source: 'pluggy',
+      needsReview: true,
+      importHash,
+      importBatchId: batchId,
+      createdAt: now,
+      updatedAt: now,
+    }
+  })
+
+  const newTxs = allMapped.filter(t =>
+    !existingIds.has(t.id) && !(t.importHash && existingHashes.has(t.importHash))
+  )
+
+  return {
+    newTxs,
+    duplicateCount: allMapped.length - newTxs.length,
+    incomeCount: newTxs.filter(t => t.type === 'income').length,
+    expenseCount: newTxs.filter(t => t.type === 'expense').length,
+  }
+}
+
+// ── Update per-account sync metadata in localStorage ─────────────────────────
+
+export function updateConnectionSyncMeta(itemId: string, accountId: string, importedCount: number): void {
+  const all = getLocalConnections()
+  const conn = all.find(c => c.itemId === itemId)
+  if (!conn) return
+  const acc = conn.accounts.find(a => a.id === accountId)
+  if (!acc) return
+  acc.lastSyncAt = new Date().toISOString()
+  acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+}
+
+// ── Compute period date range from a preset ───────────────────────────────────
+
+export function getPeriodDates(
+  period: 'current_month' | 'last_30d' | 'last_90d' | 'custom',
+  _customFrom?: string,
+  _customTo?: string,
+): { from: string; to: string } {
+  const today = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (period === 'current_month') {
+    const y = today.getFullYear()
+    const m = today.getMonth() + 1
+    const lastDay = new Date(y, m, 0).getDate()
+    return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` }
+  }
+  const days = period === 'last_30d' ? 30 : 90
+  const from = new Date(today)
+  from.setDate(from.getDate() - days)
+  return {
+    from: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
+    to: `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`,
+  }
+  // 'custom' handled by caller
 }

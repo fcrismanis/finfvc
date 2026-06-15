@@ -1,17 +1,18 @@
 import { useState, useMemo } from 'react'
-import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft } from 'lucide-react'
+import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import { MACRO_CATEGORIES } from '../config/categories'
+import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
+import { suggestCategories } from '../services/categorize.service'
 
 interface Props {
   onNavigate?: (route: string) => void
 }
 
-type ActivePanel = ReviewReason | 'all' | null
+type ActivePanel = ReviewReason | 'all' | 'import_api' | null
 
 const CLS_LABELS: Record<ClassificationType, string> = {
   operational_income: 'Receita Op.', extraordinary_income: 'Rec. Eventual',
@@ -26,8 +27,19 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
+  const [applyingAll, setApplyingAll] = useState(false)
 
   const reviewItems = useMemo(() => getReviewItems(transactions), [transactions])
+
+  const pluggyItems = useMemo(() =>
+    transactions.filter(t => t.origin === 'import_api'),
+    [transactions]
+  )
+
+  const suggestions = useMemo(() =>
+    suggestCategories(pluggyItems.filter(t => !t.macroCategoryId)),
+    [pluggyItems]
+  )
 
   const counts = useMemo(() => ({
     all:          reviewItems.length,
@@ -36,13 +48,37 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     transfer:     reviewItems.filter(i => i.tags.includes('transfer')).length,
     high_value:   reviewItems.filter(i => i.tags.includes('high_value')).length,
     needs_review: reviewItems.filter(i => i.tags.includes('needs_review')).length,
-  }), [reviewItems])
+    import_api:   pluggyItems.length,
+  }), [reviewItems, pluggyItems])
 
   const panelItems = useMemo(() => {
     if (!activePanel) return []
     if (activePanel === 'all') return reviewItems
+    if (activePanel === 'import_api') return []  // handled separately
     return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason))
   }, [reviewItems, activePanel])
+
+  function applySuggestion(tx: Transaction) {
+    const s = suggestions.get(tx.id)
+    if (!s) return
+    updateTransaction(tx.id, {
+      macroCategoryId:    s.macroCategoryId,
+      categoryId:         s.categoryId,
+      classificationType: s.classificationType,
+    })
+  }
+
+  function applyAllSuggestions() {
+    setApplyingAll(true)
+    for (const [txId, s] of suggestions) {
+      updateTransaction(txId, {
+        macroCategoryId:    s.macroCategoryId,
+        categoryId:         s.categoryId,
+        classificationType: s.classificationType,
+      })
+    }
+    setApplyingAll(false)
+  }
 
   function openModal(tx: Transaction) {
     setModalTx(tx)
@@ -109,6 +145,14 @@ export function Review({ onNavigate: _onNavigate }: Props) {
       icon: <Zap size={18} />,
       color: 'var(--accent)',
       count: counts.needs_review,
+    },
+    {
+      key: 'import_api' as ActivePanel,
+      label: 'Importadas via Pluggy',
+      description: `${suggestions.size} com sugestão de categoria automática`,
+      icon: <Sparkles size={18} />,
+      color: 'var(--pos)',
+      count: counts.import_api,
     },
   ]
 
@@ -210,12 +254,119 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             </button>
 
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
-              {panelItems.length} {panelItems.length === 1 ? 'item' : 'itens'} · {
+              {activePanel === 'import_api' ? pluggyItems.length : panelItems.length}&nbsp;
+              {(activePanel === 'import_api' ? pluggyItems.length : panelItems.length) === 1 ? 'item' : 'itens'} · {
                 activePanel === 'all' ? 'Todos os itens' :
+                activePanel === 'import_api' ? 'Importadas via Pluggy' :
                 TRIAGE_CARDS.find(c => c.key === activePanel)?.label ?? activePanel
               }
             </div>
 
+            {/* ── Pluggy import panel ── */}
+            {activePanel === 'import_api' && (
+              <>
+                {suggestions.size > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+                      {suggestions.size} transações com sugestão automática de categoria
+                    </span>
+                    <button
+                      onClick={applyAllSuggestions}
+                      disabled={applyingAll}
+                      style={{
+                        fontSize: 11.5, fontWeight: 700, color: '#fff',
+                        background: 'var(--pos)', border: 'none', borderRadius: 7,
+                        padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
+                      }}
+                    >
+                      {applyingAll ? 'Aplicando…' : `Aplicar todas as ${suggestions.size} sugestões`}
+                    </button>
+                  </div>
+                )}
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                          <th className="table-th">Data</th>
+                          <th className="table-th">Descrição</th>
+                          <th className="table-th table-th-right">Valor</th>
+                          <th className="table-th">Categoria atual</th>
+                          <th className="table-th">Sugestão</th>
+                          <th style={{ width: 100 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pluggyItems.map(tx => {
+                          const macro   = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                          const sugg    = suggestions.get(tx.id)
+                          const suggMacro = sugg ? MACRO_CATEGORIES.find(m => m.id === sugg.macroCategoryId) : null
+                          const suggCat   = sugg ? CATEGORIES.find(c => c.id === sugg.categoryId) : null
+                          return (
+                            <tr key={tx.id} className="table-row">
+                              <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
+                                {new Date(tx.competenceDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                              </td>
+                              <td className="table-td" style={{ maxWidth: 220 }}>
+                                <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
+                                  {tx.description}
+                                </p>
+                              </td>
+                              <td className="table-td table-th-right" style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)' }}>
+                                {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
+                              </td>
+                              <td className="table-td">
+                                {macro ? (
+                                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12` }}>
+                                    {macro.name}
+                                  </span>
+                                ) : <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }}>Sem categoria</span>}
+                              </td>
+                              <td className="table-td">
+                                {sugg && suggMacro ? (
+                                  <div>
+                                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: `1px solid ${suggMacro.color}50`, color: suggMacro.color, fontWeight: 600, background: `${suggMacro.color}12` }}>
+                                      {suggCat?.name ?? suggMacro.name}
+                                    </span>
+                                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+                                      {sugg.reason} · {sugg.confidence === 'high' ? 'alta confiança' : 'média'}
+                                    </span>
+                                  </div>
+                                ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
+                              </td>
+                              <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  {sugg && !tx.macroCategoryId && (
+                                    <button
+                                      onClick={() => applySuggestion(tx)}
+                                      style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--pos)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                                    >
+                                      Aplicar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => openModal(tx)}
+                                    style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                                  >
+                                    Editar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {pluggyItems.length === 0 && (
+                          <tr><td colSpan={6}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Standard review panel ── */}
+            {activePanel !== 'import_api' && (
             <div className="card" style={{ overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
@@ -296,6 +447,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                 </table>
               </div>
             </div>
+            )}
 
             <div style={{ paddingBottom: 8 }}>
               <button
