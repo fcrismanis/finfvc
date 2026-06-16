@@ -47,6 +47,7 @@ const SUGGESTION_SOURCE_LABEL: Record<NonNullable<Transaction['categorySuggestio
   history:        'Histórico',
   rule:           'Regra aprendida',
   ai:             'IA',
+  command:        'Comando',
   manual:         'Manual',
   none:           '—',
 }

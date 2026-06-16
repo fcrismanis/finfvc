@@ -30,6 +30,7 @@ const Budget           = lazy(() => import('./pages/Budget').then(m => ({ defaul
 const Review           = lazy(() => import('./pages/Review').then(m => ({ default: m.Review })))
 const Closing          = lazy(() => import('./pages/Closing').then(m => ({ default: m.Closing })))
 const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ default: m.Advisor })))
+const FinanceAssistantPage = lazy(() => import('./pages/FinanceAssistantPage').then(m => ({ default: m.FinanceAssistantPage })))
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
 const SubcategoriesPage = lazy(() => import('./pages/SubcategoriesPage').then(m => ({ default: m.SubcategoriesPage })))
@@ -101,7 +102,7 @@ function AppShell() {
     const r = sessionStorage.getItem('fin_route')
     if (!r) return '/'
     const known = ['/', '/conectar', '/lancamentos', '/orcamento', '/revisao', '/fechamento',
-      '/migrar', '/consultor', '/configuracoes', '/categorias', '/subcategorias', '/regras',
+      '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/subcategorias', '/regras',
       '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
       '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes']
     return known.includes(r) ? r : '/'
@@ -139,6 +140,7 @@ function AppShell() {
       case '/fechamento':    return <Closing selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/migrar':        return <MigrationPage />
       case '/consultor':     return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/assistente':    return <FinanceAssistantPage />
       case '/configuracoes': return <Settings onNavigate={navigate} />
       case '/categorias':    return <CategoriesPage onNavigate={navigate} />
       case '/subcategorias': return <SubcategoriesPage />

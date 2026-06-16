@@ -8,11 +8,11 @@ import {
 } from '../services/categoryRules.service'
 
 const ORIGIN_LABEL: Record<CategoryRule['origin'], string> = {
-  manual: 'Manual', pluggy: 'Pluggy', csv: 'CSV', ai: 'IA',
+  manual: 'Manual', pluggy: 'Pluggy', csv: 'CSV', ai: 'IA', command: 'Comando',
 }
 
 const ORIGIN_COLOR: Record<CategoryRule['origin'], string> = {
-  manual: 'var(--ink-2)', pluggy: 'var(--pos)', csv: 'var(--ink-2)', ai: 'var(--accent)',
+  manual: 'var(--ink-2)', pluggy: 'var(--pos)', csv: 'var(--ink-2)', ai: 'var(--accent)', command: 'var(--accent)',
 }
 
 const CONFIDENCE_COLOR: Record<NonNullable<CategoryRule['confidence']>, string> = {

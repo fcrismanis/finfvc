@@ -13,7 +13,7 @@ import type { Transaction, ClassificationType } from '../types'
  * Rules are applied BEFORE Pluggy inference (Priority 2 in import).
  */
 
-export type RuleOrigin = 'manual' | 'pluggy' | 'csv' | 'ai'
+export type RuleOrigin = 'manual' | 'pluggy' | 'csv' | 'ai' | 'command'
 
 export interface CategoryRule {
   id: string

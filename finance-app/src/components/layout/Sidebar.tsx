@@ -49,6 +49,7 @@ const INTEGRACOES: NavEntry[] = [
   { route: '/conectar', label: 'Importação', icon: Upload },
   { route: '/pluggy', label: 'Pluggy', icon: Link2 },
   { route: '/consultor', label: 'Consultor IA', icon: Bot },
+  { route: '/assistente', label: 'Assistente', icon: Wand2 },
 ]
 
 const SISTEMA: NavEntry[] = [
