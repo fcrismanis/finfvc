@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, t
 import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import { useAuth } from './AuthContext'
 import { createDataProvider } from '../adapters/adapter.factory'
+import { dedupeIncomingBatch } from '../utils/transactionDedupe'
 
 interface DataContextValue {
   transactions: Transaction[]
@@ -84,9 +85,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [provider, loadData])
 
   const appendTransactions = useCallback(async (txns: Transaction[]) => {
-    await provider.appendTransactions(txns)
+    const { unique } = dedupeIncomingBatch(txns, transactions)
+    await provider.appendTransactions(unique)
     await loadData(false)  // silent reload — don't unmount the migration page mid-flight
-  }, [provider, loadData])
+  }, [provider, loadData, transactions])
 
   const saveSubCategory = useCallback(async (sub: SubCategory) => {
     await provider.saveSubCategory(sub)
