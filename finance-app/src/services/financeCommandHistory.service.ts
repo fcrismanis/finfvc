@@ -3,7 +3,7 @@ import type { CategoryRule } from './categoryRules.service'
 import type { FinanceCommandPlan } from './financeCommand.service'
 
 const STORAGE_KEY = 'fin_command_history'
-const MAX_HISTORY = 30
+const MAX_HISTORY = 10
 
 export type FinanceCommandHistoryEntry = {
   id: string
@@ -28,7 +28,7 @@ export type FinanceCommandHistoryEntry = {
     subCategories: SubCategory[]
     rules: CategoryRule[]
   }
-  status: 'applied' | 'undone'
+  status: 'applied' | 'undone' | 'no_match'
 }
 
 export function getCommandHistory(): FinanceCommandHistoryEntry[] {
@@ -41,7 +41,21 @@ export function getCommandHistory(): FinanceCommandHistoryEntry[] {
 }
 
 function saveCommandHistory(entries: FinanceCommandHistoryEntry[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)))
+  // Strip fields not needed for undo to keep storage small.
+  // Only before.transactions is used by undoCommand/removeUnusedArtifacts.
+  const lean = entries.slice(0, MAX_HISTORY).map(e => ({
+    ...e,
+    before: { ...e.before, categories: [], subCategories: [], rules: [] },
+    after: undefined,
+  }))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lean))
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'QuotaExceededError' && lean.length > 1) {
+      lean.pop()
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(lean)) } catch { /* storage full */ }
+    }
+  }
 }
 
 export function createCommandSnapshot(input: {

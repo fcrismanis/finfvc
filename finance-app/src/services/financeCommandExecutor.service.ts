@@ -294,16 +294,33 @@ export function previewFinanceCommand(plan: FinanceCommandPlan, ctx: FinanceComm
 
 export async function executeFinanceCommand(plan: FinanceCommandPlan, ctx: FinanceCommandContext): Promise<FinanceCommandResult> {
   const matchedTransactions = matchTransactions(plan, ctx.transactions, ctx.subCategories)
+
+  if (matchedTransactions.length === 0) {
+    const snapshot = createCommandSnapshot({
+      command: plan.originalPrompt,
+      plan,
+      summary: { affectedTransactions: 0, createdCategories: [], createdSubCategories: [], createdRules: [] },
+      before: { transactions: [], categories: [], subCategories: [], rules: [] },
+    })
+    saveCommandHistoryEntry({ ...snapshot, status: 'no_match' })
+    return {
+      commandId: plan.id,
+      affectedTransactions: 0,
+      createdCategories: [],
+      createdSubCategories: [],
+      createdRules: [],
+      message: 'Nenhum lançamento encontrado para esse comando.',
+    }
+  }
+
   const beforeRules = loadRules()
   const beforeCustomCategories = getAllCategories().filter(category => isCustomCategoryId(category.id))
   const resolved = await resolveTargets(plan, ctx)
 
   const patches = matchedTransactions.map(tx => ({ id: tx.id, patch: buildPatch(tx, plan, resolved) }))
   const createdRuleNames: string[] = []
-  for (const tx of matchedTransactions.slice(0, 1)) {
-    const createdRule = buildRule(tx, plan, resolved)
-    if (createdRule) createdRuleNames.push(createdRule.pattern)
-  }
+  const createdRule = buildRule(matchedTransactions[0], plan, resolved)
+  if (createdRule) createdRuleNames.push(createdRule.pattern)
 
   const snapshot = createCommandSnapshot({
     command: plan.originalPrompt,
@@ -324,9 +341,7 @@ export async function executeFinanceCommand(plan: FinanceCommandPlan, ctx: Finan
 
   saveCommandHistoryEntry(snapshot)
 
-  if (patches.length > 0) {
-    await ctx.updateTransactions(patches, { markManual: true })
-  }
+  await ctx.updateTransactions(patches, { markManual: true })
 
   ctx.reload()
 
