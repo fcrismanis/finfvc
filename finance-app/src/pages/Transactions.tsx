@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag, Download } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -8,7 +8,7 @@ import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
 import {
   highValueThreshold, findDuplicateCandidateIds, matchesQuickFilter,
-  type QuickFilterKey,
+  QUICK_FILTER_LABELS, type QuickFilterKey,
 } from '../utils/dataQuality'
 import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import type { ReviewReason } from '../utils/reviewItems'
@@ -23,6 +23,25 @@ interface Props {
 }
 
 const DEFAULT_PAGE_SIZE = 500
+const SAVED_FILTERS_KEY = 'fin_ledger_filters'
+
+interface SavedFilters {
+  filterType?: string
+  filterStatus?: string
+  filterMacro?: string
+  filterTag?: string
+  filterInstitution?: string
+  quickFilter?: string
+}
+
+function loadSavedFilters(): SavedFilters {
+  try {
+    const raw = localStorage.getItem(SAVED_FILTERS_KEY)
+    return raw ? (JSON.parse(raw) as SavedFilters) : {}
+  } catch {
+    return {}
+  }
+}
 
 const CLS_LABELS: Record<ClassificationType, string> = {
   operational_income: 'Receita Op.', extraordinary_income: 'Rec. Eventual',
@@ -42,13 +61,14 @@ function fmtGroupDate(isoDate: string): string {
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
   const { transactions, isDemo, updateTransaction, subCategories } = useData()
 
+  const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
   const [filterMonth, setFilterMonth] = useState(selectedMonth)
-  const [filterType, setFilterType] = useState('')
-  const [filterMacro, setFilterMacro] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterTag, setFilterTag] = useState('')
-  const [filterInstitution, setFilterInstitution] = useState('')
+  const [filterType, setFilterType] = useState(savedFilters.filterType ?? '')
+  const [filterMacro, setFilterMacro] = useState(savedFilters.filterMacro ?? '')
+  const [filterStatus, setFilterStatus] = useState(savedFilters.filterStatus ?? '')
+  const [filterTag, setFilterTag] = useState(savedFilters.filterTag ?? '')
+  const [filterInstitution, setFilterInstitution] = useState(savedFilters.filterInstitution ?? '')
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(0)
@@ -60,7 +80,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
+  const [inlineSubEdit, setInlineSubEdit] = useState<{ id: string; subId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
+  const [inlineTagAdd, setInlineTagAdd] = useState<{ id: string; value: string } | null>(null)
   const inlineSelectRef = useRef<HTMLSelectElement>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
 
@@ -79,7 +101,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     onNavigate(route)
   }
 
-  const [quickFilter, setQuickFilter] = useState<QuickFilterKey | ''>('')
+  const [quickFilter, setQuickFilter] = useState<QuickFilterKey | ''>((savedFilters.quickFilter as QuickFilterKey) ?? '')
 
   useEffect(() => {
     setPage(0)
@@ -87,6 +109,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (navFilter?.monthOverride) setFilterMonth(navFilter.monthOverride)
     if (navFilter?.quickFilter) setQuickFilter(navFilter.quickFilter as QuickFilterKey)
   }, [navFilter])
+
+  // Persist filter selections (not search/month) across sessions
+  useEffect(() => {
+    const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter }
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(payload))
+  }, [filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter])
 
   const dqCtx = useMemo(() => ({
     threshold: highValueThreshold(transactions),
@@ -251,6 +279,59 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       updateTransaction(txId, { description: newDesc.trim() })
     }
     setInlineDescEdit(null)
+  }
+
+  function saveInlineSub(subId: string, txId: string) {
+    const tx = transactions.find(t => t.id === txId)
+    if (tx && subId !== (tx.subCategoryId ?? '')) {
+      updateTransaction(txId, { subCategoryId: subId || undefined })
+    }
+    setInlineSubEdit(null)
+  }
+
+  function addInlineTag(value: string, txId: string) {
+    const t = value.trim().toLowerCase().replace(/\s+/g, '_')
+    const tx = transactions.find(x => x.id === txId)
+    if (tx && t && !(tx.tags ?? []).includes(t)) {
+      updateTransaction(txId, { tags: [...(tx.tags ?? []), t] })
+    }
+    setInlineTagAdd(null)
+  }
+
+  function removeTagFromTx(tag: string, txId: string) {
+    const tx = transactions.find(x => x.id === txId)
+    if (tx?.tags?.includes(tag)) updateTransaction(txId, { tags: tx.tags.filter(t => t !== tag) })
+  }
+
+  function csvCell(v: string): string {
+    const s = String(v ?? '')
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+
+  function exportCsv() {
+    const headers = ['Data', 'Descrição', 'Valor', 'Tipo', 'Classificação', 'Categoria', 'Subcategoria', 'Tags', 'Status']
+    const rows = filtered.map(t => {
+      const macroName = MACRO_CATEGORIES.find(m => m.id === t.macroCategoryId)?.name ?? ''
+      const subName = t.subCategoryId ? (subCategories.find(s => s.id === t.subCategoryId)?.name ?? '') : ''
+      return [
+        t.transactionDate,
+        t.description,
+        (t.type === 'expense' ? '-' : '') + t.amount.toFixed(2),
+        t.type === 'income' ? 'Receita' : 'Despesa',
+        CLS_LABELS[t.classificationType] ?? t.classificationType,
+        macroName, subName,
+        (t.tags ?? []).join(' '),
+        t.status,
+      ].map(csvCell).join(',')
+    })
+    const csv = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `lancamentos_${filterMonth || 'todos'}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const allTags = useMemo(() => {
@@ -439,6 +520,30 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 Limpar
               </button>
             )}
+
+            <button
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              title="Exportar lançamentos do filtro atual em CSV"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-2)', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'var(--ui)', marginLeft: 'auto' }}
+            >
+              <Download size={12} /> CSV
+            </button>
+          </div>
+        )}
+
+        {/* ── Quick filter pills ── */}
+        {!isReviewMode && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(['no_category', 'pluggy', 'manual', 'neutral', 'high_value', 'with_tags', 'no_tags'] as QuickFilterKey[]).map(key => (
+              <button
+                key={key}
+                onClick={() => { setQuickFilter(q => q === key ? '' : key); setPage(0) }}
+                className={`filter-pill${quickFilter === key ? ' active' : ''}`}
+              >
+                {QUICK_FILTER_LABELS[key]}
+              </button>
+            ))}
           </div>
         )}
 
@@ -501,6 +606,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
                         const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                         const isInlineCat = inlineCatEdit?.id === tx.id
+                        const isInlineSub = inlineSubEdit?.id === tx.id
                         const isInlineDesc = inlineDescEdit?.id === tx.id
                         const subOptions = macro ? subCategories.filter(s => s.macroCategoryId === macro.id && s.active) : []
 
@@ -547,6 +653,21 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                         pendente
                                       </span>
                                     )}
+                                    {tx.categorySuggestionSource === 'rule' && (
+                                      <span title="Classificado por regra aprendida" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', flexShrink: 0 }}>
+                                        regra
+                                      </span>
+                                    )}
+                                    {tx.classificationType === 'neutral' && (
+                                      <span title="Movimento neutro — fora do resultado/orçamento" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--well)', color: 'var(--faint)', border: '1px solid var(--line)', flexShrink: 0 }}>
+                                        neutro
+                                      </span>
+                                    )}
+                                    {tx.needsReview && (
+                                      <span title="Precisa revisar" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
+                                        revisar
+                                      </span>
+                                    )}
                                   </div>
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
@@ -565,22 +686,45 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   })()}
                                 </>
                               )}
-                              {/* Tags chips (Bloco 6) */}
-                              {tx.tags && tx.tags.length > 0 && (
-                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
-                                  {tx.tags.map(tag => (
-                                    <span
-                                      key={tag}
-                                      onClick={() => setFilterTag(tag)}
-                                      title={`Filtrar por #${tag}`}
-                                      style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2 }}
-                                    >
-                                      <Tag size={7} />
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                              {/* Tags chips — click filters, × removes inline */}
+                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3, alignItems: 'center' }}>
+                                {(tx.tags ?? []).map(tag => (
+                                  <span
+                                    key={tag}
+                                    title={`Filtrar por #${tag}`}
+                                    style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px 1px 5px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                                  >
+                                    <Tag size={7} style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)} />
+                                    <span style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)}>{tag}</span>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); removeTagFromTx(tag, tx.id) }}
+                                      title={`Remover tag #${tag}`}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 0, lineHeight: 1, fontSize: 10, fontFamily: 'var(--ui)', display: 'flex', alignItems: 'center' }}
+                                      aria-label={`Remover tag ${tag}`}
+                                    >×</button>
+                                  </span>
+                                ))}
+                                {inlineTagAdd?.id === tx.id ? (
+                                  <input
+                                    autoFocus
+                                    value={inlineTagAdd.value}
+                                    onChange={e => setInlineTagAdd(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                    onBlur={() => addInlineTag(inlineTagAdd.value, tx.id)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') addInlineTag(inlineTagAdd.value, tx.id)
+                                      if (e.key === 'Escape') setInlineTagAdd(null)
+                                    }}
+                                    placeholder="nova tag…"
+                                    style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, border: '1px solid var(--accent)', outline: 'none', background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)', width: 70 }}
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setInlineTagAdd({ id: tx.id, value: '' }) }}
+                                    title="Adicionar tag"
+                                    style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', fontFamily: 'var(--ui)', display: 'inline-flex', alignItems: 'center' }}
+                                  >+ tag</button>
+                                )}
+                              </div>
                               {/* Suggested tags — click to apply (append, never overwrites) */}
                               {(() => {
                                 const suggested = suggestTags(tx, tagCtx).slice(0, 3)
@@ -655,11 +799,34 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       A classificar
                                     </span>
                                   )}
-                                  {sub ? (
-                                    <span style={{ fontSize: 10.5, color: 'var(--ink-2)', fontWeight: 500 }}>· {sub.name}</span>
-                                  ) : macro && subOptions.length > 0 ? (
-                                    <span style={{ fontSize: 10, color: 'var(--faint)', fontStyle: 'italic' }}>· sem subcat.</span>
-                                  ) : null}
+                                  {macro && (isInlineSub ? (
+                                    <select
+                                      autoFocus
+                                      value={inlineSubEdit.subId}
+                                      onClick={e => e.stopPropagation()}
+                                      onChange={e => setInlineSubEdit(prev => prev ? { ...prev, subId: e.target.value } : null)}
+                                      onBlur={() => saveInlineSub(inlineSubEdit.subId, tx.id)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') saveInlineSub(inlineSubEdit.subId, tx.id)
+                                        if (e.key === 'Escape') setInlineSubEdit(null)
+                                      }}
+                                      className="ledger-select"
+                                      style={{ fontSize: 10, minWidth: 110 }}
+                                    >
+                                      <option value="">sem subcat.</option>
+                                      {subOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                  ) : (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={e => { e.stopPropagation(); if (subOptions.length > 0) setInlineSubEdit({ id: tx.id, subId: tx.subCategoryId ?? '' }) }}
+                                      title={subOptions.length > 0 ? 'Clique para editar subcategoria' : undefined}
+                                      style={{ fontSize: 10.5, color: sub ? 'var(--ink-2)' : 'var(--faint)', fontWeight: 500, fontStyle: sub ? 'normal' : 'italic', cursor: subOptions.length > 0 ? 'pointer' : 'default' }}
+                                    >
+                                      · {sub ? sub.name : subOptions.length > 0 ? 'sem subcat.' : '—'}
+                                    </span>
+                                  ))}
                                 </div>
                               )}
                             </td>
