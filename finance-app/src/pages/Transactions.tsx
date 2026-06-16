@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
+import { useRouteScroll } from '../hooks/useRouteScroll'
 import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag, Download } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
@@ -88,6 +89,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const inlineSelectRef = useRef<HTMLSelectElement>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
   const scrollSaveRef = useRef<number>(0)
+  const mainRef = useRouteScroll('/lancamentos')
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
@@ -96,10 +98,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [similarModal, setSimilarModal] = useState<SimilarPending | null>(null)
   const [selectedSimilar, setSelectedSimilar] = useState<Set<string>>(new Set())
 
-  function captureScroll() { scrollSaveRef.current = window.scrollY }
+  function captureScroll() { scrollSaveRef.current = mainRef.current?.scrollTop ?? 0 }
   function restoreScroll() {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.scrollTo({ top: scrollSaveRef.current, behavior: 'instant' as ScrollBehavior }))
+      requestAnimationFrame(() => mainRef.current?.scrollTo({ top: scrollSaveRef.current, behavior: 'instant' as ScrollBehavior }))
     })
   }
 
@@ -437,7 +439,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution || quickFilter)
 
   return (
-    <main className="page-shell">
+    <main ref={mainRef} className="page-shell">
       <div className="page-content section-gap">
 
         {drilldownSource && (
@@ -1028,31 +1030,18 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 />
               </ModalField>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <ModalField label="Classificação" style={{ flex: 1 }}>
-                  <select
-                    value={modalPatch.classificationType as string ?? ''}
-                    onChange={e => setModalPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
-                    className="ledger-select"
-                    style={{ width: '100%', fontSize: 12 }}
-                  >
-                    {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </ModalField>
-
-                <ModalField label="Status" style={{ flex: 1 }}>
-                  <select
-                    value={modalPatch.status ?? ''}
-                    onChange={e => setModalPatch(p => ({ ...p, status: e.target.value as Transaction['status'] }))}
-                    className="ledger-select"
-                    style={{ width: '100%', fontSize: 12 }}
-                  >
-                    <option value="paid">Pago</option>
-                    <option value="pending">Pendente</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                </ModalField>
-              </div>
+              <ModalField label="Status">
+                <select
+                  value={modalPatch.status ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, status: e.target.value as Transaction['status'] }))}
+                  className="ledger-select"
+                  style={{ width: '100%', fontSize: 12 }}
+                >
+                  <option value="paid">Pago</option>
+                  <option value="pending">Pendente</option>
+                  <option value="cancelled">Cancelado</option>
+                </select>
+              </ModalField>
 
               <ModalField label="Categoria">
                 <select
