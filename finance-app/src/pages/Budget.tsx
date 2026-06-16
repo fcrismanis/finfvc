@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
-import { TrendingDown, Copy, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingDown, Copy, Lightbulb, ChevronLeft, ChevronRight, Sparkles, X, Check } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getMacroCategoryTotals } from '../engine/calculate'
 import { suggestBudgets } from '../services/budget.service'
+import { generateBudgetSuggestions } from '../utils/budgetSuggestion'
+import type { BudgetSuggestion } from '../utils/budgetSuggestion'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -18,6 +20,8 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
   const [month, setMonth] = useState(selectedMonth)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedSugs, setSelectedSugs] = useState<Set<string>>(new Set())
 
   const expenseMacros = MACRO_CATEGORIES.filter(m =>
     ['operational_expense', 'debt_cost'].includes(m.classificationType)
@@ -86,6 +90,38 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
     }
   }
 
+  const smartSuggestions = useMemo(
+    () => generateBudgetSuggestions(transactions, budgets, month),
+    [transactions, budgets, month],
+  )
+
+  function toggleSugSelection(macroId: string) {
+    setSelectedSugs(prev => {
+      const next = new Set(prev)
+      if (next.has(macroId)) next.delete(macroId); else next.add(macroId)
+      return next
+    })
+  }
+
+  function applySelectedSuggestions() {
+    for (const s of smartSuggestions) {
+      if (!selectedSugs.has(s.macroCategoryId)) continue
+      saveBudget({
+        id: budgetIdFor(s.macroCategoryId, undefined),
+        referenceMonth: month,
+        macroCategoryId: s.macroCategoryId,
+        plannedAmount: s.suggestedAmount,
+      })
+    }
+    setShowSuggestions(false)
+    setSelectedSugs(new Set())
+  }
+
+  function openSmartSuggest() {
+    setSelectedSugs(new Set(smartSuggestions.map(s => s.macroCategoryId)))
+    setShowSuggestions(true)
+  }
+
   function rowForMacro(macroId: string) {
     const macro = MACRO_CATEGORIES.find(m => m.id === macroId)!
     const budget = monthBudgets.find(b => b.macroCategoryId === macroId)
@@ -151,14 +187,28 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
         </div>
 
         {/* ── Actions ── */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={handleCopyPrev}>
             <Copy size={12} /> Copiar do mês anterior
           </button>
           <button className="btn btn-secondary btn-sm" onClick={handleSuggest}>
             <Lightbulb size={12} /> Sugerir pela média
           </button>
+          <button className="btn btn-secondary btn-sm" onClick={openSmartSuggest}>
+            <Sparkles size={12} /> Orçamento inteligente
+          </button>
         </div>
+
+        {/* ── Smart budget suggestion panel ── */}
+        {showSuggestions && (
+          <SmartBudgetPanel
+            suggestions={smartSuggestions}
+            selected={selectedSugs}
+            onToggle={toggleSugSelection}
+            onApply={applySelectedSuggestions}
+            onClose={() => setShowSuggestions(false)}
+          />
+        )}
 
         {/* ── Budget table ── */}
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -313,6 +363,121 @@ function BudgetSummaryCard({ label, value, color, soft }: { label: string; value
     <div className="card" style={{ padding: '14px 18px', ...(soft ? { background: 'var(--accent-soft)' } : {}) }}>
       <span className="eyebrow" style={{ display: 'block', marginBottom: 7 }}>{label}</span>
       <p className="num" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', color }}>{value}</p>
+    </div>
+  )
+}
+
+const CONF_COLOR: Record<string, string> = {
+  high: 'var(--pos)',
+  medium: 'var(--warn)',
+  low: 'var(--faint)',
+}
+
+function SmartBudgetPanel({
+  suggestions, selected, onToggle, onApply, onClose,
+}: {
+  suggestions: BudgetSuggestion[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onApply: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, border: '1px solid var(--accent)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles size={14} color="var(--accent)" />
+            Orçamento inteligente
+          </h3>
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+            Sugestões baseadas em histórico, média e recorrentes detectados. Selecione e aplique.
+          </p>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 4 }}>
+          <X size={15} />
+        </button>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+          <thead>
+            <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+              <th className="table-th" style={{ width: 32 }}>
+                <button
+                  onClick={() => {
+                    if (selected.size === suggestions.length) {
+                      suggestions.forEach(s => onToggle(s.macroCategoryId))
+                    } else {
+                      suggestions.filter(s => !selected.has(s.macroCategoryId)).forEach(s => onToggle(s.macroCategoryId))
+                    }
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
+                >
+                  {selected.size === suggestions.length ? <Check size={14} /> : <span style={{ width: 14, height: 14, border: '1px solid var(--line)', borderRadius: 3, display: 'block' }} />}
+                </button>
+              </th>
+              <th className="table-th">Categoria</th>
+              <th className="table-th table-th-right">Média 3m</th>
+              <th className="table-th table-th-right">Mês ant.</th>
+              <th className="table-th table-th-right">Recorrentes</th>
+              <th className="table-th table-th-right">Sugestão</th>
+              <th className="table-th">Conf.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {suggestions.map(s => (
+              <tr key={s.macroCategoryId} className="table-row" style={{ background: selected.has(s.macroCategoryId) ? 'var(--accent-soft)' : undefined }}>
+                <td className="table-td">
+                  <button
+                    onClick={() => onToggle(s.macroCategoryId)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: selected.has(s.macroCategoryId) ? 'var(--accent)' : 'var(--faint)' }}
+                  >
+                    {selected.has(s.macroCategoryId) ? <Check size={14} /> : <span style={{ width: 14, height: 14, border: '1px solid var(--line)', borderRadius: 3, display: 'block' }} />}
+                  </button>
+                </td>
+                <td className="table-td">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{s.label}</span>
+                      <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{s.reason}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>
+                  {s.average3m > 0 ? formatBRL(s.average3m) : '—'}
+                </td>
+                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>
+                  {s.lastMonth > 0 ? formatBRL(s.lastMonth) : '—'}
+                </td>
+                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>
+                  {s.recurringForecast > 0 ? formatBRL(s.recurringForecast) : '—'}
+                </td>
+                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>
+                  {formatBRL(s.suggestedAmount)}
+                </td>
+                <td className="table-td">
+                  <span style={{ fontSize: 10, fontWeight: 700, color: CONF_COLOR[s.confidence] }}>
+                    {s.confidence === 'high' ? 'Alta' : s.confidence === 'medium' ? 'Média' : 'Baixa'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={selected.size === 0}
+          onClick={onApply}
+        >
+          Aplicar {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancelar</button>
+      </div>
     </div>
   )
 }
