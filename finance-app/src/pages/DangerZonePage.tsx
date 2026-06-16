@@ -2,9 +2,39 @@ import { useState, useMemo } from 'react'
 import { useData } from '../context/DataContext'
 import { DATA_PROVIDER } from '../config/env'
 
+const ALL_FIN_KEYS = [
+  'finance_transactions',
+  'finance_budgets',
+  'finance_closings',
+  'finance_subcategories',
+  'fin_pluggy_connections',
+  'fin_category_rules',
+  'finance_migration_banner_dismissed',
+]
+
+function exportFullBackup(): void {
+  const snapshot: Record<string, unknown> = { _exportedAt: new Date().toISOString(), _version: 1 }
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (!k) continue
+    if (k.startsWith('fin_') || k.startsWith('finance_')) {
+      try { snapshot[k] = JSON.parse(localStorage.getItem(k) ?? 'null') }
+      catch { snapshot[k] = localStorage.getItem(k) }
+    }
+  }
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `fin_backup_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function DangerZonePage() {
   const { transactions, budgets, closings } = useData()
   const [confirmClear, setConfirmClear] = useState(false)
+  const [clearAllPhrase, setClearAllPhrase] = useState('')
   const [clearMonth, setClearMonth] = useState('')
   const [clearMonthConfirm, setClearMonthConfirm] = useState('')
 
@@ -47,10 +77,14 @@ export function DangerZonePage() {
   }
 
   function handleClearLocal() {
-    const DATA_KEYS = ['finance_transactions', 'finance_budgets', 'finance_closings', 'finance_subcategories']
-    DATA_KEYS.forEach(k => localStorage.setItem(k, '[]'))
-    localStorage.removeItem('fin_pluggy_connections')
-    localStorage.removeItem('finance_migration_banner_dismissed')
+    if (clearAllPhrase !== 'APAGAR TUDO') return
+    ALL_FIN_KEYS.forEach(k => {
+      if (k === 'fin_pluggy_connections' || k === 'finance_migration_banner_dismissed' || k === 'fin_category_rules') {
+        localStorage.removeItem(k)
+      } else {
+        localStorage.setItem(k, '[]')
+      }
+    })
     window.location.reload()
   }
 
@@ -134,31 +168,62 @@ export function DangerZonePage() {
           <div className="card" style={{ padding: '18px 22px', border: '1px solid var(--crit)' }}>
             <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Limpar todos os dados locais</h3>
             {confirmClear ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <p style={{ fontSize: 12.5, color: 'var(--crit)', fontWeight: 600 }}>
-                  Esta ação remove todos os dados locais permanentemente. Exporte um backup antes?
-                </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)', fontSize: 12.5, color: 'var(--crit)', fontWeight: 600, lineHeight: 1.5 }}>
+                  Isso remove conexões Pluggy, contas, lançamentos, regras aprendidas e todas as configurações locais. <strong>Irreversível.</strong>
+                </div>
+                <button
+                  onClick={exportFullBackup}
+                  className="btn btn-secondary btn-sm"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Exportar backup antes de apagar
+                </button>
+                <div>
+                  <p style={{ fontSize: 11.5, color: 'var(--crit)', marginBottom: 5 }}>
+                    Digite <strong>APAGAR TUDO</strong> para confirmar:
+                  </p>
+                  <input
+                    value={clearAllPhrase}
+                    onChange={e => setClearAllPhrase(e.target.value)}
+                    placeholder="APAGAR TUDO"
+                    className="login-field"
+                    style={{ fontSize: 12, maxWidth: 200 }}
+                  />
+                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     onClick={handleClearLocal}
-                    style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--crit)', border: 'none', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                    disabled={clearAllPhrase !== 'APAGAR TUDO'}
+                    style={{
+                      fontSize: 12, fontWeight: 700, color: '#fff',
+                      background: clearAllPhrase === 'APAGAR TUDO' ? 'var(--crit)' : 'var(--line)',
+                      border: 'none', borderRadius: 8, padding: '7px 16px',
+                      cursor: clearAllPhrase === 'APAGAR TUDO' ? 'pointer' : 'not-allowed',
+                      fontFamily: 'var(--ui)',
+                    }}
                   >
-                    Confirmar limpeza total
+                    Apagar tudo permanentemente
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setConfirmClear(false)}>Cancelar</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setConfirmClear(false); setClearAllPhrase('') }}>Cancelar</button>
                 </div>
               </div>
             ) : (
               <>
                 <p style={{ fontSize: 12.5, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.6 }}>
-                  Remove todos os lançamentos, orçamentos e fechamentos armazenados localmente. Irreversível.
+                  Remove conexões Pluggy, contas, lançamentos, orçamentos, fechamentos e regras aprendidas armazenados localmente. Irreversível.
                 </p>
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  style={{ fontSize: 12, fontWeight: 700, color: 'var(--crit)', background: 'var(--crit-soft)', border: '1px solid var(--crit)', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontFamily: 'var(--ui)' }}
-                >
-                  Limpar todos os dados locais
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setConfirmClear(true)}
+                    style={{ fontSize: 12, fontWeight: 700, color: 'var(--crit)', background: 'var(--crit-soft)', border: '1px solid var(--crit)', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                  >
+                    Limpar todos os dados locais
+                  </button>
+                  <button onClick={exportFullBackup} className="btn btn-secondary btn-sm">
+                    Exportar backup
+                  </button>
+                </div>
               </>
             )}
           </div>
