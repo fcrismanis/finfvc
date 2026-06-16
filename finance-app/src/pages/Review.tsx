@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles, CheckSquare, Square } from 'lucide-react'
+import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles, CheckSquare, Square, Brain } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
@@ -7,9 +7,21 @@ import { getReviewItems } from '../utils/reviewItems'
 import { lookupPluggyCategory } from '../services/pluggy.service'
 import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { isManualTx } from '../utils/dataQuality'
+import { canAutoCategorize, learnRuleFromTransaction } from '../services/categoryRules.service'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
+
+interface AISuggestion {
+  id: string
+  macroCategoryId: string
+  subCategoryId?: string | null
+  classificationType: ClassificationType
+  tags: string[]
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+  rulePattern: string
+}
 
 interface Props {
   onNavigate?: (route: string) => void
@@ -31,6 +43,7 @@ const SUGGESTION_SOURCE_LABEL: Record<NonNullable<Transaction['categorySuggestio
   text_inference: 'Inferência por texto',
   history:        'Histórico',
   rule:           'Regra aprendida',
+  ai:             'IA',
   manual:         'Manual',
   none:           '—',
 }
@@ -60,6 +73,10 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [applyingAll, setApplyingAll] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[] | null>(null)
+  const [dismissedAI, setDismissedAI] = useState<Set<string>>(new Set())
 
   useEffect(() => { setSelected(new Set()) }, [activePanel])
 
@@ -251,6 +268,91 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     const prompt = buildClipboardPrompt(uncategorized)
     navigator.clipboard.writeText(prompt).catch(() => {/* ignore */})
   }
+
+  async function categorizeWithAI() {
+    const candidates = transactions.filter(t =>
+      canAutoCategorize(t) && (!t.macroCategoryId || t.needsReview || t.categoryConfidence === 'low')
+    )
+    if (candidates.length === 0) {
+      setAiError('Nenhuma transação pendente de categorização (sem manual override).')
+      return
+    }
+    setAiLoading(true)
+    setAiError(null)
+    setAiSuggestions(null)
+    try {
+      const res = await fetch('http://localhost:8787/api/ai/categorize-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactions: candidates.slice(0, 80),
+          categories: MACRO_CATEGORIES.map(m => ({ id: m.id, name: m.name, classificationType: m.classificationType })),
+          subCategories: subCategories.map(s => ({ id: s.id, name: s.name, macroCategoryId: s.macroCategoryId })),
+          rules: [],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        setAiError(data.error ?? 'Erro desconhecido da IA.')
+        return
+      }
+      setAiSuggestions((data.suggestions as AISuggestion[]) ?? [])
+      setDismissedAI(new Set())
+    } catch {
+      setAiError('Falha de conexão com o servidor backend (localhost:8787). Verifique se está rodando.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function applyAISuggestion(sugg: AISuggestion) {
+    const tx = transactions.find(t => t.id === sugg.id)
+    if (!tx || !canAutoCategorize(tx)) return
+    updateTransaction(tx.id, {
+      macroCategoryId: sugg.macroCategoryId,
+      subCategoryId: sugg.subCategoryId ?? undefined,
+      classificationType: sugg.classificationType,
+      tags: Array.from(new Set([...(tx.tags ?? []), ...(sugg.tags ?? [])])),
+      categorySuggestionSource: 'ai',
+      categoryConfidence: sugg.confidence,
+      needsReview: sugg.confidence !== 'high',
+    })
+    if (sugg.rulePattern) {
+      learnRuleFromTransaction(
+        { ...tx, macroCategoryId: sugg.macroCategoryId, subCategoryId: sugg.subCategoryId ?? undefined, classificationType: sugg.classificationType },
+        'ai',
+      )
+    }
+    setDismissedAI(prev => { const n = new Set(prev); n.add(sugg.id); return n })
+  }
+
+  async function applyAllHighAI() {
+    if (!aiSuggestions) return
+    const highConf = aiSuggestions.filter(s => s.confidence === 'high' && !dismissedAI.has(s.id))
+    const items: Array<{ id: string; patch: Partial<Transaction> }> = []
+    for (const sugg of highConf) {
+      const tx = transactions.find(t => t.id === sugg.id)
+      if (!tx || !canAutoCategorize(tx)) continue
+      items.push({ id: sugg.id, patch: {
+        macroCategoryId: sugg.macroCategoryId,
+        subCategoryId: sugg.subCategoryId ?? undefined,
+        classificationType: sugg.classificationType,
+        tags: Array.from(new Set([...(tx.tags ?? []), ...(sugg.tags ?? [])])),
+        categorySuggestionSource: 'ai',
+        categoryConfidence: 'high',
+        needsReview: false,
+      } })
+      if (sugg.rulePattern) {
+        learnRuleFromTransaction(
+          { ...tx, macroCategoryId: sugg.macroCategoryId, subCategoryId: sugg.subCategoryId ?? undefined, classificationType: sugg.classificationType },
+          'ai',
+        )
+      }
+    }
+    if (items.length) await updateTransactions(items, { markManual: false })
+    setDismissedAI(prev => new Set([...prev, ...highConf.map(s => s.id)]))
+  }
+
 
   function openModal(tx: Transaction) {
     setModalTx(tx)
@@ -464,6 +566,24 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                       >
                         Copiar pendências para ChatGPT
                       </button>
+                    )}
+                    <button
+                      onClick={categorizeWithAI}
+                      disabled={aiLoading}
+                      title="Envia pendentes para IA e mostra sugestões de categoria para aprovação"
+                      style={{
+                        fontSize: 11.5, fontWeight: 700, color: '#fff',
+                        background: 'var(--accent)', border: 'none', borderRadius: 7,
+                        padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        opacity: aiLoading ? 0.65 : 1,
+                      }}
+                    >
+                      <Brain size={13} />
+                      {aiLoading ? 'Consultando IA…' : 'Categorizar com IA'}
+                    </button>
+                    {aiError && (
+                      <span style={{ fontSize: 11, color: 'var(--crit)', fontWeight: 600 }}>{aiError}</span>
                     )}
                   </div>
                 )}
@@ -741,6 +861,113 @@ export function Review({ onNavigate: _onNavigate }: Props) {
           onApplySuggestedTags={bulkApplySuggestedTags}
           onClear={clearSelection}
         />
+      )}
+
+      {/* ── AI suggestions modal ── */}
+      {aiSuggestions !== null && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 110,
+            background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(2px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={e => e.target === e.currentTarget && setAiSuggestions(null)}
+        >
+          <div style={{
+            background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px',
+            width: '100%', maxWidth: 660, maxHeight: '80vh',
+            display: 'flex', flexDirection: 'column', gap: 14,
+            boxShadow: '0 8px 40px rgba(0,0,0,.22)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em', display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Brain size={16} color="var(--accent)" />
+                  Sugestões da IA
+                </h2>
+                <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3 }}>
+                  {aiSuggestions.length} sugestões · aplique individualmente ou todas de alta confiança. Dados sensíveis não são enviados.
+                </p>
+              </div>
+              <button onClick={() => setAiSuggestions(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={applyAllHighAI}
+                style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+              >
+                Aplicar alta confiança ({aiSuggestions.filter(s => s.confidence === 'high' && !dismissedAI.has(s.id)).length})
+              </button>
+              <button
+                onClick={() => setAiSuggestions(null)}
+                style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {aiSuggestions.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--faint)', textAlign: 'center', padding: '24px 0' }}>
+                  A IA não encontrou sugestões com confiança suficiente.
+                </p>
+              ) : aiSuggestions.map(sugg => {
+                const dismissed = dismissedAI.has(sugg.id)
+                const tx = transactions.find(t => t.id === sugg.id)
+                const macro = MACRO_CATEGORIES.find(m => m.id === sugg.macroCategoryId)
+                const confColor = sugg.confidence === 'high' ? 'var(--pos)' : sugg.confidence === 'medium' ? 'var(--warn)' : 'var(--faint)'
+                return (
+                  <div
+                    key={sugg.id}
+                    style={{
+                      padding: '12px 14px', borderRadius: 8,
+                      border: `1px solid ${dismissed ? 'var(--line)' : 'var(--line)'}`,
+                      background: dismissed ? 'var(--well)' : 'var(--paper)',
+                      opacity: dismissed ? 0.5 : 1,
+                      display: 'flex', alignItems: 'flex-start', gap: 12,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {tx?.description ?? sugg.id}
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {macro && (
+                          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12` }}>
+                            {macro.name}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 10, fontWeight: 700, color: confColor }}>
+                          {sugg.confidence === 'high' ? 'alta' : sugg.confidence === 'medium' ? 'média' : 'baixa'} confiança
+                        </span>
+                        <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{sugg.reason}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {!dismissed && (
+                        <button
+                          onClick={() => applyAISuggestion(sugg)}
+                          style={{ fontSize: 11, fontWeight: 700, color: 'var(--pos)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                        >
+                          Aplicar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setDismissedAI(prev => { const n = new Set(prev); n.add(sugg.id); return n })}
+                        style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                      >
+                        Ignorar
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Edit modal ── */}

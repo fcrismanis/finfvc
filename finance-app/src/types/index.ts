@@ -58,7 +58,7 @@ export interface Transaction {
   pluggyCategoryId?: string
   pluggyCategoryMapped?: boolean
   categoryConfidence?: 'high' | 'medium' | 'low'
-  categorySuggestionSource?: 'pluggy_id' | 'pluggy_name' | 'text_inference' | 'history' | 'rule' | 'manual' | 'none'
+  categorySuggestionSource?: 'pluggy_id' | 'pluggy_name' | 'text_inference' | 'history' | 'rule' | 'ai' | 'manual' | 'none'
   subCategoryNameSuggested?: string
   pluggyOperationType?: string
   pluggyPaymentMethod?: string
