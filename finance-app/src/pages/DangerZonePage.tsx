@@ -117,6 +117,13 @@ function DuplicateCleanupPanel() {
               pluggyPayerName: donor.pluggyPayerName ?? keep.pluggyPayerName,
               pluggyAccountName: donor.pluggyAccountName ?? keep.pluggyAccountName,
               pluggyInstitutionName: donor.pluggyInstitutionName ?? keep.pluggyInstitutionName,
+              pluggyRawDate: donor.pluggyRawDate ?? keep.pluggyRawDate,
+              pluggyRawTransactionDate: donor.pluggyRawTransactionDate ?? keep.pluggyRawTransactionDate,
+              pluggyRawPaymentDate: donor.pluggyRawPaymentDate ?? keep.pluggyRawPaymentDate,
+              pluggyRawCompetenceDate: donor.pluggyRawCompetenceDate ?? keep.pluggyRawCompetenceDate,
+              pluggyRawOperationDate: donor.pluggyRawOperationDate ?? keep.pluggyRawOperationDate,
+              pluggyRawCreatedAt: donor.pluggyRawCreatedAt ?? keep.pluggyRawCreatedAt,
+              pluggyRawUpdatedAt: donor.pluggyRawUpdatedAt ?? keep.pluggyRawUpdatedAt,
               updatedAt: new Date().toISOString(),
             })
           }

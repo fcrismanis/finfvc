@@ -67,6 +67,13 @@ export interface Transaction {
   pluggyAccountName?: string
   pluggyInstitutionName?: string
   pluggyInstitutionLogoUrl?: string
+  pluggyRawDate?: string
+  pluggyRawTransactionDate?: string
+  pluggyRawPaymentDate?: string
+  pluggyRawCompetenceDate?: string
+  pluggyRawOperationDate?: string
+  pluggyRawCreatedAt?: string
+  pluggyRawUpdatedAt?: string
   group?: string
   tags?: string[]
   notes?: string

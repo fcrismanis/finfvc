@@ -108,6 +108,12 @@ export interface PluggyRawTransaction {
   accountId: string
   accountType?: 'BANK' | 'CREDIT'
   date: string
+  transactionDate?: string | null
+  paymentDate?: string | null
+  competenceDate?: string | null
+  operationDate?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
   description: string
   descriptionRaw?: string | null
   amount: number
@@ -242,6 +248,13 @@ export interface ConnInfo {
   institutionLogoUrl: string | null
 }
 
+function firstNonEmptyDate(...values: Array<string | null | undefined>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value
+  }
+  return undefined
+}
+
 export function mapPluggyToTransactions(
   pluggyTxs: PluggyRawTransaction[],
   accountId: string,
@@ -255,7 +268,16 @@ export function mapPluggyToTransactions(
   const fallbackDate = currentFinancialDate()
 
   const allMapped: import('../types').Transaction[] = pluggyTxs.map(ptx => {
-    const financialDate = normalizeFinancialDate(ptx.date, fallbackDate)
+    const rawPrimaryDate = firstNonEmptyDate(
+      ptx.transactionDate,
+      ptx.date,
+      ptx.operationDate,
+      ptx.paymentDate,
+      ptx.competenceDate,
+    )
+    const financialDate = normalizeFinancialDate(rawPrimaryDate, fallbackDate)
+    const competenceDate = normalizeFinancialDate(ptx.competenceDate ?? rawPrimaryDate, financialDate)
+    const paymentDate = ptx.paymentDate ? normalizeFinancialDate(ptx.paymentDate, '') : undefined
     const importHash = ptx.providerCode
       ? `pluggy_${ptx.providerCode}`
       : `${financialDate}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
@@ -272,7 +294,8 @@ export function mapPluggyToTransactions(
       type,
       classificationType: defaultClassification,
       transactionDate: financialDate,
-      competenceDate: financialDate,
+      competenceDate,
+      paymentDate,
       status: ptx.status === 'POSTED' ? 'paid' : 'pending',
       accountId,
       paymentMethod: 'account' as import('../types').PaymentMethod,
@@ -297,8 +320,30 @@ export function mapPluggyToTransactions(
       pluggyAccountName:   connInfo?.accountName,
       pluggyInstitutionName: connInfo?.institutionName,
       pluggyInstitutionLogoUrl: connInfo?.institutionLogoUrl ?? undefined,
+      pluggyRawDate: ptx.date ?? undefined,
+      pluggyRawTransactionDate: ptx.transactionDate ?? undefined,
+      pluggyRawPaymentDate: ptx.paymentDate ?? undefined,
+      pluggyRawCompetenceDate: ptx.competenceDate ?? undefined,
+      pluggyRawOperationDate: ptx.operationDate ?? undefined,
+      pluggyRawCreatedAt: ptx.createdAt ?? undefined,
+      pluggyRawUpdatedAt: ptx.updatedAt ?? undefined,
       createdAt: now,
       updatedAt: now,
+    }
+
+    if (import.meta.env.DEV) {
+      console.debug('[PluggyDateTrace]', {
+        providerCode: ptx.providerCode,
+        rawDate: ptx.date,
+        rawTransactionDate: ptx.transactionDate,
+        rawPaymentDate: ptx.paymentDate,
+        rawCompetenceDate: ptx.competenceDate,
+        rawOperationDate: ptx.operationDate,
+        rawCreatedAt: ptx.createdAt,
+        mappedDate: baseTx.transactionDate,
+        mappedCompetenceDate: baseTx.competenceDate,
+        mappedPaymentDate: baseTx.paymentDate,
+      })
     }
 
     // Priority 1: history-based (high confidence wins; medium also applied)

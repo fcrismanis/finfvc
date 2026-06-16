@@ -99,6 +99,9 @@ export class SupabaseDataProvider implements IDataProvider {
     // Convert camelCase patch fields to snake_case for Supabase
     const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (patch.description !== undefined)         dbPatch.description = patch.description
+    if (patch.transactionDate !== undefined)     dbPatch.transaction_date = patch.transactionDate
+    if (patch.competenceDate !== undefined)      dbPatch.competence_date = patch.competenceDate
+    if (patch.paymentDate !== undefined)         dbPatch.payment_date = patch.paymentDate ?? null
     if (patch.categoryId !== undefined)          dbPatch.category_id = patch.categoryId ?? null
     if (patch.subCategoryId !== undefined)       dbPatch.sub_category_id = patch.subCategoryId ?? null
     if (patch.macroCategoryId !== undefined)     dbPatch.macro_category_id = patch.macroCategoryId ?? null

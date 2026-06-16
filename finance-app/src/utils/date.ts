@@ -43,6 +43,14 @@ export function normalizeFinancialDate(raw: string | number | Date | undefined |
   return isNaN(parsed.getTime()) ? fallback : formatLocalDate(parsed)
 }
 
+export function formatFinancialDateBR(value?: string | null): string {
+  const normalized = normalizeFinancialDate(value, '')
+  if (!normalized) return ''
+  const [year, month, day] = normalized.split('-')
+  if (!year || !month || !day) return normalized
+  return `${day}/${month}/${year}`
+}
+
 export function getCompetenceMonth(dateStr: string): string {
   return dateStr.substring(0, 7)
 }

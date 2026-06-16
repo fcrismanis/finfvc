@@ -37,6 +37,41 @@ type DbTransaction = {
   updated_at: string
 }
 
+type TransactionRawData = {
+  pluggyRawDate?: string
+  pluggyRawTransactionDate?: string
+  pluggyRawPaymentDate?: string
+  pluggyRawCompetenceDate?: string
+  pluggyRawOperationDate?: string
+  pluggyRawCreatedAt?: string
+  pluggyRawUpdatedAt?: string
+}
+
+function fromRawData(raw: Record<string, unknown> | null): TransactionRawData {
+  if (!raw) return {}
+  return {
+    pluggyRawDate: typeof raw.pluggyRawDate === 'string' ? raw.pluggyRawDate : undefined,
+    pluggyRawTransactionDate: typeof raw.pluggyRawTransactionDate === 'string' ? raw.pluggyRawTransactionDate : undefined,
+    pluggyRawPaymentDate: typeof raw.pluggyRawPaymentDate === 'string' ? raw.pluggyRawPaymentDate : undefined,
+    pluggyRawCompetenceDate: typeof raw.pluggyRawCompetenceDate === 'string' ? raw.pluggyRawCompetenceDate : undefined,
+    pluggyRawOperationDate: typeof raw.pluggyRawOperationDate === 'string' ? raw.pluggyRawOperationDate : undefined,
+    pluggyRawCreatedAt: typeof raw.pluggyRawCreatedAt === 'string' ? raw.pluggyRawCreatedAt : undefined,
+    pluggyRawUpdatedAt: typeof raw.pluggyRawUpdatedAt === 'string' ? raw.pluggyRawUpdatedAt : undefined,
+  }
+}
+
+function toRawData(tx: Transaction): Record<string, unknown> | null {
+  const raw: TransactionRawData = {}
+  if (tx.pluggyRawDate) raw.pluggyRawDate = tx.pluggyRawDate
+  if (tx.pluggyRawTransactionDate) raw.pluggyRawTransactionDate = tx.pluggyRawTransactionDate
+  if (tx.pluggyRawPaymentDate) raw.pluggyRawPaymentDate = tx.pluggyRawPaymentDate
+  if (tx.pluggyRawCompetenceDate) raw.pluggyRawCompetenceDate = tx.pluggyRawCompetenceDate
+  if (tx.pluggyRawOperationDate) raw.pluggyRawOperationDate = tx.pluggyRawOperationDate
+  if (tx.pluggyRawCreatedAt) raw.pluggyRawCreatedAt = tx.pluggyRawCreatedAt
+  if (tx.pluggyRawUpdatedAt) raw.pluggyRawUpdatedAt = tx.pluggyRawUpdatedAt
+  return Object.keys(raw).length > 0 ? raw : null
+}
+
 function toTransaction(row: DbTransaction): Transaction {
   return {
     id: row.id,
@@ -68,6 +103,7 @@ function toTransaction(row: DbTransaction): Transaction {
     sourceFile: row.source_file ?? undefined,
     notes: row.notes ?? undefined,
     origin: 'import_xlsx',
+    ...fromRawData(row.raw_data),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -102,7 +138,7 @@ function toDbRow(t: Transaction, familyId: string): Omit<DbTransaction, 'created
     import_batch_id: t.importBatchId ?? null,
     import_hash: t.importHash ?? null,
     source_file: t.sourceFile ?? null,
-    raw_data: null,
+    raw_data: toRawData(t),
     notes: t.notes ?? null,
   }
 }

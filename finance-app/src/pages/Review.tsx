@@ -10,7 +10,7 @@ import { lookupPluggyCategory } from '../services/pluggy.service'
 import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { isManualTx } from '../utils/dataQuality'
 import { canAutoCategorize, learnRuleFromTransaction } from '../services/categoryRules.service'
-import { currentYearMonth } from '../utils/date'
+import { currentYearMonth, formatFinancialDateBR } from '../utils/date'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
@@ -670,7 +670,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                                 </button>
                               </td>
                               <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
-                                {new Date(tx.competenceDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                {formatFinancialDateBR(tx.competenceDate)}
                               </td>
                               <td className="table-td" style={{ maxWidth: 200 }}>
                                 <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
@@ -802,7 +802,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                             </button>
                           </td>
                           <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5 }}>
-                            {item.tx.competenceDate}
+                            {formatFinancialDateBR(item.tx.competenceDate)}
                           </td>
                           <td className="table-td" style={{ maxWidth: 240 }}>
                             <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PluggyConnect } from 'react-pluggy-connect'
 import { useData } from '../context/DataContext'
 import {
@@ -22,7 +22,7 @@ import {
   type RecoveryResult,
 } from '../services/pluggyStorage.service'
 import { MACRO_CATEGORIES } from '../config/categories'
-import { currentFinancialDate } from '../utils/date'
+import { currentFinancialDate, formatFinancialDateBR, normalizeFinancialDate } from '../utils/date'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 
@@ -160,11 +160,30 @@ interface SyncSession {
   error?: string
 }
 
+interface PluggyDateRepairCandidate {
+  id: string
+  description: string
+  reason: string
+  beforeDate: string
+  afterDate: string
+  beforeCompetenceDate: string
+  afterCompetenceDate: string
+  beforePaymentDate?: string
+  afterPaymentDate?: string
+  patch: Partial<Transaction>
+}
+
+interface PluggyDateRepairPreview {
+  analyzed: number
+  missingEvidence: number
+  candidates: PluggyDateRepairCandidate[]
+}
+
 const fmtBRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  formatFinancialDateBR(iso)
 
 const STATUS_LABEL: Record<string, string> = {
   UPDATED:            'Atualizado',
@@ -190,8 +209,90 @@ const PERIOD_LABELS: Record<PeriodPreset, string> = {
   custom:        'Personalizado',
 }
 
+function firstRawDate(...values: Array<string | null | undefined>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value
+  }
+  return undefined
+}
+
+function isLikelyPluggyTransaction(tx: Transaction): boolean {
+  return tx.source === 'pluggy'
+    || tx.origin === 'import_api'
+    || tx.id.startsWith('pluggy_')
+    || Boolean(tx.importHash?.startsWith('pluggy_'))
+    || Boolean(
+      tx.pluggyCategory
+      || tx.pluggyCategoryId
+      || tx.pluggyInstitutionName
+      || tx.pluggyRawDate
+      || tx.pluggyRawTransactionDate
+    )
+}
+
+function buildPluggyDateRepairPreview(transactions: Transaction[]): PluggyDateRepairPreview {
+  const pluggyTxs = transactions.filter(isLikelyPluggyTransaction)
+  const candidates: PluggyDateRepairCandidate[] = []
+  let missingEvidence = 0
+
+  for (const tx of pluggyTxs) {
+    const primaryRaw = firstRawDate(
+      tx.pluggyRawTransactionDate,
+      tx.pluggyRawDate,
+      tx.pluggyRawOperationDate,
+      tx.pluggyRawPaymentDate,
+      tx.pluggyRawCompetenceDate,
+    )
+    if (!primaryRaw) {
+      missingEvidence++
+      continue
+    }
+
+    const expectedDate = normalizeFinancialDate(primaryRaw, '')
+    if (!expectedDate) {
+      missingEvidence++
+      continue
+    }
+
+    const expectedCompetenceDate = normalizeFinancialDate(tx.pluggyRawCompetenceDate ?? primaryRaw, expectedDate)
+    const expectedPaymentDate = tx.pluggyRawPaymentDate ? normalizeFinancialDate(tx.pluggyRawPaymentDate, '') : undefined
+    const reasons: string[] = []
+    const patch: Partial<Transaction> = {}
+
+    if (tx.transactionDate !== expectedDate) {
+      patch.transactionDate = expectedDate
+      reasons.push('transactionDate')
+    }
+    if (tx.competenceDate !== expectedCompetenceDate) {
+      patch.competenceDate = expectedCompetenceDate
+      reasons.push('competenceDate')
+    }
+    if (expectedPaymentDate && tx.paymentDate !== expectedPaymentDate) {
+      patch.paymentDate = expectedPaymentDate
+      reasons.push('paymentDate')
+    }
+
+    if (reasons.length === 0) continue
+
+    candidates.push({
+      id: tx.id,
+      description: tx.description,
+      reason: reasons.join(', '),
+      beforeDate: tx.transactionDate,
+      afterDate: expectedDate,
+      beforeCompetenceDate: tx.competenceDate,
+      afterCompetenceDate: expectedCompetenceDate,
+      beforePaymentDate: tx.paymentDate,
+      afterPaymentDate: expectedPaymentDate,
+      patch,
+    })
+  }
+
+  return { analyzed: pluggyTxs.length, missingEvidence, candidates }
+}
+
 export function PluggyPage() {
-  const { transactions, appendTransactions, updateTransaction } = useData()
+  const { transactions, appendTransactions, updateTransaction, updateTransactions } = useData()
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
   const [connectToken, setConnectToken] = useState<string | null>(null)
@@ -203,8 +304,11 @@ export function PluggyPage() {
   const [debugLoading, setDebugLoading] = useState<string | null>(null)
   const [reclassPreview, setReclassPreview] = useState<ReclassPreview | null>(null)
   const [reclassRunning, setReclassRunning] = useState(false)
+  const [repairPreview, setRepairPreview] = useState<PluggyDateRepairPreview | null>(null)
+  const [repairRunning, setRepairRunning] = useState(false)
   const [recoveryDiag, setRecoveryDiag] = useState<DiagnosticResult | null>(null)
   const [recoveryResult, setRecoveryResult] = useState<RecoveryResult | null>(null)
+  const pendingPersistTraceRef = useRef<string[] | null>(null)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
@@ -213,6 +317,26 @@ export function PluggyPage() {
       .catch(() => setBackendStatus('not_configured'))
     setConnections(getLocalConnections())
   }, [])
+
+  useEffect(() => {
+    if (!IS_DEV || !pendingPersistTraceRef.current?.length) return
+    const pendingIds = new Set(pendingPersistTraceRef.current)
+    const persisted = transactions.filter(tx => pendingIds.has(tx.id))
+    if (persisted.length === 0) return
+    console.debug('[PluggyDateTrace:Persisted]', persisted.map(tx => ({
+      id: tx.id,
+      description: tx.description,
+      transactionDate: tx.transactionDate,
+      competenceDate: tx.competenceDate,
+      paymentDate: tx.paymentDate,
+      pluggyRawDate: tx.pluggyRawDate,
+      pluggyRawTransactionDate: tx.pluggyRawTransactionDate,
+      pluggyRawPaymentDate: tx.pluggyRawPaymentDate,
+      pluggyRawCompetenceDate: tx.pluggyRawCompetenceDate,
+      pluggyRawOperationDate: tx.pluggyRawOperationDate,
+    })))
+    pendingPersistTraceRef.current = null
+  }, [transactions])
 
   function handleDiagnose() {
     setRecoveryResult(null)
@@ -288,9 +412,7 @@ export function PluggyPage() {
   }
 
   function handleReclassPreview() {
-    const pluggyTxs = transactions.filter(
-      t => t.source === 'pluggy' || t.origin === 'import_api'
-    )
+    const pluggyTxs = transactions.filter(isLikelyPluggyTransaction)
     setReclassPreview(buildReclassPreview(pluggyTxs))
   }
 
@@ -306,6 +428,24 @@ export function PluggyPage() {
     } finally {
       setReclassRunning(false)
       setReclassPreview(null)
+    }
+  }
+
+  function handleRepairPreview() {
+    setRepairPreview(buildPluggyDateRepairPreview(transactions))
+  }
+
+  async function handleRepairConfirm() {
+    if (!repairPreview || repairPreview.candidates.length === 0) return
+    setRepairRunning(true)
+    try {
+      await updateTransactions(
+        repairPreview.candidates.map(candidate => ({ id: candidate.id, patch: candidate.patch })),
+        { markManual: false },
+      )
+      setRepairPreview(null)
+    } finally {
+      setRepairRunning(false)
     }
   }
 
@@ -354,6 +494,7 @@ export function PluggyPage() {
     const { itemId, accountId, result } = sync
     setSync(s => s ? { ...s, phase: 'importing' } : s)
     try {
+      pendingPersistTraceRef.current = result.newTxs.map(tx => tx.id)
       await appendTransactions(result.newTxs as Transaction[])
       updateConnectionSyncMeta(itemId, accountId, result.newTxs.length)
       setConnections(getLocalConnections())
@@ -549,7 +690,7 @@ export function PluggyPage() {
         )}
 
         {/* Reclassify imported */}
-        {transactions.some(t => t.source === 'pluggy' || t.origin === 'import_api') && (
+        {transactions.some(isLikelyPluggyTransaction) && (
           <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
               <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>Lançamentos Pluggy já importados</p>
@@ -557,9 +698,14 @@ export function PluggyPage() {
                 Aplica o mapeamento de categorias atualizado (Pluggy + inferência por texto) nos importados sem categoria manual.
               </p>
             </div>
-            <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleReclassPreview}>
-              Reclassificar importados
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleRepairPreview}>
+                Corrigir datas Pluggy
+              </button>
+              <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleReclassPreview}>
+                Reclassificar importados
+              </button>
+            </div>
           </div>
         )}
 
@@ -589,6 +735,15 @@ export function PluggyPage() {
           running={reclassRunning}
           onConfirm={handleReclassConfirm}
           onClose={() => setReclassPreview(null)}
+        />
+      )}
+
+      {repairPreview && (
+        <RepairDatesModal
+          preview={repairPreview}
+          running={repairRunning}
+          onConfirm={handleRepairConfirm}
+          onClose={() => setRepairPreview(null)}
         />
       )}
 
@@ -683,6 +838,64 @@ function ReclassModal({ preview, running, onConfirm, onClose }: {
         <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
           <button className="btn btn-primary" disabled={running || preview.willReclassify === 0} onClick={onConfirm}>
             {running ? 'Aplicando…' : `Aplicar ${preview.willReclassify} classificação${preview.willReclassify !== 1 ? 'ões' : ''}`}
+          </button>
+          <button className="btn btn-secondary" disabled={running} onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RepairDatesModal({ preview, running, onConfirm, onClose }: {
+  preview: PluggyDateRepairPreview
+  running: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => !running && e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 620, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Corrigir datas Pluggy</p>
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>Só corrige quando existe evidência raw salva. Sem adivinhação agressiva.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+          {([
+            ['Analisados', String(preview.analyzed), 'var(--ink-2)'],
+            ['Sem evidência raw', String(preview.missingEvidence), 'var(--faint)'],
+            ['Corrigíveis', String(preview.candidates.length), 'var(--warn)'],
+          ] as [string, string, string][]).map(([l, v, c]) => (
+            <div key={l} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
+              <p style={{ fontSize: 18, fontWeight: 800, color: c, fontVariantNumeric: 'tabular-nums' }}>{v}</p>
+              <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{l}</p>
+            </div>
+          ))}
+        </div>
+        {preview.candidates.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {preview.candidates.slice(0, 12).map(candidate => (
+              <div key={candidate.id} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{candidate.description}</p>
+                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>{candidate.reason}</p>
+                <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <span>Data: {candidate.beforeDate} → {candidate.afterDate}</span>
+                  <span>Comp.: {candidate.beforeCompetenceDate} → {candidate.afterCompetenceDate}</span>
+                  {candidate.afterPaymentDate && (
+                    <span>Pgto.: {candidate.beforePaymentDate ?? '—'} → {candidate.afterPaymentDate}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {preview.candidates.length > 12 && (
+              <p style={{ fontSize: 11, color: 'var(--faint)' }}>Mostrando 12 exemplos de {preview.candidates.length}.</p>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: 12.5, color: 'var(--ok)' }}>Nenhuma correção com evidência suficiente.</p>
+        )}
+        <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+          <button className="btn btn-primary" disabled={running || preview.candidates.length === 0} onClick={onConfirm}>
+            {running ? 'Aplicando…' : `Aplicar ${preview.candidates.length} correção${preview.candidates.length !== 1 ? 'ões' : ''}`}
           </button>
           <button className="btn btn-secondary" disabled={running} onClick={onClose}>Cancelar</button>
         </div>
