@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { ImportDropzone } from '../components/import/ImportDropzone'
 import { ImportPreview } from '../components/import/ImportPreview'
 import { ImportSummary } from '../components/import/ImportSummary'
 import { parseAndPreview, confirmImport } from '../services/import.service'
+import {
+  parseRealFinanceXlsx, importRealFinanceBase, ensureSubCategories, upsertAccountRegistry,
+  type RealImportResult,
+} from '../services/realFinanceImport.service'
+import { buildTrainingExamplesFromRows, appendTrainingExamples } from '../services/financialTraining.service'
 import { useData } from '../context/DataContext'
 import type { ParsedImportItem, ImportSummaryData } from '../importers/types'
 
 type Stage = 'idle' | 'parsing' | 'preview' | 'complete'
+type RealStage = 'idle' | 'importing' | 'done' | 'error'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -18,6 +24,10 @@ const STAGES: Array<'idle' | 'preview' | 'complete'> = ['idle', 'preview', 'comp
 
 export function Import({ onNavigate }: Props) {
   const { transactions, appendTransactions } = useData()
+  const realInputRef = useRef<HTMLInputElement>(null)
+  const [realStage, setRealStage] = useState<RealStage>('idle')
+  const [realResult, setRealResult] = useState<RealImportResult | null>(null)
+  const [realError, setRealError] = useState<string | null>(null)
   const [stage, setStage] = useState<Stage>('idle')
   const [items, setItems] = useState<ParsedImportItem[]>([])
   const [summary, setSummary] = useState<ImportSummaryData | null>(null)
@@ -53,6 +63,38 @@ export function Import({ onNavigate }: Props) {
     setSummary(null)
     setError(null)
     setStage('idle')
+  }
+
+  async function handleRealImport(file: File) {
+    setRealStage('importing')
+    setRealError(null)
+    setRealResult(null)
+    try {
+      const buffer = await file.arrayBuffer()
+      const rows = parseRealFinanceXlsx(buffer, file.name)
+      if (rows.length === 0) throw new Error('Nenhuma linha encontrada no arquivo.')
+
+      const batchId = `real_${Date.now().toString(36)}`
+      const { transactions: txns, result } = importRealFinanceBase(rows, transactions, batchId)
+
+      // Ensure subcategories exist and get the map for training
+      const { created, byName } = ensureSubCategories()
+
+      // Build and save training examples
+      const trainingExamples = buildTrainingExamplesFromRows(rows, byName)
+      appendTrainingExamples(trainingExamples)
+
+      // Save account/card registry
+      upsertAccountRegistry(result.accounts, result.cards)
+
+      if (txns.length > 0) await appendTransactions(txns)
+
+      setRealResult({ ...result, subcategoriesCreated: created, trainingExamples: trainingExamples.length })
+      setRealStage('done')
+    } catch (e) {
+      setRealError(e instanceof Error ? e.message : String(e))
+      setRealStage('error')
+    }
   }
 
   const current = STAGE_ORDER[stage]
@@ -125,6 +167,94 @@ export function Import({ onNavigate }: Props) {
               onNewImport={handleNewImport}
               onGoToDashboard={() => onNavigate('/')}
             />
+          )}
+        </div>
+
+        {/* ── Base real 2026 ── */}
+        <div className="card" style={{ padding: '20px 24px', border: '1px solid var(--accent)20' }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
+            Importar base real 2026
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
+            Use esta opção para carregar a base real de lançamentos, contas, cartões, categorias e regras de IA.
+            Importar o mesmo arquivo novamente não gera duplicatas.
+          </p>
+
+          {realStage === 'idle' && (
+            <>
+              <input
+                ref={realInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleRealImport(f) }}
+              />
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => realInputRef.current?.click()}
+              >
+                Importar base real 2026
+              </button>
+            </>
+          )}
+
+          {realStage === 'importing' && (
+            <p style={{ fontSize: 12, color: 'var(--faint)' }}>Processando arquivo…</p>
+          )}
+
+          {realStage === 'error' && (
+            <div>
+              <p style={{ fontSize: 12, color: 'var(--crit)', marginBottom: 8 }}>{realError}</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => setRealStage('idle')}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
+          {realStage === 'done' && realResult && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+                {[
+                  { label: 'Importados', value: realResult.imported },
+                  { label: 'Duplicatas ignoradas', value: realResult.duplicates },
+                  { label: 'Subcategorias criadas', value: realResult.subcategoriesCreated },
+                  { label: 'Exemplos de treinamento', value: realResult.trainingExamples },
+                ].map(s => (
+                  <div key={s.label} className="card" style={{ padding: '10px 12px' }}>
+                    <p style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{s.label}</p>
+                    <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {realResult.cards.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--ink-2)' }}>Cartões: </span>
+                  {realResult.cards.join(', ')}
+                </div>
+              )}
+              {realResult.accounts.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--ink-2)' }}>Contas: </span>
+                  {realResult.accounts.join(', ')}
+                </div>
+              )}
+              {realResult.categoriesFound.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--ink-2)' }}>Categorias do arquivo: </span>
+                  {realResult.categoriesFound.join(', ')}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button className="btn btn-primary btn-sm" onClick={() => onNavigate('/lancamentos')}>
+                  Ver lançamentos
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setRealStage('idle'); setRealResult(null) }}>
+                  Importar outro arquivo
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
