@@ -4,10 +4,13 @@ import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
+import { generateFinancialReviewItems, countBySeverity } from '../utils/financialReview'
+import type { FinancialReviewItem, FinancialReviewType } from '../utils/financialReview'
 import { lookupPluggyCategory } from '../services/pluggy.service'
 import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { isManualTx } from '../utils/dataQuality'
 import { canAutoCategorize, learnRuleFromTransaction } from '../services/categoryRules.service'
+import { currentYearMonth } from '../utils/date'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
@@ -93,6 +96,24 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     suggestCategories(pluggyItems.filter(t => !t.macroCategoryId)),
     [pluggyItems]
   )
+
+  // Intelligent review (Fase 2.1)
+  const intelligentItems = useMemo(
+    () => generateFinancialReviewItems(transactions, currentYearMonth()),
+    [transactions],
+  )
+  const intelligentCounts = useMemo(() => countBySeverity(intelligentItems), [intelligentItems])
+  const [intelligentFilter, setIntelligentFilter] = useState<'all' | FinancialReviewType | 'severity_high' | 'severity_medium' | 'severity_low'>('all')
+  const [dismissedIntelligent, setDismissedIntelligent] = useState<Set<string>>(new Set())
+
+  const filteredIntelligent = useMemo(() => {
+    const visible = intelligentItems.filter(i => !dismissedIntelligent.has(i.id))
+    if (intelligentFilter === 'all') return visible
+    if (intelligentFilter === 'severity_high') return visible.filter(i => i.severity === 'high')
+    if (intelligentFilter === 'severity_medium') return visible.filter(i => i.severity === 'medium')
+    if (intelligentFilter === 'severity_low') return visible.filter(i => i.severity === 'low')
+    return visible.filter(i => i.type === intelligentFilter)
+  }, [intelligentItems, intelligentFilter, dismissedIntelligent])
 
   const counts = useMemo(() => ({
     all:          reviewItems.length,
@@ -441,6 +462,23 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             Central de triagem — {counts.all} {counts.all === 1 ? 'item precisa' : 'itens precisam'} de atenção
           </div>
         </div>
+
+        {/* ── Revisão Inteligente (Fase 2.1) ── */}
+        {!activePanel && intelligentItems.length > 0 && (
+          <IntelligentReviewPanel
+            items={intelligentItems}
+            filteredItems={filteredIntelligent}
+            counts={intelligentCounts}
+            filter={intelligentFilter}
+            dismissed={dismissedIntelligent}
+            onFilterChange={setIntelligentFilter}
+            onDismiss={id => setDismissedIntelligent(prev => new Set([...prev, id]))}
+            onNavigateToTx={txId => {
+              const tx = transactions.find(t => t.id === txId)
+              if (tx) openModal(tx)
+            }}
+          />
+        )}
 
         {/* ── Triage cards ── */}
         {!activePanel && (
@@ -1064,6 +1102,146 @@ export function Review({ onNavigate: _onNavigate }: Props) {
         </div>
       )}
     </main>
+  )
+}
+
+const REVIEW_TYPE_LABELS: Record<FinancialReviewType, string> = {
+  uncategorized:        'Sem categoria',
+  missing_subcategory:  'Sem subcategoria',
+  low_confidence:       'Baixa confiança',
+  possible_duplicate:   'Duplicidade',
+  possible_wrong_neutral: 'Neutro suspeito',
+  new_recurring:        'Novo recorrente',
+  above_average:        'Acima da média',
+  unexpected_income:    'Receita inesperada',
+  card_payment_check:   'Pagamento de fatura',
+  financial_cost:       'Custo financeiro',
+}
+
+const SEV_COLOR: Record<string, string> = {
+  high: 'var(--crit)',
+  medium: 'var(--warn)',
+  low: 'var(--faint)',
+}
+
+function IntelligentReviewPanel({
+  items, filteredItems, counts, filter, dismissed, onFilterChange, onDismiss, onNavigateToTx,
+}: {
+  items: FinancialReviewItem[]
+  filteredItems: FinancialReviewItem[]
+  counts: { high: number; medium: number; low: number }
+  filter: string
+  dismissed: Set<string>
+  onFilterChange: (f: any) => void
+  onDismiss: (id: string) => void
+  onNavigateToTx: (txId: string) => void
+}) {
+  const visible = filteredItems.length
+  const totalDismissed = dismissed.size
+
+  return (
+    <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Zap size={14} color="var(--accent)" />
+            Revisão inteligente · mês atual
+          </h3>
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
+            {items.length} itens detectados · {totalDismissed > 0 && `${totalDismissed} ignorados · `}
+            <span style={{ color: 'var(--crit)', fontWeight: 600 }}>{counts.high} alta</span> ·{' '}
+            <span style={{ color: 'var(--warn)' }}>{counts.medium} média</span> ·{' '}
+            <span>{counts.low} baixa</span>
+          </p>
+        </div>
+        {totalDismissed > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--faint)' }}>{totalDismissed} ignorados</span>
+        )}
+      </div>
+
+      {/* Severity filters */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {(['all', 'severity_high', 'severity_medium', 'severity_low'] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => onFilterChange(f)}
+            style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+              border: `1px solid ${filter === f ? 'var(--accent)' : 'var(--line)'}`,
+              background: filter === f ? 'var(--accent)' : 'transparent',
+              color: filter === f ? '#fff' : 'var(--ink-2)',
+              cursor: 'pointer', fontFamily: 'var(--ui)',
+            }}
+          >
+            {f === 'all' ? `Todos (${items.filter(i => !dismissed.has(i.id)).length})` :
+             f === 'severity_high' ? `Alta (${counts.high})` :
+             f === 'severity_medium' ? `Média (${counts.medium})` :
+             `Baixa (${counts.low})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Items list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+        {visible === 0 && (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--faint)', fontSize: 13 }}>
+            Nenhum item neste filtro
+          </div>
+        )}
+        {filteredItems.map(item => (
+          <div
+            key={item.id}
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '10px 12px', borderRadius: 8,
+              border: `1px solid ${SEV_COLOR[item.severity]}30`,
+              background: `${SEV_COLOR[item.severity]}08`,
+            }}
+          >
+            <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: `${SEV_COLOR[item.severity]}20`,
+                color: SEV_COLOR[item.severity],
+                textTransform: 'uppercase', letterSpacing: '.04em',
+              }}>
+                {item.severity === 'high' ? 'Alta' : item.severity === 'medium' ? 'Média' : 'Baixa'}
+              </span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{item.title}</span>
+                <span style={{
+                  fontSize: 9.5, padding: '1px 6px', borderRadius: 8,
+                  background: 'var(--well)', color: 'var(--faint)', border: '1px solid var(--line)',
+                }}>
+                  {REVIEW_TYPE_LABELS[item.type]}
+                </span>
+              </div>
+              <p style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 2 }}>{item.description}</p>
+              <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>{item.suggestedAction}</p>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+              {item.transactionId && (
+                <button
+                  onClick={() => onNavigateToTx(item.transactionId!)}
+                  style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+                >
+                  Abrir
+                </button>
+              )}
+              <button
+                onClick={() => onDismiss(item.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 2, display: 'flex' }}
+                title="Ignorar este item"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
