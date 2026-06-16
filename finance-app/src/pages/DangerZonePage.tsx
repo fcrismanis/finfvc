@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useData } from '../context/DataContext'
 import { DATA_PROVIDER } from '../config/env'
+import { findExistingDuplicateGroups, type DuplicateGroup } from '../utils/transactionDedupe'
+import { MACRO_CATEGORIES } from '../config/categories'
+import { formatBRL } from '../utils/currency'
+import type { Transaction } from '../types'
 
 const ALL_FIN_KEYS = [
   'finance_transactions',
@@ -29,6 +33,203 @@ function exportFullBackup(): void {
   a.download = `fin_backup_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ── Duplicate cleanup ─────────────────────────────────────────────────────────
+
+type GroupAction = 'keep_xlsx' | 'keep_pluggy' | 'merge' | 'skip'
+
+function sourceLabel(tx: Transaction): string {
+  if (tx.source === 'real_xlsx' || tx.source === 'real_2026_xlsx' || tx.origin === 'import_xlsx') return 'Excel'
+  if (tx.source === 'pluggy' || tx.origin === 'import_api') return 'Pluggy'
+  return tx.source ?? tx.origin
+}
+
+function macroName(id?: string): string {
+  if (!id) return '—'
+  return MACRO_CATEGORIES.find(m => m.id === id)?.name ?? id
+}
+
+function DuplicateCleanupPanel() {
+  const { transactions } = useData()
+  const [scanned, setScanned] = useState(false)
+  const [groups, setGroups] = useState<DuplicateGroup[]>([])
+  const [actions, setActions] = useState<Record<string, GroupAction>>({})
+  const [applying, setApplying] = useState(false)
+  const [done, setDone] = useState<{ removed: number; kept: number } | null>(null)
+
+  function scan() {
+    setScanned(true)
+    setDone(null)
+    setGroups(findExistingDuplicateGroups(transactions))
+    setActions({})
+  }
+
+  function setAction(gid: string, a: GroupAction) {
+    setActions(prev => ({ ...prev, [gid]: a }))
+  }
+
+  async function applyAll() {
+    setApplying(true)
+    const toRemove = new Set<string>()
+    const toEnrich: Array<{ keepId: string; donorId: string }> = []
+
+    for (const g of groups) {
+      const action = actions[g.id] ?? (g.keepId ? 'keep_xlsx' : 'skip')
+      if (action === 'skip') continue
+
+      const [a, b] = g.transactions
+      if (!a || !b) continue
+
+      const isAXlsx = a.origin === 'import_xlsx' || a.source?.includes('xlsx')
+      const xlsxTx = isAXlsx ? a : b
+      const pluggyTx = isAXlsx ? b : a
+
+      if (action === 'keep_xlsx') {
+        toRemove.add(pluggyTx.id)
+      } else if (action === 'keep_pluggy') {
+        toRemove.add(xlsxTx.id)
+      } else if (action === 'merge') {
+        // keep xlsx, remove pluggy, enrich xlsx with pluggy metadata
+        toRemove.add(pluggyTx.id)
+        toEnrich.push({ keepId: xlsxTx.id, donorId: pluggyTx.id })
+      }
+    }
+
+    // Apply removals via localStorage (local only)
+    if (DATA_PROVIDER !== 'supabase') {
+      const raw = localStorage.getItem('finance_transactions')
+      if (raw) {
+        let txns: Transaction[] = JSON.parse(raw)
+        // Enrich before removing
+        const byId = new Map(txns.map(t => [t.id, t]))
+        for (const { keepId, donorId } of toEnrich) {
+          const keep = byId.get(keepId)
+          const donor = byId.get(donorId)
+          if (keep && donor && !keep.manualCategoryOverride) {
+            byId.set(keepId, {
+              ...keep,
+              pluggyCategory: donor.pluggyCategory ?? keep.pluggyCategory,
+              pluggyCategoryId: donor.pluggyCategoryId ?? keep.pluggyCategoryId,
+              pluggyOperationType: donor.pluggyOperationType ?? keep.pluggyOperationType,
+              pluggyPaymentMethod: donor.pluggyPaymentMethod ?? keep.pluggyPaymentMethod,
+              pluggyReceiverName: donor.pluggyReceiverName ?? keep.pluggyReceiverName,
+              pluggyPayerName: donor.pluggyPayerName ?? keep.pluggyPayerName,
+              pluggyAccountName: donor.pluggyAccountName ?? keep.pluggyAccountName,
+              pluggyInstitutionName: donor.pluggyInstitutionName ?? keep.pluggyInstitutionName,
+              updatedAt: new Date().toISOString(),
+            })
+          }
+        }
+        txns = Array.from(byId.values()).filter(t => !toRemove.has(t.id))
+        localStorage.setItem('finance_transactions', JSON.stringify(txns))
+      }
+    }
+
+    setApplying(false)
+    setDone({ removed: toRemove.size, kept: groups.length - toRemove.size })
+    setGroups([])
+    setScanned(false)
+    window.location.reload()
+  }
+
+  const pendingCount = groups.filter(g => !actions[g.id]).length
+
+  return (
+    <div className="card" style={{ padding: '18px 22px' }}>
+      <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Corrigir duplicidades cruzadas</h3>
+      <p style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 12, lineHeight: 1.6 }}>
+        Detecta transações duplicadas entre importações Excel e Pluggy com IDs diferentes.
+        Nunca apaga automaticamente — você revisa cada grupo antes de confirmar.
+      </p>
+
+      {done && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--ok-soft)', border: '1px solid var(--ok)', fontSize: 12.5, color: 'var(--ok)', marginBottom: 12 }}>
+          Concluído: {done.removed} duplicatas removidas.
+        </div>
+      )}
+
+      {!scanned ? (
+        <button className="btn btn-secondary btn-sm" onClick={scan} disabled={transactions.length === 0}>
+          Escanear duplicidades ({transactions.length} lançamentos)
+        </button>
+      ) : groups.length === 0 ? (
+        <div>
+          <p style={{ fontSize: 12.5, color: 'var(--ok)', fontWeight: 600, marginBottom: 8 }}>Nenhuma duplicidade detectada.</p>
+          <button className="btn btn-secondary btn-sm" onClick={() => setScanned(false)}>Escanear novamente</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600 }}>
+            {groups.length} grupo(s) detectado(s) · {pendingCount} sem decisão
+          </p>
+
+          {groups.map(g => {
+            const [a, b] = g.transactions
+            const action = actions[g.id]
+            return (
+              <div key={g.id} style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', background: 'var(--well)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: g.confidence === 'strong' ? 'var(--crit)' : 'var(--warn)', textTransform: 'uppercase' }}>
+                    {g.confidence === 'strong' ? 'Duplicata certa' : 'Possível duplicata'}
+                  </span>
+                  <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{g.reason}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+                  {[a, b].map((tx, i) => tx && (
+                    <div key={tx.id} style={{ padding: '10px 12px', borderRight: i === 0 ? '1px solid var(--line)' : undefined }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 4 }}>
+                        {sourceLabel(tx)}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }} title={tx.description}>
+                        {tx.description.slice(0, 35)}{tx.description.length > 35 ? '…' : ''}
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ink)' }}>{formatBRL(tx.amount)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>{tx.transactionDate}</div>
+                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>{macroName(tx.macroCategoryId)}</div>
+                      {tx.manualCategoryOverride && (
+                        <div style={{ fontSize: 10, color: 'var(--ok)', fontWeight: 700, marginTop: 2 }}>manual</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: '8px 12px', borderTop: '1px solid var(--line)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(['keep_xlsx', 'keep_pluggy', 'merge', 'skip'] as GroupAction[]).map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setAction(g.id, opt)}
+                      style={{
+                        fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'var(--ui)', cursor: 'pointer', fontWeight: action === opt ? 700 : 400,
+                        border: `1px solid ${action === opt ? 'var(--accent)' : 'var(--line)'}`,
+                        background: action === opt ? 'var(--accent)' : 'transparent',
+                        color: action === opt ? '#fff' : 'var(--ink-2)',
+                      }}
+                    >
+                      {opt === 'keep_xlsx' ? 'Manter Excel' : opt === 'keep_pluggy' ? 'Manter Pluggy' : opt === 'merge' ? 'Mesclar (Excel + metadados Pluggy)' : 'Ignorar'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={applyAll}
+              disabled={applying || pendingCount > 0}
+              title={pendingCount > 0 ? `${pendingCount} grupo(s) sem decisão` : undefined}
+            >
+              {applying ? 'Aplicando…' : `Aplicar decisões (${groups.filter(g => actions[g.id] && actions[g.id] !== 'skip').length} ações)`}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setScanned(false); setGroups([]) }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function DangerZonePage() {
@@ -98,6 +299,9 @@ export function DangerZonePage() {
             Ações destrutivas e irreversíveis. Proceed com cuidado.
           </div>
         </div>
+
+        {/* Duplicate cleanup */}
+        <DuplicateCleanupPanel />
 
         {/* Clear specific month */}
         <div className="card" style={{ padding: '18px 22px', border: '1px solid var(--crit)' }}>

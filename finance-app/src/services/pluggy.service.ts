@@ -1,6 +1,7 @@
 import { suggestCategoryWithHistory } from './categorize.service'
 import { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap'
 import { suggestFromRules } from './categoryRules.service'
+import { findCrossSourceDuplicate } from '../utils/transactionDedupe'
 
 /**
  * Pluggy Open Finance service.
@@ -225,6 +226,7 @@ export function pluggyCategoryToMacro(pluggyCategory: string | null): string | n
 export interface MapResult {
   newTxs: import('../types').Transaction[]
   duplicateCount: number
+  crossSourceDupeCount?: number
   incomeCount: number
   expenseCount: number
   autoCategorizedCount: number
@@ -371,9 +373,22 @@ export function mapPluggyToTransactions(
     return baseTx
   })
 
-  const newTxs = allMapped.filter(t =>
+  // Level 1: hash / id dedupe (original)
+  const hashDeduped = allMapped.filter(t =>
     !existingIds.has(t.id) && !(t.importHash && existingHashes.has(t.importHash))
   )
+
+  // Level 2 & 3: cross-source dedupe (catches Excel vs Pluggy same transaction)
+  const newTxs: import('../types').Transaction[] = []
+  let crossSourceDupes = 0
+  for (const t of hashDeduped) {
+    const match = findCrossSourceDuplicate(t, existingTxs)
+    if (match) {
+      crossSourceDupes++
+    } else {
+      newTxs.push(t)
+    }
+  }
 
   const autoCategorizedCount = newTxs.filter(t => t.macroCategoryId && !t.needsReview).length
   const needsReviewCount = newTxs.filter(t => t.needsReview).length
@@ -387,7 +402,8 @@ export function mapPluggyToTransactions(
 
   return {
     newTxs,
-    duplicateCount: allMapped.length - newTxs.length,
+    duplicateCount: allMapped.length - newTxs.length - crossSourceDupes,
+    crossSourceDupeCount: crossSourceDupes,
     incomeCount: newTxs.filter(t => t.type === 'income').length,
     expenseCount: newTxs.filter(t => t.type === 'expense').length,
     autoCategorizedCount,
