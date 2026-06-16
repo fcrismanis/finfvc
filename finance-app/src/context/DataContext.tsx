@@ -64,7 +64,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(() => { void loadData() }, [loadData])
 
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
-    void provider.updateTransaction(id, patch).then(() => loadData())
+    void provider.updateTransaction(id, patch).then(() => loadData(false))
   }, [provider, loadData])
 
   const updateTransactions = useCallback(async (

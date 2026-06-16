@@ -112,7 +112,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     }
   }
 
+
   // Runs after DOM commit, before paint — no visible flicker
+  // Depends on state that changes when inline edits open/close (DOM changes)
   useLayoutEffect(() => {
     const anchor = pendingScrollAnchorRef.current
     const container = mainRef.current
@@ -126,7 +128,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       // Item left the filter: restore previous scroll (browser clamps to valid range)
       container.scrollTop = anchor.scrollTop
     }
-  }, [transactions])
+  }, [transactions, inlineCatEdit, inlineSubEdit, inlineDescEdit, inlineTagAdd])
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
@@ -733,10 +735,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   ref={inlineDescRef}
                                   value={inlineDescEdit.value}
                                   onChange={e => setInlineDescEdit(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                  onBlur={() => saveInlineDesc(inlineDescEdit.value, tx.id)}
+                                  onBlur={() => { captureScrollAnchor(tx.id); saveInlineDesc(inlineDescEdit.value, tx.id) }}
                                   onKeyDown={e => {
-                                    if (e.key === 'Enter') saveInlineDesc(inlineDescEdit.value, tx.id)
-                                    if (e.key === 'Escape') setInlineDescEdit(null)
+                                    if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineDesc(inlineDescEdit.value, tx.id) }
+                                    if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineDescEdit(null) }
                                   }}
                                   style={{ fontSize: 12.5, fontWeight: 600, width: '100%', background: 'var(--paper)', border: '1px solid var(--accent)', borderRadius: 5, padding: '2px 6px', outline: 'none', color: 'var(--ink)', fontFamily: 'var(--ui)' }}
                                 />
@@ -807,6 +809,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                     <Tag size={7} style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)} />
                                     <span style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)}>{tag}</span>
                                     <button
+                                      onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
                                       onClick={e => { e.stopPropagation(); removeTagFromTx(tag, tx.id) }}
                                       title={`Remover tag #${tag}`}
                                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 0, lineHeight: 1, fontSize: 10, fontFamily: 'var(--ui)', display: 'flex', alignItems: 'center' }}
@@ -819,16 +822,17 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                     autoFocus
                                     value={inlineTagAdd.value}
                                     onChange={e => setInlineTagAdd(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                    onBlur={() => addInlineTag(inlineTagAdd.value, tx.id)}
+                                    onBlur={() => { captureScrollAnchor(tx.id); addInlineTag(inlineTagAdd.value, tx.id) }}
                                     onKeyDown={e => {
-                                      if (e.key === 'Enter') addInlineTag(inlineTagAdd.value, tx.id)
-                                      if (e.key === 'Escape') setInlineTagAdd(null)
+                                      if (e.key === 'Enter') { captureScrollAnchor(tx.id); addInlineTag(inlineTagAdd.value, tx.id) }
+                                      if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineTagAdd(null) }
                                     }}
                                     placeholder="nova tag…"
                                     style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, border: '1px solid var(--accent)', outline: 'none', background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)', width: 70 }}
                                   />
                                 ) : (
                                   <button
+                                    onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
                                     onClick={e => { e.stopPropagation(); setInlineTagAdd({ id: tx.id, value: '' }) }}
                                     title="Adicionar tag"
                                     style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', fontFamily: 'var(--ui)', display: 'inline-flex', alignItems: 'center' }}
@@ -844,6 +848,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                     {suggested.map(tag => (
                                       <button
                                         key={tag}
+                                        onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
                                         onClick={() => applySuggestedTag(tx, tag)}
                                         title={`Adicionar tag sugerida #${tag}`}
                                         style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--ui)' }}
@@ -875,10 +880,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   ref={inlineSelectRef}
                                   value={inlineCatEdit.catId}
                                   onChange={e => setInlineCatEdit(prev => prev ? { ...prev, catId: e.target.value } : null)}
-                                  onBlur={() => saveInlineCat(inlineCatEdit.catId, tx.id)}
+                                  onBlur={() => { captureScrollAnchor(tx.id); saveInlineCat(inlineCatEdit.catId, tx.id) }}
                                   onKeyDown={e => {
-                                    if (e.key === 'Enter') saveInlineCat(inlineCatEdit.catId, tx.id)
-                                    if (e.key === 'Escape') setInlineCatEdit(null)
+                                    if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineCat(inlineCatEdit.catId, tx.id) }
+                                    if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineCatEdit(null) }
                                   }}
                                   className="ledger-select"
                                   style={{ fontSize: 11, minWidth: 130 }}
@@ -915,10 +920,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       value={inlineSubEdit.subId}
                                       onClick={e => e.stopPropagation()}
                                       onChange={e => setInlineSubEdit(prev => prev ? { ...prev, subId: e.target.value } : null)}
-                                      onBlur={() => saveInlineSub(inlineSubEdit.subId, tx.id)}
+                                      onBlur={() => { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }}
                                       onKeyDown={e => {
-                                        if (e.key === 'Enter') saveInlineSub(inlineSubEdit.subId, tx.id)
-                                        if (e.key === 'Escape') setInlineSubEdit(null)
+                                        if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }
+                                        if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineSubEdit(null) }
                                       }}
                                       className="ledger-select"
                                       style={{ fontSize: 10, minWidth: 110 }}
