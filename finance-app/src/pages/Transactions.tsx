@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag, Download } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
@@ -11,6 +11,8 @@ import {
   QUICK_FILTER_LABELS, type QuickFilterKey,
 } from '../utils/dataQuality'
 import { suggestTags, buildTagContext } from '../services/tagSuggester'
+import { learnRuleFromTransaction, incrementRuleUseCount } from '../services/categoryRules.service'
+import { findSimilarUncategorized } from '../utils/similarTransactions'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
@@ -85,6 +87,21 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [inlineTagAdd, setInlineTagAdd] = useState<{ id: string; value: string } | null>(null)
   const inlineSelectRef = useRef<HTMLSelectElement>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
+  const scrollSaveRef = useRef<number>(0)
+
+  // Similar-category propagation state
+  interface SimilarApplied { count: number; category: string }
+  interface SimilarPending { candidates: Transaction[]; macroCategoryId: string; subCategoryId?: string; classificationType: string }
+  const [similarToast, setSimilarToast] = useState<SimilarApplied | null>(null)
+  const [similarModal, setSimilarModal] = useState<SimilarPending | null>(null)
+  const [selectedSimilar, setSelectedSimilar] = useState<Set<string>>(new Set())
+
+  function captureScroll() { scrollSaveRef.current = window.scrollY }
+  function restoreScroll() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.scrollTo({ top: scrollSaveRef.current, behavior: 'instant' as ScrollBehavior }))
+    })
+  }
 
   const isReviewMode = navFilter?.smartFilter === 'review'
   const drilldownSource = navFilter?.sourcePage ?? null
@@ -262,11 +279,61 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }
 
   function saveInlineCat(newCatId: string, txId: string) {
+    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
-      updateTransaction(txId, { macroCategoryId: newCatId || undefined, subCategoryId: undefined })
+      const macro = MACRO_CATEGORIES.find(m => m.id === newCatId)
+      updateTransaction(txId, {
+        macroCategoryId: newCatId || undefined,
+        subCategoryId: undefined,
+        manualCategoryOverride: true,
+        categorySuggestionSource: 'manual',
+        categoryConfidence: 'high',
+        needsReview: false,
+        classificationType: macro?.classificationType ?? tx.classificationType,
+      })
+
+      // Learn rule for future imports
+      const updatedTx: Transaction = {
+        ...tx,
+        macroCategoryId: newCatId,
+        subCategoryId: undefined,
+        classificationType: macro?.classificationType ?? tx.classificationType,
+        categorySuggestionSource: 'manual',
+      }
+      learnRuleFromTransaction(updatedTx, 'manual')
+
+      // Propagate to similar uncategorized items
+      const similar = findSimilarUncategorized(updatedTx, transactions)
+
+      if (similar.highConfidence.length > 0) {
+        for (const candidate of similar.highConfidence) {
+          updateTransaction(candidate.id, {
+            macroCategoryId: newCatId,
+            subCategoryId: undefined,
+            classificationType: macro?.classificationType ?? candidate.classificationType,
+            categorySuggestionSource: 'rule',
+            categoryConfidence: 'high',
+            needsReview: false,
+          })
+          incrementRuleUseCount(txId)
+        }
+        setSimilarToast({ count: similar.highConfidence.length, category: macro?.name ?? newCatId })
+        setTimeout(() => setSimilarToast(null), 5000)
+      }
+
+      if (similar.mediumConfidence.length > 0) {
+        setSimilarModal({
+          candidates: similar.mediumConfidence,
+          macroCategoryId: newCatId,
+          subCategoryId: undefined,
+          classificationType: macro?.classificationType ?? tx.classificationType,
+        })
+        setSelectedSimilar(new Set(similar.mediumConfidence.map(t => t.id)))
+      }
     }
     setInlineCatEdit(null)
+    restoreScroll()
   }
 
   function openInlineDesc(tx: Transaction) {
@@ -274,33 +341,41 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }
 
   function saveInlineDesc(newDesc: string, txId: string) {
+    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && newDesc.trim() && newDesc.trim() !== tx.description) {
       updateTransaction(txId, { description: newDesc.trim() })
     }
     setInlineDescEdit(null)
+    restoreScroll()
   }
 
   function saveInlineSub(subId: string, txId: string) {
+    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && subId !== (tx.subCategoryId ?? '')) {
       updateTransaction(txId, { subCategoryId: subId || undefined })
     }
     setInlineSubEdit(null)
+    restoreScroll()
   }
 
   function addInlineTag(value: string, txId: string) {
+    captureScroll()
     const t = value.trim().toLowerCase().replace(/\s+/g, '_')
     const tx = transactions.find(x => x.id === txId)
     if (tx && t && !(tx.tags ?? []).includes(t)) {
       updateTransaction(txId, { tags: [...(tx.tags ?? []), t] })
     }
     setInlineTagAdd(null)
+    restoreScroll()
   }
 
   function removeTagFromTx(tag: string, txId: string) {
+    captureScroll()
     const tx = transactions.find(x => x.id === txId)
     if (tx?.tags?.includes(tag)) updateTransaction(txId, { tags: tx.tags.filter(t => t !== tag) })
+    restoreScroll()
   }
 
   function csvCell(v: string): string {
@@ -582,9 +657,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 </thead>
                 <tbody>
                   {grouped.map(({ date, items }) => (
-                    <>
+                    <Fragment key={date}>
                       {/* Day group header */}
-                      <tr key={`g-${date}`} style={{ background: 'var(--well)' }}>
+                      <tr style={{ background: 'var(--well)' }}>
                         <td
                           colSpan={4}
                           style={{
@@ -845,7 +920,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                           </tr>
                         )
                       })}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1028,6 +1103,84 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
               <button className="btn btn-primary" onClick={saveModal}>Salvar alterações</button>
               <button className="btn btn-secondary" onClick={() => setModalTx(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Similar-category toast */}
+      {similarToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 400, background: 'var(--card-bg)', border: '1px solid var(--pos)',
+          borderRadius: 10, padding: '11px 18px', boxShadow: '0 6px 24px rgba(0,0,0,.15)',
+          display: 'flex', alignItems: 'center', gap: 12, maxWidth: 420,
+        }}>
+          <p style={{ fontSize: 12.5, color: 'var(--ink)', flex: 1 }}>
+            <strong>{similarToast.count}</strong> lançamento{similarToast.count !== 1 ? 's' : ''} semelhante{similarToast.count !== 1 ? 's' : ''} sem categoria {similarToast.count !== 1 ? 'receberam' : 'recebeu'} <strong>{similarToast.category}</strong> automaticamente.
+          </p>
+          <button onClick={() => setSimilarToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {/* Similar-category modal (medium confidence) */}
+      {similarModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => e.target === e.currentTarget && setSimilarModal(null)}>
+          <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 540, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Lançamentos parecidos sem categoria</p>
+              <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>
+                Somente lançamentos sem categoria e sem ajuste manual serão alterados.
+              </p>
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+              Categoria proposta: <strong>{MACRO_CATEGORIES.find(m => m.id === similarModal.macroCategoryId)?.name ?? similarModal.macroCategoryId}</strong>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
+              {similarModal.candidates.map(tx => (
+                <label key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: '1px solid var(--line)', cursor: 'pointer', background: selectedSimilar.has(tx.id) ? 'var(--accent-soft)' : 'var(--well)' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSimilar.has(tx.id)}
+                    onChange={e => {
+                      const s = new Set(selectedSimilar)
+                      e.target.checked ? s.add(tx.id) : s.delete(tx.id)
+                      setSelectedSimilar(s)
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</p>
+                    <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>{tx.transactionDate} · {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setSimilarModal(null)}>Ignorar</button>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={selectedSimilar.size === 0}
+                onClick={() => {
+                  const macro = MACRO_CATEGORIES.find(m => m.id === similarModal.macroCategoryId)
+                  for (const tx of similarModal.candidates) {
+                    if (!selectedSimilar.has(tx.id)) continue
+                    updateTransaction(tx.id, {
+                      macroCategoryId: similarModal.macroCategoryId,
+                      subCategoryId: similarModal.subCategoryId,
+                      classificationType: similarModal.classificationType as Transaction['classificationType'],
+                      categorySuggestionSource: 'rule',
+                      categoryConfidence: 'medium',
+                      needsReview: false,
+                    })
+                  }
+                  setSimilarToast({ count: selectedSimilar.size, category: macro?.name ?? similarModal.macroCategoryId })
+                  setTimeout(() => setSimilarToast(null), 5000)
+                  setSimilarModal(null)
+                }}
+              >
+                Aplicar aos selecionados ({selectedSimilar.size})
+              </button>
             </div>
           </div>
         </div>
