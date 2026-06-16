@@ -91,7 +91,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
-  interface SimilarPending { candidates: Transaction[]; macroCategoryId: string; subCategoryId?: string; classificationType: string }
+  interface SimilarPending { candidates: Transaction[]; macroCategoryId: string; subCategoryId?: string; classificationType: string; ruleId?: string }
   const [similarToast, setSimilarToast] = useState<SimilarApplied | null>(null)
   const [similarModal, setSimilarModal] = useState<SimilarPending | null>(null)
   const [selectedSimilar, setSelectedSimilar] = useState<Set<string>>(new Set())
@@ -293,7 +293,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         classificationType: macro?.classificationType ?? tx.classificationType,
       })
 
-      // Learn rule for future imports
+      // Learn rule for future imports — capture returned rule to get its id
       const updatedTx: Transaction = {
         ...tx,
         macroCategoryId: newCatId,
@@ -301,7 +301,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         classificationType: macro?.classificationType ?? tx.classificationType,
         categorySuggestionSource: 'manual',
       }
-      learnRuleFromTransaction(updatedTx, 'manual')
+      const learnedRule = learnRuleFromTransaction(updatedTx, 'manual')
+      // subCategoryId to propagate: prefer what the rule already stored (upsert may have kept it)
+      const propagateSub = learnedRule?.subCategoryId ?? undefined
 
       // Propagate to similar uncategorized items
       const similar = findSimilarUncategorized(updatedTx, transactions)
@@ -310,13 +312,17 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         for (const candidate of similar.highConfidence) {
           updateTransaction(candidate.id, {
             macroCategoryId: newCatId,
-            subCategoryId: undefined,
+            subCategoryId: propagateSub,
             classificationType: macro?.classificationType ?? candidate.classificationType,
             categorySuggestionSource: 'rule',
             categoryConfidence: 'high',
             needsReview: false,
           })
-          incrementRuleUseCount(txId)
+        }
+        if (learnedRule) {
+          incrementRuleUseCount(learnedRule.id)
+        } else if (import.meta.env.DEV) {
+          console.log('[similar] no rule created — useCount not incremented')
         }
         setSimilarToast({ count: similar.highConfidence.length, category: macro?.name ?? newCatId })
         setTimeout(() => setSimilarToast(null), 5000)
@@ -326,8 +332,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         setSimilarModal({
           candidates: similar.mediumConfidence,
           macroCategoryId: newCatId,
-          subCategoryId: undefined,
+          subCategoryId: propagateSub,
           classificationType: macro?.classificationType ?? tx.classificationType,
+          ruleId: learnedRule?.id,
         })
         setSelectedSimilar(new Set(similar.mediumConfidence.map(t => t.id)))
       }
@@ -1173,6 +1180,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                       categoryConfidence: 'medium',
                       needsReview: false,
                     })
+                  }
+                  if (similarModal.ruleId) {
+                    incrementRuleUseCount(similarModal.ruleId)
                   }
                   setSimilarToast({ count: selectedSimilar.size, category: macro?.name ?? similarModal.macroCategoryId })
                   setTimeout(() => setSimilarToast(null), 5000)
