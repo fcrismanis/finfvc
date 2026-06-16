@@ -8,6 +8,7 @@ import type { Transaction, SubCategory } from '../types'
 import { classifyByDescription } from '../importers/classifier'
 import { computeImportHash } from '../importers/deduplicator'
 import { normalizeAmount, normalizeDate, normalizeDescription, normalizePaymentMethod, parseInstallment } from '../importers/normalizer'
+import { currentFinancialDate, normalizeFinancialDate } from '../utils/date'
 import { loadSubCategories, saveSubCategories, newSubCategoryId } from './subcategory.service'
 
 // ── Sub-category seeds from real history ─────────────────────────────────────
@@ -120,12 +121,8 @@ const COL_MAP: Record<string, keyof RealFinanceRow> = {
 // ── Excel date to ISO string ──────────────────────────────────────────────────
 
 function xlsxDateToIso(value: string | number | undefined): string {
-  if (!value && value !== 0) return new Date().toISOString().slice(0, 10)
-  if (typeof value === 'number') {
-    // Excel serial date
-    const d = new Date(Math.round((value - 25569) * 86400 * 1000))
-    return d.toISOString().slice(0, 10)
-  }
+  if (!value && value !== 0) return currentFinancialDate()
+  if (typeof value === 'number') return normalizeFinancialDate(value, currentFinancialDate())
   const s = String(value).trim()
   // DD/MM/YYYY
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)

@@ -2,6 +2,7 @@ import { suggestCategoryWithHistory } from './categorize.service'
 import { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap'
 import { suggestFromRules } from './categoryRules.service'
 import { findCrossSourceDuplicate } from '../utils/transactionDedupe'
+import { currentFinancialDate, normalizeFinancialDate } from '../utils/date'
 
 /**
  * Pluggy Open Finance service.
@@ -251,11 +252,13 @@ export function mapPluggyToTransactions(
   const existingIds = new Set(existingTxs.map(t => t.id))
   const batchId = `pluggy_${Date.now().toString(36)}`
   const now = new Date().toISOString()
+  const fallbackDate = currentFinancialDate()
 
   const allMapped: import('../types').Transaction[] = pluggyTxs.map(ptx => {
+    const financialDate = normalizeFinancialDate(ptx.date, fallbackDate)
     const importHash = ptx.providerCode
       ? `pluggy_${ptx.providerCode}`
-      : `${(ptx.date ?? '').slice(0, 10)}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
+      : `${financialDate}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
 
     const type: import('../types').TransactionType = ptx.type === 'CREDIT' ? 'income' : 'expense'
     const defaultClassification: import('../types').ClassificationType =
@@ -268,8 +271,8 @@ export function mapPluggyToTransactions(
       amount: Math.abs(ptx.amount),
       type,
       classificationType: defaultClassification,
-      transactionDate: (ptx.date ?? now).slice(0, 10),
-      competenceDate: (ptx.date ?? now).slice(0, 10),
+      transactionDate: financialDate,
+      competenceDate: financialDate,
       status: ptx.status === 'POSTED' ? 'paid' : 'pending',
       accountId,
       paymentMethod: 'account' as import('../types').PaymentMethod,

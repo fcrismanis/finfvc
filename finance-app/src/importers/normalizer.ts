@@ -1,4 +1,5 @@
 import type { TransactionStatus, PaymentMethod, TransactionType } from '../types'
+import { currentFinancialDate, normalizeFinancialDate } from '../utils/date'
 
 export function normalizeAmount(raw: string | number): number {
   if (typeof raw === 'number') return Math.abs(raw)
@@ -13,31 +14,7 @@ export function normalizeAmount(raw: string | number): number {
 }
 
 export function normalizeDate(raw: string | number | undefined): string {
-  if (!raw) return new Date().toISOString().slice(0, 10)
-
-  if (typeof raw === 'number') {
-    // Excel serial date
-    const excelEpoch = new Date(1899, 11, 30)
-    const date = new Date(excelEpoch.getTime() + raw * 86400000)
-    return date.toISOString().slice(0, 10)
-  }
-
-  const s = String(raw).trim()
-
-  // DD/MM/YYYY or DD-MM-YYYY
-  const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if (brMatch) {
-    const [, d, m, y] = brMatch
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
-  }
-
-  // YYYY-MM-DD already
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-
-  const parsed = new Date(s)
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
-
-  return new Date().toISOString().slice(0, 10)
+  return normalizeFinancialDate(raw, currentFinancialDate())
 }
 
 export function normalizeType(raw: string): TransactionType {

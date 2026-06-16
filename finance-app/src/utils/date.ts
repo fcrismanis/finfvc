@@ -1,3 +1,48 @@
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function formatLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+function formatUtcDate(date: Date): string {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`
+}
+
+export function currentFinancialDate(): string {
+  return formatLocalDate(new Date())
+}
+
+export function normalizeFinancialDate(raw: string | number | Date | undefined | null, fallback = currentFinancialDate()): string {
+  if (raw == null || raw === '') return fallback
+
+  if (typeof raw === 'number') {
+    const excelEpochUtc = Date.UTC(1899, 11, 30)
+    const date = new Date(excelEpochUtc + raw * 86400000)
+    return formatUtcDate(date)
+  }
+
+  if (raw instanceof Date) {
+    return isNaN(raw.getTime()) ? fallback : formatLocalDate(raw)
+  }
+
+  const s = String(raw).trim()
+  if (!s) return fallback
+
+  const isoPrefix = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoPrefix) return `${isoPrefix[1]}-${isoPrefix[2]}-${isoPrefix[3]}`
+
+  const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (brMatch) {
+    const [, day, month, year] = brMatch
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  const parsed = new Date(s)
+  return isNaN(parsed.getTime()) ? fallback : formatLocalDate(parsed)
+}
+
 export function getCompetenceMonth(dateStr: string): string {
   return dateStr.substring(0, 7)
 }

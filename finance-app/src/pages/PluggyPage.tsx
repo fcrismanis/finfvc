@@ -22,6 +22,7 @@ import {
   type RecoveryResult,
 } from '../services/pluggyStorage.service'
 import { MACRO_CATEGORIES } from '../config/categories'
+import { currentFinancialDate } from '../utils/date'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 
@@ -275,7 +276,7 @@ export function PluggyPage() {
       const res = await fetch('/api/pluggy/debug-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId, from: '2024-01-01', to: new Date().toISOString().slice(0, 10), limit: 5 }),
+        body: JSON.stringify({ accountId, from: '2024-01-01', to: currentFinancialDate(), limit: 5 }),
       })
       const data = await res.json()
       setDebugPayload(data)
@@ -319,7 +320,7 @@ export function PluggyPage() {
   }
 
   function startSync(itemId: string, accountId: string, accountName: string) {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = currentFinancialDate()
     setSync({ itemId, accountId, accountName, period: 'last_7d', customFrom: '2024-01-01', customTo: today, phase: 'period_select' })
   }
 

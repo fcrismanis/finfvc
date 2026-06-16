@@ -4,7 +4,7 @@ import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, 
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth } from '../utils/date'
+import { getCompetenceMonth, normalizeFinancialDate } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
 import {
@@ -54,11 +54,8 @@ const CLS_LABELS: Record<ClassificationType, string> = {
   adjustment: 'Ajuste', neutral: 'Neutro',
 }
 
-const MONTHS_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
-
 function fmtGroupDate(isoDate: string): string {
-  const d = new Date(isoDate + 'T12:00:00')
-  return `${d.getDate()} ${MONTHS_PT[d.getMonth()]} ${d.getFullYear()}`
+  return normalizeFinancialDate(isoDate, isoDate)
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
