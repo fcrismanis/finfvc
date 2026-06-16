@@ -1,11 +1,11 @@
 # PROJECT STATUS — FINANCE
-> Atualizado: 2026-06-15 | Branch: `feature/fin-functional-upgrades`
+> Atualizado: 2026-06-16 | Branch: `feature/fin-functional-upgrades`
 
 ---
 
 ## Estado atual
 
-O projeto está na **Fase 3 concluída** — produto utilizável e confiável, com qualidade de dados, fluxo de revisão completo e ledger avançado. A fundação da Fase 2 (Supabase) está pronta mas não ativada em produção.
+O projeto está na **Fase 2 de Inteligência Financeira concluída** — assistente financeiro diário com revisão inteligente, motor de recorrência, orçamento sugerido, projeção de fechamento, alertas de desvio, checklist guiado e resumo mensal automático.
 
 ---
 
