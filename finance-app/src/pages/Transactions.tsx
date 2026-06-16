@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
 import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag, Download } from 'lucide-react'
 import { useData } from '../context/DataContext'
@@ -88,8 +88,45 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [inlineTagAdd, setInlineTagAdd] = useState<{ id: string; value: string } | null>(null)
   const inlineSelectRef = useRef<HTMLSelectElement>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
-  const scrollSaveRef = useRef<number>(0)
   const mainRef = useRouteScroll('/lancamentos')
+
+  // Inline-edit scroll anchor — restored in useLayoutEffect before paint
+  interface ScrollAnchor {
+    transactionId: string
+    scrollTop: number
+    scrollHeight: number
+    elementTop: number | null
+  }
+  const pendingScrollAnchorRef = useRef<ScrollAnchor | null>(null)
+
+  function captureScrollAnchor(transactionId: string): void {
+    const container = mainRef.current
+    if (!container) return
+    const el = container.querySelector<HTMLElement>(`[data-transaction-id="${transactionId}"]`)
+    const containerRect = container.getBoundingClientRect()
+    pendingScrollAnchorRef.current = {
+      transactionId,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      elementTop: el ? el.getBoundingClientRect().top - containerRect.top : null,
+    }
+  }
+
+  // Runs after DOM commit, before paint — no visible flicker
+  useLayoutEffect(() => {
+    const anchor = pendingScrollAnchorRef.current
+    const container = mainRef.current
+    if (!anchor || !container) return
+    pendingScrollAnchorRef.current = null
+    const el = container.querySelector<HTMLElement>(`[data-transaction-id="${anchor.transactionId}"]`)
+    if (el && anchor.elementTop !== null) {
+      const newTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top
+      container.scrollTop += (newTop - anchor.elementTop)
+    } else {
+      // Item left the filter: restore previous scroll (browser clamps to valid range)
+      container.scrollTop = anchor.scrollTop
+    }
+  }, [transactions])
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
@@ -97,13 +134,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [similarToast, setSimilarToast] = useState<SimilarApplied | null>(null)
   const [similarModal, setSimilarModal] = useState<SimilarPending | null>(null)
   const [selectedSimilar, setSelectedSimilar] = useState<Set<string>>(new Set())
-
-  function captureScroll() { scrollSaveRef.current = mainRef.current?.scrollTop ?? 0 }
-  function restoreScroll() {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => mainRef.current?.scrollTo({ top: scrollSaveRef.current, behavior: 'instant' as ScrollBehavior }))
-    })
-  }
 
   const isReviewMode = navFilter?.smartFilter === 'review'
   const drilldownSource = navFilter?.sourcePage ?? null
@@ -146,6 +176,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const tags = [...(tx.tags ?? [])]
     if (tags.includes(tag)) return
     tags.push(tag)
+    captureScrollAnchor(tx.id)
     updateTransaction(tx.id, { tags })
   }
 
@@ -281,9 +312,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }
 
   function saveInlineCat(newCatId: string, txId: string) {
-    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
+      captureScrollAnchor(txId)
       const macro = MACRO_CATEGORIES.find(m => m.id === newCatId)
       updateTransaction(txId, {
         macroCategoryId: newCatId || undefined,
@@ -295,7 +326,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         classificationType: macro?.classificationType ?? tx.classificationType,
       })
 
-      // Learn rule for future imports — capture returned rule to get its id
       const updatedTx: Transaction = {
         ...tx,
         macroCategoryId: newCatId,
@@ -304,10 +334,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         categorySuggestionSource: 'manual',
       }
       const learnedRule = learnRuleFromTransaction(updatedTx, 'manual')
-      // subCategoryId to propagate: prefer what the rule already stored (upsert may have kept it)
       const propagateSub = learnedRule?.subCategoryId ?? undefined
 
-      // Propagate to similar uncategorized items
       const similar = findSimilarUncategorized(updatedTx, transactions)
 
       if (similar.highConfidence.length > 0) {
@@ -342,7 +370,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       }
     }
     setInlineCatEdit(null)
-    restoreScroll()
   }
 
   function openInlineDesc(tx: Transaction) {
@@ -350,41 +377,39 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }
 
   function saveInlineDesc(newDesc: string, txId: string) {
-    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && newDesc.trim() && newDesc.trim() !== tx.description) {
+      captureScrollAnchor(txId)
       updateTransaction(txId, { description: newDesc.trim() })
     }
     setInlineDescEdit(null)
-    restoreScroll()
   }
 
   function saveInlineSub(subId: string, txId: string) {
-    captureScroll()
     const tx = transactions.find(t => t.id === txId)
     if (tx && subId !== (tx.subCategoryId ?? '')) {
+      captureScrollAnchor(txId)
       updateTransaction(txId, { subCategoryId: subId || undefined })
     }
     setInlineSubEdit(null)
-    restoreScroll()
   }
 
   function addInlineTag(value: string, txId: string) {
-    captureScroll()
     const t = value.trim().toLowerCase().replace(/\s+/g, '_')
     const tx = transactions.find(x => x.id === txId)
     if (tx && t && !(tx.tags ?? []).includes(t)) {
+      captureScrollAnchor(txId)
       updateTransaction(txId, { tags: [...(tx.tags ?? []), t] })
     }
     setInlineTagAdd(null)
-    restoreScroll()
   }
 
   function removeTagFromTx(tag: string, txId: string) {
-    captureScroll()
     const tx = transactions.find(x => x.id === txId)
-    if (tx?.tags?.includes(tag)) updateTransaction(txId, { tags: tx.tags.filter(t => t !== tag) })
-    restoreScroll()
+    if (tx?.tags?.includes(tag)) {
+      captureScrollAnchor(txId)
+      updateTransaction(txId, { tags: tx.tags.filter(t => t !== tag) })
+    }
   }
 
   function csvCell(v: string): string {
@@ -697,6 +722,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         return (
                           <tr
                             key={tx.id}
+                            data-transaction-id={tx.id}
                             className="table-row"
                             style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
                           >
