@@ -73,14 +73,10 @@ export function Import({ onNavigate }: Props) {
     try {
       const buffer = await file.arrayBuffer()
       const rows = parseRealFinanceXlsx(buffer, file.name)
-      console.log('[RealImport] rows parsed:', rows.length)
       if (rows.length === 0) throw new Error('Nenhuma linha encontrada no arquivo.')
 
       const batchId = `real_${Date.now().toString(36)}`
-      console.log('[RealImport] existing txns in context:', transactions.length, '| existing with importHash:', transactions.filter(t => t.importHash).length)
-
       const { transactions: txns, result } = importRealFinanceBase(rows, transactions, batchId)
-      console.log('[RealImport] generated:', txns.length, '| duplicates:', result.duplicates, '| skipped:', result.skipped)
 
       // Ensure subcategories exist and get the map for training
       const { created, byName } = ensureSubCategories()
@@ -92,19 +88,11 @@ export function Import({ onNavigate }: Props) {
       // Save account/card registry
       upsertAccountRegistry(result.accounts, result.cards)
 
-      if (txns.length > 0) {
-        console.log('[RealImport] calling appendTransactions with', txns.length, 'txns')
-        await appendTransactions(txns)
-        const stored = localStorage.getItem('finance_transactions')
-        console.log('[RealImport] finance_transactions after save:', stored ? JSON.parse(stored).length : 'null')
-      } else {
-        console.warn('[RealImport] txns.length=0 → appendTransactions NOT called')
-      }
+      if (txns.length > 0) await appendTransactions(txns)
 
       setRealResult({ ...result, subcategoriesCreated: created, trainingExamples: trainingExamples.length })
       setRealStage('done')
     } catch (e) {
-      console.error('[RealImport] error:', e)
       setRealError(e instanceof Error ? e.message : String(e))
       setRealStage('error')
     }
