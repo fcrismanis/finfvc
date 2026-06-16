@@ -200,6 +200,53 @@ const RAW_CATEGORY_MAP: Record<string, Partial<ClassificationResult>> = {
   'impostos': { classificationType: 'operational_expense', macroCategoryId: 'mac_impostos', categoryId: 'cat_compras', includeInOperationalResult: true },
   'dívidas': { classificationType: 'debt_cost', macroCategoryId: 'mac_divida', categoryId: 'cat_dividas', includeInOperationalResult: true },
   'dividas': { classificationType: 'debt_cost', macroCategoryId: 'mac_divida', categoryId: 'cat_dividas', includeInOperationalResult: true },
+  // Educação — subcategorias específicas
+  'bethel': { classificationType: 'operational_expense', macroCategoryId: 'mac_educacao', categoryId: 'cat_bethel', includeInOperationalResult: true },
+  'idiomas': { classificationType: 'operational_expense', macroCategoryId: 'mac_educacao', categoryId: 'cat_idiomas', includeInOperationalResult: true },
+  'supera': { classificationType: 'operational_expense', macroCategoryId: 'mac_educacao', categoryId: 'cat_supera', includeInOperationalResult: true },
+  'treinamentos': { classificationType: 'operational_expense', macroCategoryId: 'mac_educacao', categoryId: 'cat_bethel', includeInOperationalResult: true },
+  // Assinaturas — subcategorias específicas
+  'spotify': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', categoryId: 'cat_spotify', includeInOperationalResult: true },
+  'vivo': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', includeInOperationalResult: true },
+  'claro tv': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', includeInOperationalResult: true },
+  'youtube': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', includeInOperationalResult: true },
+  'brasil paralelo': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', includeInOperationalResult: true },
+  'apple storage': { classificationType: 'operational_expense', macroCategoryId: 'mac_assinaturas', includeInOperationalResult: true },
+  // Transporte
+  'multas e taxas': { classificationType: 'operational_expense', macroCategoryId: 'mac_impostos', includeInOperationalResult: true },
+  'multas': { classificationType: 'operational_expense', macroCategoryId: 'mac_impostos', includeInOperationalResult: true },
+  // Casa
+  'iptu': { classificationType: 'operational_expense', macroCategoryId: 'mac_casa', categoryId: 'cat_iptu', includeInOperationalResult: true },
+  'limpeza': { classificationType: 'operational_expense', macroCategoryId: 'mac_casa', includeInOperationalResult: true },
+  'faxina': { classificationType: 'operational_expense', macroCategoryId: 'mac_casa', includeInOperationalResult: true },
+  // Seguros
+  'seguros': { classificationType: 'operational_expense', macroCategoryId: 'mac_seguros', includeInOperationalResult: true },
+  'seguro': { classificationType: 'operational_expense', macroCategoryId: 'mac_seguros', includeInOperationalResult: true },
+  // Pets
+  'pets': { classificationType: 'operational_expense', macroCategoryId: 'mac_pets', includeInOperationalResult: true },
+  // Presentes e Doações
+  'presentes': { classificationType: 'operational_expense', macroCategoryId: 'mac_presentes', includeInOperationalResult: true },
+  'doacoes': { classificationType: 'operational_expense', macroCategoryId: 'mac_doacoes', includeInOperationalResult: true },
+  'doações': { classificationType: 'operational_expense', macroCategoryId: 'mac_doacoes', includeInOperationalResult: true },
+  // Cuidados pessoais
+  'cuidados pessoais': { classificationType: 'operational_expense', macroCategoryId: 'mac_cuidados', includeInOperationalResult: true },
+  // Prestadores
+  'prestadores de servicos': { classificationType: 'operational_expense', macroCategoryId: 'mac_prestadores', includeInOperationalResult: true },
+  'prestadores de serviços': { classificationType: 'operational_expense', macroCategoryId: 'mac_prestadores', includeInOperationalResult: true },
+  'prestadores': { classificationType: 'operational_expense', macroCategoryId: 'mac_prestadores', includeInOperationalResult: true },
+  // Receita operacional — FIT
+  'fit': { classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
+  'fit - eit6247': { classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
+  // Excel: categorias encontradas no arquivo real
+  'investimentos': { classificationType: 'investment', macroCategoryId: 'mac_movfin', categoryId: 'cat_aporte', includeInOperationalResult: false, includeInBudget: false },
+  'acessorios': { classificationType: 'operational_expense', macroCategoryId: 'mac_compras', includeInOperationalResult: true },
+  'despesa reembolsavel': { classificationType: 'reimbursement', macroCategoryId: 'mac_movfin', includeInOperationalResult: false, includeInBudget: false },
+  'reembolso recebido': { type: 'income', classificationType: 'reimbursement', macroCategoryId: 'mac_movfin', includeInOperationalResult: false, includeInBudget: false },
+  'neutra': { classificationType: 'neutral', macroCategoryId: 'mac_movfin', isInternalTransfer: false, includeInOperationalResult: false, includeInBudget: false },
+  'outras neutras': { classificationType: 'neutral', macroCategoryId: 'mac_movfin', isInternalTransfer: false, includeInOperationalResult: false, includeInBudget: false },
+  'pagamento fit': { type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
+  'pagamento de cartao': { classificationType: 'transfer', macroCategoryId: 'mac_movfin', isInternalTransfer: true, includeInOperationalResult: false, includeInBudget: false },
+  'pagamento de fatura de cartao': { classificationType: 'transfer', macroCategoryId: 'mac_movfin', isInternalTransfer: true, includeInOperationalResult: false, includeInBudget: false },
 }
 
 function classifyByRawCategory(rawCategory: string, rawType: string): ClassificationResult | null {
