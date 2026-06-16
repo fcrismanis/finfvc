@@ -229,6 +229,8 @@ export interface MapResult {
   expenseCount: number
   autoCategorizedCount: number
   needsReviewCount: number
+  uncategorizedCount: number
+  bySourceCount: Record<string, number>
 }
 
 export interface ConnInfo {
@@ -375,6 +377,13 @@ export function mapPluggyToTransactions(
 
   const autoCategorizedCount = newTxs.filter(t => t.macroCategoryId && !t.needsReview).length
   const needsReviewCount = newTxs.filter(t => t.needsReview).length
+  const uncategorizedCount = newTxs.filter(t => !t.macroCategoryId && t.classificationType !== 'neutral').length
+
+  const bySourceCount: Record<string, number> = {}
+  for (const tx of newTxs) {
+    const src = (tx.categorySuggestionSource as string | undefined) ?? 'none'
+    bySourceCount[src] = (bySourceCount[src] ?? 0) + 1
+  }
 
   return {
     newTxs,
@@ -383,6 +392,8 @@ export function mapPluggyToTransactions(
     expenseCount: newTxs.filter(t => t.type === 'expense').length,
     autoCategorizedCount,
     needsReviewCount,
+    uncategorizedCount,
+    bySourceCount,
   }
 }
 
@@ -402,24 +413,26 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
 // ── Compute period date range from a preset ───────────────────────────────────
 
 export function getPeriodDates(
-  period: 'current_month' | 'last_30d' | 'last_90d' | 'custom',
+  period: 'last_7d' | 'current_month' | 'last_30d' | 'last_90d' | 'custom',
   _customFrom?: string,
   _customTo?: string,
 ): { from: string; to: string } {
   const today = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
   if (period === 'current_month') {
     const y = today.getFullYear()
     const m = today.getMonth() + 1
     const lastDay = new Date(y, m, 0).getDate()
     return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` }
   }
-  const days = period === 'last_30d' ? 30 : 90
+  const dayMap: Partial<Record<typeof period, number>> = { last_7d: 7, last_30d: 30, last_90d: 90 }
+  const days = dayMap[period] ?? 7
   const from = new Date(today)
   from.setDate(from.getDate() - days)
   return {
     from: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
-    to: `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`,
+    to: todayStr,
   }
   // 'custom' handled by caller
 }

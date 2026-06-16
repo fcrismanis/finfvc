@@ -145,7 +145,7 @@ function buildReclassPreview(pluggyTxs: Transaction[]): ReclassPreview {
 
 type BackendStatus = 'checking' | 'configured' | 'not_configured'
 type SyncPhase = 'period_select' | 'fetching' | 'preview' | 'importing' | 'done' | 'error'
-type PeriodPreset = 'current_month' | 'last_30d' | 'last_90d' | 'custom'
+type PeriodPreset = 'last_7d' | 'current_month' | 'last_30d' | 'last_90d' | 'custom'
 
 interface SyncSession {
   itemId: string
@@ -182,6 +182,7 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 const PERIOD_LABELS: Record<PeriodPreset, string> = {
+  last_7d:       'Últimos 7 dias',
   current_month: 'Mês atual',
   last_30d:      'Últimos 30 dias',
   last_90d:      'Últimos 90 dias',
@@ -319,7 +320,7 @@ export function PluggyPage() {
 
   function startSync(itemId: string, accountId: string, accountName: string) {
     const today = new Date().toISOString().slice(0, 10)
-    setSync({ itemId, accountId, accountName, period: 'current_month', customFrom: '2024-01-01', customTo: today, phase: 'period_select' })
+    setSync({ itemId, accountId, accountName, period: 'last_7d', customFrom: '2024-01-01', customTo: today, phase: 'period_select' })
   }
 
   async function doFetch(period: PeriodPreset, customFrom: string, customTo: string) {
@@ -405,6 +406,13 @@ export function PluggyPage() {
             Salvando conexão…
           </div>
         )}
+
+        {/* Environment status card */}
+        <PluggyStatusCard
+          connections={connections}
+          pluggyTxCount={transactions.filter(t => t.source === 'pluggy' || t.origin === 'import_api').length}
+          backendStatus={backendStatus}
+        />
 
         {/* Connections list */}
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -758,9 +766,14 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
         {/* Period selector — initial step */}
         {phase === 'period_select' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <p style={{ fontSize: 12.5, color: 'var(--ink-2)', fontWeight: 600 }}>Selecione o período</p>
+            <div>
+              <p style={{ fontSize: 12.5, color: 'var(--ink-2)', fontWeight: 600 }}>Selecione o período</p>
+              <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3 }}>
+                Para primeira importação, comece com <strong>7 dias</strong> para validar categorias e evitar duplicidade.
+              </p>
+            </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(['current_month', 'last_30d', 'last_90d', 'custom'] as PeriodPreset[]).map(p => (
+              {(['last_7d', 'current_month', 'last_30d', 'last_90d', 'custom'] as PeriodPreset[]).map(p => (
                 <button
                   key={p}
                   onClick={() => setLocalPeriod(p)}
@@ -773,6 +786,7 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
                   }}
                 >
                   {PERIOD_LABELS[p]}
+                  {p === 'last_7d' && <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: 'var(--pos)', background: 'var(--pos-soft)', border: '1px solid var(--pos)40', borderRadius: 3, padding: '0 4px' }}>REC</span>}
                 </button>
               ))}
             </div>
@@ -822,7 +836,7 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
               {([
                 ['Novas', String(result.newTxs.length), 'var(--pos)'],
                 ['Duplicadas', String(result.duplicateCount), 'var(--faint)'],
-                ['Auto-cat.', String(result.autoCategorizedCount), 'var(--ink-2)'],
+                ['Sem categoria', String(result.uncategorizedCount), result.uncategorizedCount > 0 ? 'var(--warn)' : 'var(--faint)'],
               ] as [string,string,string][]).map(([label, val, color]) => (
                 <div key={label} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
                   <p style={{ fontSize: 18, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</p>
@@ -830,6 +844,30 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
                 </div>
               ))}
             </div>
+
+            {result.newTxs.length > 0 && Object.keys(result.bySourceCount).length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(Object.entries(result.bySourceCount) as [string, number][])
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([src, count]) => {
+                    const labels: Record<string, string> = {
+                      rule: 'regra', pluggy_id: 'Pluggy ID', pluggy_name: 'Pluggy nome',
+                      text_inference: 'inferência', history: 'histórico', none: 'a classificar',
+                    }
+                    const isNone = src === 'none'
+                    return (
+                      <span key={src} style={{
+                        fontSize: 10.5, padding: '2px 8px', borderRadius: 4,
+                        background: isNone ? 'var(--warn-soft, var(--well))' : 'var(--well)',
+                        border: `1px solid ${isNone ? 'var(--warn)' : 'var(--line)'}`,
+                        color: isNone ? 'var(--warn)' : 'var(--ink-2)', fontWeight: 600,
+                      }}>
+                        {count} {labels[src] ?? src}
+                      </span>
+                    )
+                  })}
+              </div>
+            )}
 
             {result.newTxs.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -1012,6 +1050,67 @@ function RecoveryModal({ diag, onRecover, onClose }: {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── PluggyStatusCard ──────────────────────────────────────────────────────────
+
+function PluggyStatusCard({ connections, pluggyTxCount, backendStatus }: {
+  connections: PluggyLocalConnection[]
+  pluggyTxCount: number
+  backendStatus: 'checking' | 'configured' | 'not_configured'
+}) {
+  const totalAccounts = connections.flatMap(c => c.accounts).length
+  const lastSyncAt = connections
+    .flatMap(c => c.accounts)
+    .map(a => a.lastSyncAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? null
+
+  const isClean = connections.length === 0 && pluggyTxCount === 0
+
+  return (
+    <div style={{
+      padding: '12px 16px', borderRadius: 10,
+      background: isClean ? 'var(--pos-soft)' : 'var(--well)',
+      border: `1px solid ${isClean ? 'var(--pos)' : 'var(--line)'}`,
+      fontSize: 12.5,
+    }}>
+      {isClean ? (
+        <p style={{ color: 'var(--pos)', fontWeight: 700 }}>
+          Ambiente Pluggy limpo. Pronto para nova conexão.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--ink)' }}>{connections.length}</strong> conexão(ões)
+          </span>
+          <span style={{ color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--ink)' }}>{totalAccounts}</strong> conta(s)
+          </span>
+          <span style={{ color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--ink)' }}>{pluggyTxCount}</strong> transações importadas
+          </span>
+          {lastSyncAt && (
+            <span style={{ color: 'var(--faint)', fontSize: 11.5 }}>
+              última sync: {new Date(lastSyncAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+      )}
+      <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--faint)' }}>
+          backend:{' '}
+          <span style={{ color: backendStatus === 'configured' ? 'var(--pos)' : backendStatus === 'checking' ? 'var(--warn)' : 'var(--crit)', fontWeight: 600 }}>
+            {backendStatus === 'configured' ? 'configurado' : backendStatus === 'checking' ? 'verificando…' : 'não configurado'}
+          </span>
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--faint)' }}>
+          chave: <code style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>fin_pluggy_connections</code>
+        </span>
       </div>
     </div>
   )
