@@ -27,6 +27,14 @@ d6d0167 feat(review): bulk actions for categories and review state
 
 ## O que está pronto
 
+### Fase 4 — IA de categorização + regras robustas (concluída)
+- [x] **4.1** `categoryRules.service.ts` — receiverName/payerName/pluggyCategoryId, `canAutoCategorize()`, prioridade de matching, `incrementRuleUseCount()`
+- [x] **4.2** `POST /api/ai/categorize-transactions` — Claude (haiku) / GPT-4o-mini, batch ≤80, JSON estrito, sem secrets no frontend
+- [x] **4.3** Botão "Categorizar com IA" na Revisão — modal com preview, apply individual, apply all high, learn rule on apply
+- [x] **4.4** XLSX import aplica regras aprendidas (Pluggy já tinha desde Fase 3.3)
+- [x] **4.5** `/regras` — mostra receiverName/payerName, confidence, origem colorida, data atualização, botão testar
+- [x] **4.6** `FASE4_AI_CATEGORIZATION.md` — documentação completa da pipeline de categorização
+
 ### Fase 3 — Produto utilizável e confiável (concluída)
 - [x] **3.0** `updateTransactions(items, opts)` — batch write em um passo (IDataProvider + Local + Supabase)
 - [x] **3.1** DataQualityCard no Dashboard — 11 métricas clicáveis com drill-down para ledger filtrado
