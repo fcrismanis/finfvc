@@ -293,7 +293,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
       })
       const data = await res.json()
       if (!res.ok || !data.ok) {
-        setAiError(data.error ?? 'Erro desconhecido da IA.')
+          setAiError(data.error ?? 'Nenhuma IA configurada. Configure ANTHROPIC_API_KEY, OPENAI_API_KEY ou rode Ollama local (ollama serve).')
         return
       }
       setAiSuggestions((data.suggestions as AISuggestion[]) ?? [])

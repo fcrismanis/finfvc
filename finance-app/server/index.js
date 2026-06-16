@@ -614,16 +614,82 @@ async function categorizeGPT(transactions, categories, subCategories, rules) {
   return JSON.parse(text)
 }
 
+function extractFirstJsonBlock(text) {
+  const start = text.indexOf('{')
+  const end   = text.lastIndexOf('}')
+  if (start === -1 || end === -1 || end < start) return null
+  try {
+    return JSON.parse(text.slice(start, end + 1))
+  } catch {
+    return null
+  }
+}
+
+function validateSuggestions(suggestions, categories, subCategories) {
+  const catIds = new Set(categories.map(c => c.id))
+  const subIds = new Set(subCategories.map(s => s.id))
+  const validConf = new Set(['high', 'medium', 'low'])
+  return suggestions.filter(s => {
+    if (!s || typeof s !== 'object') return false
+    if (!catIds.has(s.macroCategoryId)) return false
+    if (s.subCategoryId != null && s.subCategoryId !== '' && !subIds.has(s.subCategoryId)) return false
+    if (!validConf.has(s.confidence)) return false
+    return true
+  })
+}
+
+async function categorizeOllama(transactions, categories, subCategories, rules) {
+  const ollamaUrl   = process.env.OLLAMA_URL   ?? 'http://localhost:11434'
+  const ollamaModel = process.env.OLLAMA_MODEL ?? 'qwen2.5:7b'
+
+  const userContent = buildCategorizationPrompt(transactions, categories, subCategories, rules)
+
+  let res
+  try {
+    res = await fetch(`${ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: ollamaModel,
+        stream: false,
+        messages: [
+          {
+            role: 'system',
+            content: 'Você categoriza transações financeiras pessoais e responde apenas JSON válido.',
+          },
+          { role: 'user', content: userContent },
+        ],
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
+  } catch (err) {
+    throw Object.assign(
+      new Error(`Ollama não respondeu em ${ollamaUrl}. Verifique se está rodando: ollama serve`),
+      { ollamaUnavailable: true },
+    )
+  }
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`Ollama ${res.status}: ${txt.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  const rawText = data?.message?.content ?? data?.choices?.[0]?.message?.content ?? ''
+  if (!rawText) throw new Error('Ollama retornou resposta vazia.')
+
+  const parsed = extractFirstJsonBlock(rawText)
+  if (!parsed || !Array.isArray(parsed.suggestions)) {
+    throw new Error('Ollama: resposta não é JSON válido no contrato esperado.')
+  }
+
+  parsed.suggestions = validateSuggestions(parsed.suggestions, categories, subCategories)
+  return parsed
+}
+
 app.post('/api/ai/categorize-transactions', async (req, res) => {
   const hasClaude = !!(process.env.ANTHROPIC_API_KEY)
   const hasGPT    = !!(process.env.OPENAI_API_KEY)
-
-  if (!hasClaude && !hasGPT) {
-    return res.status(503).json({
-      ok: false,
-      error: 'Nenhuma chave de IA configurada. Configure ANTHROPIC_API_KEY ou OPENAI_API_KEY no servidor.',
-    })
-  }
 
   const { transactions, categories, subCategories, rules } = req.body ?? {}
 
@@ -646,9 +712,12 @@ app.post('/api/ai/categorize-transactions', async (req, res) => {
     if (hasClaude) {
       result = await categorizeClaude(batch, cats, subs, rls)
       provider = 'claude'
-    } else {
+    } else if (hasGPT) {
       result = await categorizeGPT(batch, cats, subs, rls)
       provider = 'gpt'
+    } else {
+      result = await categorizeOllama(batch, cats, subs, rls)
+      provider = 'ollama'
     }
 
     if (!result || !Array.isArray(result.suggestions)) {
@@ -658,6 +727,12 @@ app.post('/api/ai/categorize-transactions', async (req, res) => {
     return res.json({ ok: true, provider, suggestions: result.suggestions, processed: batch.length })
   } catch (err) {
     console.error('[ai/categorize] error:', err.message)
+    if (err.ollamaUnavailable) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Nenhuma IA configurada. Configure ANTHROPIC_API_KEY, OPENAI_API_KEY ou rode Ollama local (ollama serve).',
+      })
+    }
     return res.status(500).json({ ok: false, error: 'Erro ao chamar IA: ' + err.message })
   }
 })

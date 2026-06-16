@@ -93,9 +93,15 @@ Em `suggestFromRules(tx)`, regras ativas são comparadas na ordem:
 
 ## 6. Como testar a IA
 
-### Pré-requisito
-Backend rodando com pelo menos uma chave configurada:
+### Prioridade de provider
 
+| Prioridade | Provider | Configuração |
+|---|---|---|
+| 1 | **Anthropic Claude** | `ANTHROPIC_API_KEY=sk-ant-...` |
+| 2 | **OpenAI GPT** | `OPENAI_API_KEY=sk-proj-...` |
+| 3 | **Ollama local** | Nenhuma chave necessária |
+
+### Opção A — Anthropic ou OpenAI
 ```bash
 # finance-app/server/.env
 ANTHROPIC_API_KEY=sk-ant-...   # preferido (usa claude-haiku-4-5)
@@ -103,6 +109,30 @@ ANTHROPIC_API_KEY=sk-ant-...   # preferido (usa claude-haiku-4-5)
 OPENAI_API_KEY=sk-proj-...     # fallback (usa gpt-4o-mini)
 
 cd finance-app/server && node index.js
+```
+
+### Opção B — Ollama local (gratuito)
+
+Instalar e baixar modelo:
+```bash
+brew install ollama
+ollama pull qwen2.5:7b
+```
+
+Variáveis opcionais (defaults já configurados):
+```env
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+Iniciar tudo (Ollama + backend + frontend):
+```bash
+cd ~/FINFVC && \
+  lsof -ti :8787 | xargs kill -9 2>/dev/null || true && \
+  lsof -ti :5173 | xargs kill -9 2>/dev/null || true && \
+  (ollama serve >/tmp/ollama.log 2>&1 &) && \
+  (cd ~/FINFVC/finance-app/server && OLLAMA_URL=http://localhost:11434 OLLAMA_MODEL=qwen2.5:7b npm run dev &) && \
+  (cd ~/FINFVC/finance-app && npm run dev)
 ```
 
 ### Via UI
