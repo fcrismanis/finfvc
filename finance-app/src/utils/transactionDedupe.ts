@@ -213,17 +213,122 @@ export interface DuplicateGroup {
   transactions: Transaction[]
   confidence: DupeConfidence
   reason: string
-  /** Suggested action: which tx to keep */
   keepId: string | null
 }
 
+export type AllDuplicateGroupConfidence = 'high' | 'medium' | 'low'
+
+export interface AllDuplicateGroup {
+  id: string
+  confidence: AllDuplicateGroupConfidence
+  reason: string
+  transactions: Transaction[]
+  suggestedKeepId?: string
+  suggestedMergeIds?: string[]
+}
+
 /**
- * Scan stored transactions for cross-source duplicates (Excel vs Pluggy, etc).
- * Only surfaces pairs where at least one side is from a different source.
+ * Scan ALL stored transactions for duplicates — same source or cross-source.
+ * High: same importHash / pluggyTransactionId / externalId / dedupeFingerprint / soft fingerprint
+ * Medium: same value±0.02, date ≤3 days, desc similarity ≥50%
+ * Low: same value, date ≤7 days, desc similarity ≥25%
+ */
+export function findAllDuplicateGroups(transactions: Transaction[]): AllDuplicateGroup[] {
+  const groups: AllDuplicateGroup[] = []
+  const grouped = new Set<string>()
+
+  // ── High confidence: exact key matches ──────────────────────────────────────
+
+  // Group by importHash
+  const byHash = new Map<string, Transaction[]>()
+  for (const tx of transactions) {
+    if (!tx.importHash) continue
+    const arr = byHash.get(tx.importHash) ?? []
+    arr.push(tx)
+    byHash.set(tx.importHash, arr)
+  }
+  for (const [hash, txs] of byHash) {
+    if (txs.length < 2) continue
+    if (txs.every(t => grouped.has(t.id))) continue
+    txs.forEach(t => grouped.add(t.id))
+    groups.push({ id: `hash:${hash}`, confidence: 'high', reason: 'importHash idêntico', transactions: txs, suggestedKeepId: preferKeep(txs) ?? undefined })
+  }
+
+  // Group by soft fingerprint (desc + amount + month) — ALL sources
+  const byFp = new Map<string, Transaction[]>()
+  for (const tx of transactions) {
+    if (grouped.has(tx.id)) continue
+    const fp = buildSoftFingerprint(tx)
+    if (!fp || fp === '||') continue
+    const arr = byFp.get(fp) ?? []
+    arr.push(tx)
+    byFp.set(fp, arr)
+  }
+  for (const [fp, txs] of byFp) {
+    if (txs.length < 2) continue
+    if (txs.some(t => grouped.has(t.id))) continue
+    txs.forEach(t => grouped.add(t.id))
+    const keepId = preferKeep(txs) ?? undefined
+    groups.push({
+      id: `fp:${fp}`,
+      confidence: 'high',
+      reason: 'descrição+valor+mês idênticos',
+      transactions: txs,
+      suggestedKeepId: keepId,
+      suggestedMergeIds: txs.filter(t => t.id !== keepId).map(t => t.id),
+    })
+  }
+
+  // ── Medium confidence: value + date (≤3 days) + desc similarity ≥50% ────────
+  const remaining = transactions.filter(t => !grouped.has(t.id))
+  for (let i = 0; i < remaining.length; i++) {
+    const a = remaining[i]
+    if (grouped.has(a.id)) continue
+    for (let j = i + 1; j < remaining.length; j++) {
+      const b = remaining[j]
+      if (grouped.has(b.id)) continue
+      if (Math.abs(a.amount - b.amount) > 0.02) continue
+      const dateDiff = closestDateDiff(a, b)
+      if (dateDiff > 7) continue
+      const aNorm = normalizeDescriptionForDedupe(a.originalDescription ?? a.description)
+      const bNorm = normalizeDescriptionForDedupe(b.originalDescription ?? b.description)
+      const sim = tokenSimilarity(aNorm, bNorm)
+      if (dateDiff <= 3 && sim >= 0.5) {
+        grouped.add(a.id); grouped.add(b.id)
+        const keepId = preferKeep([a, b]) ?? undefined
+        groups.push({
+          id: `med:${a.id}::${b.id}`,
+          confidence: 'medium',
+          reason: `similaridade ${Math.round(sim * 100)}%, ${dateDiff}d de diferença`,
+          transactions: [a, b],
+          suggestedKeepId: keepId,
+          suggestedMergeIds: [a, b].filter(t => t.id !== keepId).map(t => t.id),
+        })
+        break
+      } else if (dateDiff <= 7 && sim >= 0.25 && sim < 0.5) {
+        grouped.add(a.id); grouped.add(b.id)
+        groups.push({
+          id: `low:${a.id}::${b.id}`,
+          confidence: 'low',
+          reason: `similaridade parcial ${Math.round(sim * 100)}%, ${dateDiff}d de diferença`,
+          transactions: [a, b],
+          suggestedKeepId: preferKeep([a, b]) ?? undefined,
+        })
+        break
+      }
+    }
+  }
+
+  return groups
+}
+
+/**
+ * Legacy cross-source-only scanner. Use findAllDuplicateGroups for general dedupe.
+ * @deprecated
  */
 export function findExistingDuplicateGroups(transactions: Transaction[]): DuplicateGroup[] {
   const groups: DuplicateGroup[] = []
-  const grouped = new Set<string>() // ids already in a group
+  const grouped = new Set<string>()
 
   const byFp = new Map<string, Transaction[]>()
   for (const tx of transactions) {
@@ -234,10 +339,8 @@ export function findExistingDuplicateGroups(transactions: Transaction[]): Duplic
     byFp.set(fp, arr)
   }
 
-  // Level 2: same fingerprint across different sources
   for (const [fp, txs] of byFp) {
     if (txs.length < 2) continue
-    // Check at least one pair has different sources
     const sources = new Set(txs.map(t => t.source ?? t.origin))
     if (sources.size < 2) continue
     const ids = txs.map(t => t.id)
@@ -247,7 +350,6 @@ export function findExistingDuplicateGroups(transactions: Transaction[]): Duplic
     groups.push({ id: fp, transactions: txs, confidence: 'strong', reason: 'fingerprint', keepId })
   }
 
-  // Level 3: amount + date + desc similarity (softer, cross-source only)
   const remaining = transactions.filter(t => !grouped.has(t.id))
   for (let i = 0; i < remaining.length; i++) {
     const a = remaining[i]
@@ -255,7 +357,6 @@ export function findExistingDuplicateGroups(transactions: Transaction[]): Duplic
     for (let j = i + 1; j < remaining.length; j++) {
       const b = remaining[j]
       if (grouped.has(b.id)) continue
-      // Skip same-source pairs
       const aSource = a.source ?? a.origin
       const bSource = b.source ?? b.origin
       if (aSource === bSource) continue
@@ -269,13 +370,7 @@ export function findExistingDuplicateGroups(transactions: Transaction[]): Duplic
       const conf: DupeConfidence = dateDiff <= 1 && sim >= 0.8 ? 'strong' : 'soft'
       grouped.add(a.id); grouped.add(b.id)
       const keepId = preferKeep([a, b])
-      groups.push({
-        id: `${a.id}::${b.id}`,
-        transactions: [a, b],
-        confidence: conf,
-        reason: `sim=${Math.round(sim * 100)}%,days=${dateDiff}`,
-        keepId,
-      })
+      groups.push({ id: `${a.id}::${b.id}`, transactions: [a, b], confidence: conf, reason: `sim=${Math.round(sim * 100)}%,days=${dateDiff}`, keepId })
       break
     }
   }
