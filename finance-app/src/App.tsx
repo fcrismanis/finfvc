@@ -97,7 +97,15 @@ function MigrationBanner({ onNavigate }: { onNavigate: (route: string) => void }
 }
 
 function AppShell() {
-  const [activeRoute, setActiveRoute] = useState('/')
+  const [activeRoute, setActiveRoute] = useState(() => {
+    const r = sessionStorage.getItem('fin_route')
+    if (!r) return '/'
+    const known = ['/', '/conectar', '/lancamentos', '/orcamento', '/revisao', '/fechamento',
+      '/migrar', '/consultor', '/configuracoes', '/categorias', '/subcategorias', '/regras',
+      '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
+      '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes']
+    return known.includes(r) ? r : '/'
+  })
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [navFilter, setNavFilter] = useState<NavFilter | null>(null)
@@ -115,6 +123,7 @@ function AppShell() {
   }, [transactions, selectedMonth])
 
   function navigate(route: string, filter?: NavFilter) {
+    sessionStorage.setItem('fin_route', route)
     setActiveRoute(route)
     setNavFilter(filter ?? null)
     setSidebarOpen(false)
