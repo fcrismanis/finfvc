@@ -140,7 +140,7 @@ export function makeDeduplicationKey(tx: PluggyTransaction, accountId: string): 
 
 // ── Local persistence for connections (localStorage) ──────────────────────────
 
-const CONNECTIONS_KEY = 'fin_pluggy_connections'
+import { CONNECTIONS_KEY, loadPluggyConnectionsSafe } from './pluggyStorage.service'
 
 export interface PluggyLocalAccount {
   id: string
@@ -170,12 +170,7 @@ export interface PluggyLocalConnection {
 }
 
 export function getLocalConnections(): PluggyLocalConnection[] {
-  try {
-    const raw = localStorage.getItem(CONNECTIONS_KEY)
-    return raw ? (JSON.parse(raw) as PluggyLocalConnection[]) : []
-  } catch {
-    return []
-  }
+  return loadPluggyConnectionsSafe()
 }
 
 export function saveLocalConnection(conn: PluggyLocalConnection): void {
@@ -188,6 +183,7 @@ export function saveLocalConnection(conn: PluggyLocalConnection): void {
 
 export function removeLocalConnection(itemId: string): void {
   const updated = getLocalConnections().filter(c => c.itemId !== itemId)
+  // Only write if this is an explicit user removal (array may become [])
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(updated))
 }
 

@@ -15,6 +15,12 @@ import {
   getPeriodDates,
   type ConnInfo,
 } from '../services/pluggy.service'
+import {
+  diagnosePluggyStorage,
+  recoverPluggyStorage,
+  type DiagnosticResult,
+  type RecoveryResult,
+} from '../services/pluggyStorage.service'
 import { MACRO_CATEGORIES } from '../config/categories'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
@@ -195,6 +201,8 @@ export function PluggyPage() {
   const [debugLoading, setDebugLoading] = useState<string | null>(null)
   const [reclassPreview, setReclassPreview] = useState<ReclassPreview | null>(null)
   const [reclassRunning, setReclassRunning] = useState(false)
+  const [recoveryDiag, setRecoveryDiag] = useState<DiagnosticResult | null>(null)
+  const [recoveryResult, setRecoveryResult] = useState<RecoveryResult | null>(null)
 
   useEffect(() => {
     fetch('/api/pluggy/status')
@@ -203,6 +211,20 @@ export function PluggyPage() {
       .catch(() => setBackendStatus('not_configured'))
     setConnections(getLocalConnections())
   }, [])
+
+  function handleDiagnose() {
+    setRecoveryResult(null)
+    setRecoveryDiag(diagnosePluggyStorage())
+  }
+
+  function handleRecover() {
+    const result = recoverPluggyStorage()
+    setRecoveryResult(result)
+    if (result.ok && result.count > 0) {
+      setConnections(getLocalConnections())
+    }
+    setRecoveryDiag(null)
+  }
 
   async function handleConnect() {
     setFetchingToken(true)
@@ -346,12 +368,22 @@ export function PluggyPage() {
     <main className="page-shell">
       <div style={{ margin: '0 auto', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        <div>
-          <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Pluggy</h1>
-          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
-            Conecte bancos e cartões via Open Finance
-            <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 8, padding: '1px 5px', borderRadius: 3, background: 'var(--warn)', color: '#fff', verticalAlign: 'middle' }}>BETA</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Pluggy</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              Conecte bancos e cartões via Open Finance
+              <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 8, padding: '1px 5px', borderRadius: 3, background: 'var(--warn)', color: '#fff', verticalAlign: 'middle' }}>BETA</span>
+            </div>
           </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: 11, marginTop: 6, opacity: 0.75 }}
+            onClick={handleDiagnose}
+            title="Diagnosticar e recuperar dados Pluggy do localStorage"
+          >
+            Recuperar dados Pluggy
+          </button>
         </div>
 
         {backendStatus === 'not_configured' && (
@@ -396,12 +428,21 @@ export function PluggyPage() {
           </div>
 
           {connections.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--faint)' }}>
+            <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--faint)' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.35 }}>
                 <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
               </svg>
               <p style={{ fontSize: 12.5 }}>Nenhuma conexão ativa</p>
-              <p style={{ fontSize: 11.5, marginTop: 4, opacity: 0.7 }}>Clique em &ldquo;+ Conectar banco/cartão&rdquo; para adicionar</p>
+              <p style={{ fontSize: 11.5, marginTop: 4, opacity: 0.7, maxWidth: 380, margin: '4px auto 0' }}>
+                Se você já tinha conexões antes, clique em &ldquo;Recuperar dados Pluggy&rdquo;. Também confirme que está usando o mesmo navegador e o endereço <code style={{ fontFamily: 'var(--mono)', fontSize: 10.5 }}>http://localhost:5173</code>.
+              </p>
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ marginTop: 14, fontSize: 11.5 }}
+                onClick={handleDiagnose}
+              >
+                Recuperar dados Pluggy
+              </button>
             </div>
           ) : (
             <div>
@@ -540,6 +581,29 @@ export function PluggyPage() {
           onConfirm={handleReclassConfirm}
           onClose={() => setReclassPreview(null)}
         />
+      )}
+
+      {recoveryDiag && (
+        <RecoveryModal
+          diag={recoveryDiag}
+          onRecover={handleRecover}
+          onClose={() => setRecoveryDiag(null)}
+        />
+      )}
+
+      {recoveryResult && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 400, background: recoveryResult.ok ? 'var(--card-bg)' : 'var(--crit-soft)',
+          border: `1px solid ${recoveryResult.ok ? 'var(--line)' : 'var(--crit)'}`,
+          borderRadius: 10, padding: '12px 20px', boxShadow: '0 6px 24px rgba(0,0,0,.15)',
+          display: 'flex', alignItems: 'center', gap: 12, maxWidth: 480,
+        }}>
+          <p style={{ fontSize: 12.5, color: recoveryResult.ok ? 'var(--ink)' : 'var(--crit)', flex: 1 }}>
+            {recoveryResult.message}
+          </p>
+          <button onClick={() => setRecoveryResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
       )}
     </main>
   )
@@ -871,6 +935,83 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
           </div>
         )}
 
+      </div>
+    </div>
+  )
+}
+
+// ── RecoveryModal ─────────────────────────────────────────────────────────────
+
+function RecoveryModal({ diag, onRecover, onClose }: {
+  diag: DiagnosticResult
+  onRecover: () => void
+  onClose: () => void
+}) {
+  const recoverableKeys = diag.keys.filter(k => k.looksLikeConnections && k.recordCount > 0)
+  const currentKey = diag.keys.find(k => k.source === 'current')
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Diagnóstico de dados Pluggy</p>
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>{diag.message}</p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+          {[
+            { label: 'Conexões', value: diag.probableConnections },
+            { label: 'Contas', value: diag.probableAccounts },
+            { label: 'Transações', value: diag.probableTransactions },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
+              <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink)' }}>{value}</p>
+              <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {diag.keys.length > 0 && (
+          <div>
+            <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6 }}>Chaves encontradas no localStorage</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {diag.keys.map(k => (
+                <div key={k.key} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 6, background: 'var(--well)', border: `1px solid ${k.looksLikeConnections ? 'var(--accent)' : 'var(--line)'}`, display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink-2)', wordBreak: 'break-all' }}>{k.key}</span>
+                  <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                    {k.isArray ? `${k.recordCount} registros` : k.isValidJson ? 'JSON' : 'raw'}
+                    {' · '}{(k.byteSize / 1024).toFixed(1)}KB
+                    {k.looksLikeConnections && <span style={{ color: 'var(--accent)', fontWeight: 700 }}> ← conexões</span>}
+                    {k.source === 'current' && <span style={{ color: 'var(--pos)', fontWeight: 700 }}> (atual)</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {currentKey && currentKey.recordCount > 0 && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)', fontSize: 12 }}>
+            Conexões já presentes na chave atual ({currentKey.recordCount}). Recarregue a página se não estiverem aparecendo.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
+          {recoverableKeys.some(k => k.key !== 'fin_pluggy_connections') && (
+            <button className="btn btn-primary btn-sm" onClick={onRecover}>
+              Restaurar conexões encontradas
+            </button>
+          )}
+          {currentKey && currentKey.recordCount > 0 && (
+            <button className="btn btn-primary btn-sm" onClick={() => { onClose(); window.location.reload() }}>
+              Recarregar página
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
