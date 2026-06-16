@@ -2,14 +2,18 @@ import type { MonthClosing } from '../types'
 
 const KEY = 'finance_closings'
 
-export const CHECKLIST_ITEMS: { id: string; label: string }[] = [
-  { id: 'imports_reviewed',     label: 'Todos os extratos importados e revisados' },
-  { id: 'duplicates_checked',   label: 'Duplicidades e transferências confirmadas' },
-  { id: 'no_category_fixed',    label: 'Lançamentos sem categoria classificados' },
-  { id: 'pending_resolved',     label: 'Pendentes do mês resolvidos ou justificados' },
-  { id: 'budget_compared',      label: 'Desvios de orçamento revisados' },
-  { id: 'investments_logged',   label: 'Investimentos e resgates registrados' },
-  { id: 'next_month_planned',   label: 'Orçamento do próximo mês definido' },
+export const CHECKLIST_ITEMS: { id: string; label: string; description?: string }[] = [
+  { id: 'imports_done',         label: 'Importar extratos (Pluggy ou XLSX)',         description: 'Sincronizar todas as contas e cartões do mês' },
+  { id: 'no_category_fixed',    label: 'Revisar lançamentos sem categoria',           description: 'Classificar todos os itens sem macro categoria' },
+  { id: 'no_subcategory_fixed', label: 'Revisar sem subcategoria',                    description: 'Adicionar subcategoria às despesas relevantes' },
+  { id: 'neutrals_validated',   label: 'Validar transferências e neutros',            description: 'Confirmar que movimentos internos não duplicam consumo' },
+  { id: 'card_payment_checked', label: 'Validar pagamentos de cartão',                description: 'Garantir que faturas estão como neutro se compras já estão lançadas' },
+  { id: 'income_validated',     label: 'Validar receitas',                            description: 'Confirmar todas as entradas do mês' },
+  { id: 'recurring_checked',    label: 'Conferir recorrentes',                        description: 'Verificar se todos os gastos fixos foram lançados' },
+  { id: 'budget_compared',      label: 'Conferir orçamento',                          description: 'Revisar desvios entre planejado e realizado' },
+  { id: 'alerts_reviewed',      label: 'Conferir alertas financeiros',                description: 'Revisar alertas de desvio gerados automaticamente' },
+  { id: 'summary_generated',    label: 'Gerar resumo do mês',                         description: 'Criar ou revisar o resumo financeiro do mês' },
+  { id: 'next_month_planned',   label: 'Planejar orçamento do próximo mês',           description: 'Definir metas para o próximo período' },
 ]
 
 export function emptyClosing(month: string): MonthClosing {

@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight, CreditCard, ChevronDown, RefreshCw } from 'lucide-react'
+import { Lock, Unlock, CheckSquare, Square, ChevronLeft, ChevronRight, CreditCard, ChevronDown, RefreshCw, TrendingDown, FileText, Copy, Zap } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL, formatPct } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
-import { getMonthSummary, getBudgetComparison, getRedemptionTotal } from '../engine/calculate'
+import { getMonthSummary, getBudgetComparison, getRedemptionTotal, getMacroCategoryTotals } from '../engine/calculate'
 import { emptyClosing, CHECKLIST_ITEMS } from '../services/closing.service'
 import { diagnoseReconciliation, neutralPatch } from '../services/reconciliation.service'
+import { computeMonthProjection } from '../utils/monthProjection'
+import { detectRecurringPatterns } from '../utils/recurrence'
+import { generateFinancialAlerts } from '../utils/financialAlerts'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -61,6 +64,37 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
   const recon = useMemo(() => diagnoseReconciliation(monthTxs), [monthTxs])
   const [neutralizing, setNeutralizing] = useState(false)
 
+  // Fase 2.4 — Projeção de fechamento
+  const projection = useMemo(
+    () => computeMonthProjection(transactions, budgets, month),
+    [transactions, budgets, month],
+  )
+
+  // Fase 2.2 — Padrões recorrentes
+  const recurringPatterns = useMemo(
+    () => detectRecurringPatterns(transactions, month),
+    [transactions, month],
+  )
+  const missingRecurrents = recurringPatterns.filter(
+    p => !!p.nextExpectedDate && p.confidence !== 'low',
+  )
+
+  // Fase 2.5 — Alertas financeiros
+  const financialAlerts = useMemo(
+    () => generateFinancialAlerts(transactions, month, budgets),
+    [transactions, month, budgets],
+  )
+  const highAlerts = financialAlerts.filter(a => a.severity === 'high')
+
+  // Fase 2.7 — Resumo mensal
+  const [showSummary, setShowSummary] = useState(false)
+  const [summaryCopied, setSummaryCopied] = useState(false)
+
+  const monthlyMacros = useMemo(
+    () => getMacroCategoryTotals(transactions, month),
+    [transactions, month],
+  )
+
   async function handleNeutralize() {
     if (recon.candidateIds.size === 0 || closing.isClosed) return
     setNeutralizing(true)
@@ -96,6 +130,54 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
     setClosing(updated)
     saveClosing(updated)
     setNotesEdited(false)
+  }
+
+  function generateSummaryMarkdown(): string {
+    const monthLabel = formatMonthFull(month)
+    const topMacros = monthlyMacros.slice(0, 5)
+    const debtItems = monthTxs.filter(t => t.classificationType === 'debt_cost')
+    const debtTotal = debtItems.reduce((s, t) => s + t.amount, 0)
+    const lines: string[] = [
+      `# Resumo financeiro — ${monthLabel}`,
+      '',
+      `## Entradas`,
+      `- Receita operacional: **${formatBRL(summary.operationalIncome)}**`,
+      summary.hasRedemption ? `- Resgates (não é receita): ${formatBRL(summary.redemptionAmount)}` : '',
+      '',
+      `## Saídas`,
+      `- Total de despesas: **${formatBRL(summary.totalExpenses)}**`,
+      ...topMacros.map(m => `  - ${m.name}: ${formatBRL(m.total)}`),
+      debtTotal > 0 ? `- Custos financeiros (juros/IOF): ${formatBRL(debtTotal)}` : '',
+      '',
+      `## Saldo do mês`,
+      `- Resultado operacional: **${formatBRL(summary.operationalResult)}**`,
+      `- Margem familiar: ${formatPct(summary.savingsRate * 100)}`,
+      '',
+      `## Pontos de atenção`,
+      ...highAlerts.map(a => `- ⚠️ ${a.title}: ${a.message}`),
+      highAlerts.length === 0 ? '- Nenhum alerta crítico este mês' : '',
+      '',
+      `## Recorrentes`,
+      recurringPatterns.length > 0
+        ? recurringPatterns.slice(0, 5).map(p => `- ${p.label}: ${formatBRL(p.averageAmount)}/mês`).join('\n')
+        : '- Dados insuficientes para detecção de recorrentes',
+      '',
+      `## Próximas ações`,
+      `- Planejar orçamento para o próximo mês`,
+      missingRecurrents.length > 0
+        ? `- Conferir ${missingRecurrents.length} recorrente(s) esperados mas não lançados`
+        : '',
+      closing.notes ? `\n## Aprendizados\n${closing.notes}` : '',
+    ].filter(l => l !== null)
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  function copySummary() {
+    const md = generateSummaryMarkdown()
+    navigator.clipboard.writeText(md).then(() => {
+      setSummaryCopied(true)
+      setTimeout(() => setSummaryCopied(false), 2000)
+    }).catch(() => {/* ignore */})
   }
 
   const checklistDone = Object.values(closing.checklist).filter(Boolean).length
@@ -447,6 +529,135 @@ export function Closing({ selectedMonth, onNavigate }: Props) {
             )}
           </div>
         )}
+
+        {/* ── Projeção de fechamento (Fase 2.4) ── */}
+        {month === currentYearMonth() && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <TrendingDown size={15} color={
+                projection.riskLevel === 'high' ? 'var(--crit)'
+                : projection.riskLevel === 'medium' ? 'var(--warn)'
+                : 'var(--pos)'
+              } />
+              <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Projeção do mês</h3>
+              <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>
+                dia {projection.daysElapsed}/{projection.totalDays}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: projection.risks.length > 0 ? 12 : 0 }}>
+              {[
+                { label: 'Receita realizada', value: formatBRL(projection.incomeRealized), color: 'var(--pos)' },
+                { label: 'Despesa realizada', value: formatBRL(projection.expenseRealized), color: 'var(--crit)' },
+                { label: 'Despesa projetada', value: formatBRL(projection.projectedMonthlyExpense), color: 'var(--warn)' },
+                { label: 'Saldo projetado', value: formatBRL(projection.projectedBalance), color: projection.projectedBalance >= 0 ? 'var(--pos)' : 'var(--crit)' },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</span>
+                  <span className="num" style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+            {projection.risks.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {projection.risks.map((risk, i) => (
+                  <div key={i} style={{
+                    fontSize: 11.5, padding: '7px 10px', borderRadius: 7,
+                    background: risk.severity === 'high' ? 'rgba(220,38,38,.06)' : 'var(--well)',
+                    border: `1px solid ${risk.severity === 'high' ? 'var(--crit)30' : 'var(--line)'}`,
+                    color: 'var(--ink-2)',
+                  }}>
+                    <strong>{risk.label}:</strong> {risk.message}
+                  </div>
+                ))}
+              </div>
+            )}
+            {missingRecurrents.length > 0 && (
+              <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 8 }}>
+                {missingRecurrents.length} recorrente(s) ainda esperado(s) não contabilizado(s) na projeção acima.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Alertas financeiros (Fase 2.5) ── */}
+        {financialAlerts.length > 0 && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Zap size={15} color="var(--accent)" />
+              <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Alertas financeiros</h3>
+              <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{financialAlerts.length} detecções</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {financialAlerts.slice(0, 6).map(alert => (
+                <div
+                  key={alert.id}
+                  style={{
+                    fontSize: 11.5, padding: '8px 10px', borderRadius: 7,
+                    background: alert.severity === 'high' ? 'rgba(220,38,38,.06)' : 'var(--well)',
+                    border: `1px solid ${alert.severity === 'high' ? 'var(--crit)30' : alert.severity === 'medium' ? 'var(--warn)30' : 'var(--line)'}`,
+                    color: 'var(--ink-2)',
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                  }}
+                >
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 8, flexShrink: 0, marginTop: 1,
+                    background: alert.severity === 'high' ? 'var(--crit)' : alert.severity === 'medium' ? 'var(--warn)' : 'var(--line)',
+                    color: alert.severity === 'low' ? 'var(--faint)' : '#fff',
+                    textTransform: 'uppercase',
+                  }}>
+                    {alert.severity === 'high' ? 'Alta' : alert.severity === 'medium' ? 'Média' : 'Baixa'}
+                  </span>
+                  <div>
+                    <strong style={{ fontWeight: 700 }}>{alert.title}:</strong> {alert.message}
+                  </div>
+                </div>
+              ))}
+              {financialAlerts.length > 6 && (
+                <p style={{ fontSize: 11, color: 'var(--faint)', textAlign: 'center' }}>
+                  + {financialAlerts.length - 6} alerta(s) adicionais
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Resumo mensal (Fase 2.7) ── */}
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FileText size={14} color="var(--ink-2)" />
+              Resumo do mês
+            </h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowSummary(s => !s)}
+              >
+                {showSummary ? 'Ocultar' : 'Gerar resumo'}
+              </button>
+              {showSummary && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={copySummary}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <Copy size={11} />
+                  {summaryCopied ? 'Copiado!' : 'Copiar'}
+                </button>
+              )}
+            </div>
+          </div>
+          {showSummary && (
+            <pre style={{
+              fontSize: 11.5, lineHeight: 1.7, color: 'var(--ink-2)',
+              background: 'var(--well)', borderRadius: 8, padding: '14px 16px',
+              overflowX: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'var(--mono)',
+              maxHeight: 420, overflowY: 'auto',
+            }}>
+              {generateSummaryMarkdown()}
+            </pre>
+          )}
+        </div>
 
         {/* ── Notes ── */}
         <div className="card" style={{ padding: '18px 20px' }}>
