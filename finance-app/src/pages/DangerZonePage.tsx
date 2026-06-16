@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useData } from '../context/DataContext'
 import { DATA_PROVIDER } from '../config/env'
-import { findExistingDuplicateGroups, type DuplicateGroup } from '../utils/transactionDedupe'
+import { findAllDuplicateGroups, type AllDuplicateGroup } from '../utils/transactionDedupe'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import type { Transaction } from '../types'
@@ -37,7 +37,7 @@ function exportFullBackup(): void {
 
 // ── Duplicate cleanup ─────────────────────────────────────────────────────────
 
-type GroupAction = 'keep_xlsx' | 'keep_pluggy' | 'merge' | 'skip'
+type GroupAction = 'keep_a' | 'keep_b' | 'merge' | 'skip' | 'false_positive'
 
 function sourceLabel(tx: Transaction): string {
   if (tx.source === 'real_xlsx' || tx.source === 'real_2026_xlsx' || tx.origin === 'import_xlsx') return 'Excel'
@@ -50,18 +50,29 @@ function macroName(id?: string): string {
   return MACRO_CATEGORIES.find(m => m.id === id)?.name ?? id
 }
 
+const CONFIDENCE_LABEL: Record<string, string> = {
+  high: 'Duplicata certa',
+  medium: 'Possível duplicata',
+  low: 'Duplicata fraca',
+}
+const CONFIDENCE_COLOR: Record<string, string> = {
+  high: 'var(--crit)',
+  medium: 'var(--warn)',
+  low: 'var(--faint)',
+}
+
 function DuplicateCleanupPanel() {
   const { transactions } = useData()
   const [scanned, setScanned] = useState(false)
-  const [groups, setGroups] = useState<DuplicateGroup[]>([])
+  const [groups, setGroups] = useState<AllDuplicateGroup[]>([])
   const [actions, setActions] = useState<Record<string, GroupAction>>({})
   const [applying, setApplying] = useState(false)
-  const [done, setDone] = useState<{ removed: number; kept: number } | null>(null)
+  const [done, setDone] = useState<{ removed: number } | null>(null)
 
   function scan() {
     setScanned(true)
     setDone(null)
-    setGroups(findExistingDuplicateGroups(transactions))
+    setGroups(findAllDuplicateGroups(transactions))
     setActions({})
   }
 
@@ -75,33 +86,29 @@ function DuplicateCleanupPanel() {
     const toEnrich: Array<{ keepId: string; donorId: string }> = []
 
     for (const g of groups) {
-      const action = actions[g.id] ?? (g.keepId ? 'keep_xlsx' : 'skip')
-      if (action === 'skip') continue
+      const defaultAction = g.suggestedKeepId ? 'keep_a' : 'skip'
+      const action = actions[g.id] ?? defaultAction
+      if (action === 'skip' || action === 'false_positive') continue
 
-      const [a, b] = g.transactions
-      if (!a || !b) continue
+      const keepId = action === 'keep_a'
+        ? (g.suggestedKeepId ?? g.transactions[0]?.id)
+        : action === 'keep_b'
+          ? g.transactions[1]?.id ?? g.transactions[0]?.id
+          : g.suggestedKeepId ?? g.transactions[0]?.id
 
-      const isAXlsx = a.origin === 'import_xlsx' || a.source?.includes('xlsx')
-      const xlsxTx = isAXlsx ? a : b
-      const pluggyTx = isAXlsx ? b : a
-
-      if (action === 'keep_xlsx') {
-        toRemove.add(pluggyTx.id)
-      } else if (action === 'keep_pluggy') {
-        toRemove.add(xlsxTx.id)
-      } else if (action === 'merge') {
-        // keep xlsx, remove pluggy, enrich xlsx with pluggy metadata
-        toRemove.add(pluggyTx.id)
-        toEnrich.push({ keepId: xlsxTx.id, donorId: pluggyTx.id })
+      for (const tx of g.transactions) {
+        if (tx.id === keepId) continue
+        if (action === 'merge') {
+          toEnrich.push({ keepId: keepId!, donorId: tx.id })
+        }
+        toRemove.add(tx.id)
       }
     }
 
-    // Apply removals via localStorage (local only)
     if (DATA_PROVIDER !== 'supabase') {
       const raw = localStorage.getItem('finance_transactions')
       if (raw) {
         let txns: Transaction[] = JSON.parse(raw)
-        // Enrich before removing
         const byId = new Map(txns.map(t => [t.id, t]))
         for (const { keepId, donorId } of toEnrich) {
           const keep = byId.get(keepId)
@@ -134,25 +141,27 @@ function DuplicateCleanupPanel() {
     }
 
     setApplying(false)
-    setDone({ removed: toRemove.size, kept: groups.length - toRemove.size })
+    setDone({ removed: toRemove.size })
     setGroups([])
     setScanned(false)
     window.location.reload()
   }
 
+  const highCount = groups.filter(g => g.confidence === 'high').length
+  const medCount = groups.filter(g => g.confidence === 'medium').length
   const pendingCount = groups.filter(g => !actions[g.id]).length
 
   return (
     <div className="card" style={{ padding: '18px 22px' }}>
-      <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Corrigir duplicidades cruzadas</h3>
+      <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Corrigir duplicidades</h3>
       <p style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 12, lineHeight: 1.6 }}>
-        Detecta transações duplicadas entre importações Excel e Pluggy com IDs diferentes.
+        Detecta transações duplicadas de qualquer origem — Excel×Excel, Pluggy×Pluggy, Excel×Pluggy.
         Nunca apaga automaticamente — você revisa cada grupo antes de confirmar.
       </p>
 
       {done && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--ok-soft)', border: '1px solid var(--ok)', fontSize: 12.5, color: 'var(--ok)', marginBottom: 12 }}>
-          Concluído: {done.removed} duplicatas removidas.
+          Concluído: {done.removed} duplicata(s) removida(s).
         </div>
       )}
 
@@ -167,33 +176,47 @@ function DuplicateCleanupPanel() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600 }}>
-            {groups.length} grupo(s) detectado(s) · {pendingCount} sem decisão
-          </p>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--warn)' }}>{groups.length} grupo(s) total</span>
+            {highCount > 0 && <span style={{ fontSize: 12, color: 'var(--crit)' }}>{highCount} alta confiança</span>}
+            {medCount > 0 && <span style={{ fontSize: 12, color: 'var(--warn)' }}>{medCount} média confiança</span>}
+            <span style={{ fontSize: 12, color: 'var(--faint)' }}>{pendingCount} sem decisão</span>
+          </div>
 
           {groups.map(g => {
-            const [a, b] = g.transactions
             const action = actions[g.id]
+            const suggestedIdx = g.suggestedKeepId ? g.transactions.findIndex(t => t.id === g.suggestedKeepId) : -1
             return (
               <div key={g.id} style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ padding: '8px 12px', background: 'var(--well)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: g.confidence === 'strong' ? 'var(--crit)' : 'var(--warn)', textTransform: 'uppercase' }}>
-                    {g.confidence === 'strong' ? 'Duplicata certa' : 'Possível duplicata'}
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: CONFIDENCE_COLOR[g.confidence] ?? 'var(--faint)', textTransform: 'uppercase' }}>
+                    {CONFIDENCE_LABEL[g.confidence] ?? g.confidence}
                   </span>
                   <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{g.reason}</span>
+                  {suggestedIdx >= 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 'auto' }}>
+                      sugestão: manter {String.fromCharCode(65 + suggestedIdx)}
+                    </span>
+                  )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-                  {[a, b].map((tx, i) => tx && (
-                    <div key={tx.id} style={{ padding: '10px 12px', borderRight: i === 0 ? '1px solid var(--line)' : undefined }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 4 }}>
-                        {sourceLabel(tx)}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(g.transactions.length, 3)}, 1fr)`, gap: 0 }}>
+                  {g.transactions.slice(0, 3).map((tx, i) => (
+                    <div key={tx.id} style={{ padding: '10px 12px', borderRight: i < Math.min(g.transactions.length, 3) - 1 ? '1px solid var(--line)' : undefined }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 4 }}>
+                          {String.fromCharCode(65 + i)} · {sourceLabel(tx)}
+                        </div>
+                        {tx.id === g.suggestedKeepId && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--ok)', background: 'var(--ok-soft)', borderRadius: 4, padding: '1px 5px' }}>manter</span>
+                        )}
                       </div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }} title={tx.description}>
-                        {tx.description.slice(0, 35)}{tx.description.length > 35 ? '…' : ''}
+                        {tx.description.slice(0, 32)}{tx.description.length > 32 ? '…' : ''}
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ink)' }}>{formatBRL(tx.amount)}</div>
                       <div style={{ fontSize: 11, color: 'var(--faint)' }}>{tx.transactionDate}</div>
                       <div style={{ fontSize: 11, color: 'var(--faint)' }}>{macroName(tx.macroCategoryId)}</div>
+                      {tx.accountId && <div style={{ fontSize: 10, color: 'var(--faint)' }}>{tx.accountId}</div>}
                       {tx.manualCategoryOverride && (
                         <div style={{ fontSize: 10, color: 'var(--ok)', fontWeight: 700, marginTop: 2 }}>manual</div>
                       )}
@@ -201,20 +224,23 @@ function DuplicateCleanupPanel() {
                   ))}
                 </div>
                 <div style={{ padding: '8px 12px', borderTop: '1px solid var(--line)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(['keep_xlsx', 'keep_pluggy', 'merge', 'skip'] as GroupAction[]).map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => setAction(g.id, opt)}
-                      style={{
-                        fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'var(--ui)', cursor: 'pointer', fontWeight: action === opt ? 700 : 400,
-                        border: `1px solid ${action === opt ? 'var(--accent)' : 'var(--line)'}`,
-                        background: action === opt ? 'var(--accent)' : 'transparent',
-                        color: action === opt ? '#fff' : 'var(--ink-2)',
-                      }}
-                    >
-                      {opt === 'keep_xlsx' ? 'Manter Excel' : opt === 'keep_pluggy' ? 'Manter Pluggy' : opt === 'merge' ? 'Mesclar (Excel + metadados Pluggy)' : 'Ignorar'}
-                    </button>
-                  ))}
+                  {(['keep_a', 'keep_b', 'merge', 'skip', 'false_positive'] as GroupAction[]).map(opt => {
+                    if (opt === 'keep_b' && g.transactions.length < 2) return null
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => setAction(g.id, opt)}
+                        style={{
+                          fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'var(--ui)', cursor: 'pointer', fontWeight: action === opt ? 700 : 400,
+                          border: `1px solid ${action === opt ? 'var(--accent)' : 'var(--line)'}`,
+                          background: action === opt ? 'var(--accent)' : 'transparent',
+                          color: action === opt ? '#fff' : 'var(--ink-2)',
+                        }}
+                      >
+                        {opt === 'keep_a' ? 'Manter A' : opt === 'keep_b' ? 'Manter B' : opt === 'merge' ? 'Mesclar' : opt === 'false_positive' ? 'Falso positivo' : 'Ignorar'}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -227,7 +253,7 @@ function DuplicateCleanupPanel() {
               disabled={applying || pendingCount > 0}
               title={pendingCount > 0 ? `${pendingCount} grupo(s) sem decisão` : undefined}
             >
-              {applying ? 'Aplicando…' : `Aplicar decisões (${groups.filter(g => actions[g.id] && actions[g.id] !== 'skip').length} ações)`}
+              {applying ? 'Aplicando…' : `Aplicar decisões (${groups.filter(g => actions[g.id] && actions[g.id] !== 'skip' && actions[g.id] !== 'false_positive').length} ações)`}
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => { setScanned(false); setGroups([]) }}>
               Cancelar
