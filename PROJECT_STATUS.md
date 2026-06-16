@@ -1,32 +1,40 @@
 # PROJECT STATUS — FINANCE
-> Atualizado: 2026-06-11 | Branch: `feature/supabase-foundation`
+> Atualizado: 2026-06-15 | Branch: `feature/fin-functional-upgrades`
 
 ---
 
 ## Estado atual
 
-O projeto está na **Fase 1 concluída** com a fundação da Fase 2 (Supabase) pronta para ser ativada.
+O projeto está na **Fase 3 concluída** — produto utilizável e confiável, com qualidade de dados, fluxo de revisão completo e ledger avançado. A fundação da Fase 2 (Supabase) está pronta mas não ativada em produção.
 
 ---
 
 ## Branch e commits recentes
 
 ```
-Branch atual: feature/supabase-foundation
-Pendente de merge → main
+Branch atual: feature/fin-functional-upgrades
+Pendente de merge → main (após QA da Fase 3)
 
-91bad31 chore: add deployment and environment setup docs
-138e4f8 style: standardize finance front design system
-762613a feat: add data provider configuration
-52356a9 fix: tighten RLS policies after security review
-856c43f feat: add supabase foundation
-7b5b2ef feat: dashboard layout reorder + wire props (step 5B/5)
-5947af5 feat: alerts panel redesign — severity rows (step 5A/5)
+23487c3 feat(transactions): improve ledger filters and inline workflow
+9d41b85 feat(closing): add reconciliation neutralization workflow
+87a969e feat(review): smart tag suggestions and bulk tag actions
+753bf4c feat(review): learned category rules engine
+d6d0167 feat(review): bulk actions for categories and review state
+1b6c27d feat(dashboard): data quality card with clickthrough filters
 ```
 
 ---
 
 ## O que está pronto
+
+### Fase 3 — Produto utilizável e confiável (concluída)
+- [x] **3.0** `updateTransactions(items, opts)` — batch write em um passo (IDataProvider + Local + Supabase)
+- [x] **3.1** DataQualityCard no Dashboard — 11 métricas clicáveis com drill-down para ledger filtrado
+- [x] **3.2** Revisão em lote — multi-select, bulk categoria/tag/neutro/revisado (BulkActionBar)
+- [x] **3.3** Regras de categoria aprendidas — engine completo, tela `/regras`, Priority 2 na importação
+- [x] **3.4** Smart tags — suggestTags/buildTagContext, bulk "Aplicar sugestões", chips na revisão
+- [x] **3.5** Reconciliação — diagnoseReconciliation, card de neutralização no Fechamento
+- [x] **3.6** Ledger avançado — filtros salvos, pills rápidos, edição inline subcategoria/tags, CSV export
 
 ### Frontend (Fase 1 completa)
 - [x] Dashboard redesenhado (Direction A — Confiança, azul #1D5FE0)
