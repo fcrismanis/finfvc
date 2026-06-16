@@ -157,7 +157,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   useEffect(() => {
     setPage(0)
     setReviewPill('all')
-    if (navFilter?.monthOverride) setFilterMonth(navFilter.monthOverride)
+    if (navFilter && 'monthOverride' in navFilter) setFilterMonth(navFilter.monthOverride ?? '')
     if (navFilter?.quickFilter) setQuickFilter(navFilter.quickFilter as QuickFilterKey)
   }, [navFilter])
 
@@ -664,9 +664,23 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <div className="empty-state">
               <div className="empty-glyph" />
               <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento encontrado</h4>
-              <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 220 }}>
-                Ajuste os filtros ou importe um extrato.
-              </p>
+              {filterMonth && transactions.length > 0 ? (
+                <>
+                  <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 260, marginBottom: 10 }}>
+                    Não há lançamentos em <strong>{filterMonth}</strong>. Existem {transactions.length} lançamentos em outros meses.
+                  </p>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setFilterMonth(''); setPage(0) }}
+                  >
+                    Ver todos os meses
+                  </button>
+                </>
+              ) : (
+                <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 220 }}>
+                  Ajuste os filtros ou importe um extrato.
+                </p>
+              )}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>

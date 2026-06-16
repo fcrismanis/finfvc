@@ -10,12 +10,13 @@ import {
 import { buildTrainingExamplesFromRows, appendTrainingExamples } from '../services/financialTraining.service'
 import { useData } from '../context/DataContext'
 import type { ParsedImportItem, ImportSummaryData } from '../importers/types'
+import type { NavFilter } from '../App'
 
 type Stage = 'idle' | 'parsing' | 'preview' | 'complete'
 type RealStage = 'idle' | 'importing' | 'done' | 'error'
 
 interface Props {
-  onNavigate: (route: string) => void
+  onNavigate: (route: string, filter?: NavFilter) => void
 }
 
 const STAGE_ORDER: Record<Stage, number> = { idle: 0, parsing: 0, preview: 1, complete: 2 }
@@ -72,10 +73,14 @@ export function Import({ onNavigate }: Props) {
     try {
       const buffer = await file.arrayBuffer()
       const rows = parseRealFinanceXlsx(buffer, file.name)
+      console.log('[RealImport] rows parsed:', rows.length)
       if (rows.length === 0) throw new Error('Nenhuma linha encontrada no arquivo.')
 
       const batchId = `real_${Date.now().toString(36)}`
+      console.log('[RealImport] existing txns in context:', transactions.length, '| existing with importHash:', transactions.filter(t => t.importHash).length)
+
       const { transactions: txns, result } = importRealFinanceBase(rows, transactions, batchId)
+      console.log('[RealImport] generated:', txns.length, '| duplicates:', result.duplicates, '| skipped:', result.skipped)
 
       // Ensure subcategories exist and get the map for training
       const { created, byName } = ensureSubCategories()
@@ -87,11 +92,19 @@ export function Import({ onNavigate }: Props) {
       // Save account/card registry
       upsertAccountRegistry(result.accounts, result.cards)
 
-      if (txns.length > 0) await appendTransactions(txns)
+      if (txns.length > 0) {
+        console.log('[RealImport] calling appendTransactions with', txns.length, 'txns')
+        await appendTransactions(txns)
+        const stored = localStorage.getItem('finance_transactions')
+        console.log('[RealImport] finance_transactions after save:', stored ? JSON.parse(stored).length : 'null')
+      } else {
+        console.warn('[RealImport] txns.length=0 → appendTransactions NOT called')
+      }
 
       setRealResult({ ...result, subcategoriesCreated: created, trainingExamples: trainingExamples.length })
       setRealStage('done')
     } catch (e) {
+      console.error('[RealImport] error:', e)
       setRealError(e instanceof Error ? e.message : String(e))
       setRealStage('error')
     }
@@ -247,8 +260,8 @@ export function Import({ onNavigate }: Props) {
               )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <button className="btn btn-primary btn-sm" onClick={() => onNavigate('/lancamentos')}>
-                  Ver lançamentos
+                <button className="btn btn-primary btn-sm" onClick={() => onNavigate('/lancamentos', { monthOverride: '' })}>
+                  Ver lançamentos importados
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setRealStage('idle'); setRealResult(null) }}>
                   Importar outro arquivo
