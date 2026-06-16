@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { formatFinancialDateBR } from '../utils/date'
 import { buildFinanceCommandPlan } from '../services/financeCommand.service'
-import { executePromptAsFinanceCommand, type FinanceCommandPreview, type FinanceCommandResult } from '../services/financeCommandExecutor.service'
+import { executePromptAsFinanceCommand, undoCommand, type FinanceCommandPreview, type FinanceCommandResult } from '../services/financeCommandExecutor.service'
 import { getCommandHistory, type FinanceCommandHistoryEntry } from '../services/financeCommandHistory.service'
 
 const EXAMPLES = [
@@ -68,7 +68,7 @@ export function FinanceAssistantPage() {
   async function undoEntry(entry: FinanceCommandHistoryEntry) {
     setRunning(true)
     try {
-      const result = await executePromptAsFinanceCommand(`desfazer comando da ${entry.command}`, ctx, 'apply')
+      const result = await undoCommand(entry.id, ctx)
       setOutput(result)
       setHistory(getCommandHistory())
     } finally {
@@ -184,32 +184,45 @@ export function FinanceAssistantPage() {
             <p style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Histórico dos comandos</p>
           </div>
           {history.length === 0 ? (
-            <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>Nenhum comando aplicado ainda.</p>
+            <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>Nenhum comando registrado ainda.</p>
           ) : (
-            history.slice(0, 10).map(entry => (
-              <div key={entry.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <div>
-                    <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{entry.command}</p>
-                    <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
-                      {entry.summary.affectedTransactions} lançamentos · {entry.status}
-                    </p>
+            history.slice(0, 10).map((entry, idx) => {
+              const canUndo = entry.status === 'applied' && entry.summary.affectedTransactions > 0
+              const affectedIds = new Set(entry.before.transactions.map(t => t.id))
+              const hasSubsequent = canUndo && history.slice(0, idx).some(
+                e => e.status === 'applied' && e.before.transactions.some(t => affectedIds.has(t.id))
+              )
+              const statusLabel = entry.status === 'no_match' ? 'sem resultados' : entry.status === 'undone' ? 'desfeito' : 'aplicado'
+              return (
+                <div key={entry.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <div>
+                      <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{entry.command}</p>
+                      <p style={{ fontSize: 11, color: entry.status === 'no_match' ? 'var(--warn)' : 'var(--faint)', marginTop: 2 }}>
+                        {entry.summary.affectedTransactions} lançamento(s) · {statusLabel}
+                      </p>
+                    </div>
+                    {canUndo && (
+                      <button className="btn btn-secondary btn-sm" disabled={running} onClick={() => void undoEntry(entry)}>
+                        Desfazer
+                      </button>
+                    )}
                   </div>
-                  {entry.status === 'applied' && (
-                    <button className="btn btn-secondary btn-sm" disabled={running} onClick={() => void undoEntry(entry)}>
-                      Desfazer
-                    </button>
+                  {hasSubsequent && (
+                    <p style={{ fontSize: 11, color: 'var(--warn)', lineHeight: 1.5 }}>
+                      Este comando foi seguido de outras alterações. Desfazer pode reverter ajustes posteriores.
+                    </p>
+                  )}
+                  {(entry.summary.createdCategories.length > 0 || entry.summary.createdSubCategories.length > 0 || entry.summary.createdRules.length > 0) && (
+                    <p style={{ fontSize: 11, color: 'var(--faint)' }}>
+                      {entry.summary.createdCategories.length > 0 ? `categorias: ${entry.summary.createdCategories.join(', ')} · ` : ''}
+                      {entry.summary.createdSubCategories.length > 0 ? `subcategorias: ${entry.summary.createdSubCategories.join(', ')} · ` : ''}
+                      {entry.summary.createdRules.length > 0 ? `regras: ${entry.summary.createdRules.join(', ')}` : ''}
+                    </p>
                   )}
                 </div>
-                {(entry.summary.createdCategories.length > 0 || entry.summary.createdSubCategories.length > 0 || entry.summary.createdRules.length > 0) && (
-                  <p style={{ fontSize: 11, color: 'var(--faint)' }}>
-                    {entry.summary.createdCategories.length > 0 ? `categorias: ${entry.summary.createdCategories.join(', ')} · ` : ''}
-                    {entry.summary.createdSubCategories.length > 0 ? `subcategorias: ${entry.summary.createdSubCategories.join(', ')} · ` : ''}
-                    {entry.summary.createdRules.length > 0 ? `regras: ${entry.summary.createdRules.join(', ')}` : ''}
-                  </p>
-                )}
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
