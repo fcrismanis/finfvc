@@ -57,6 +57,10 @@ function cleanValue(value: string): string {
   return value.trim().replace(/^["']|["']$/g, '').trim()
 }
 
+function cleanNeedle(value: string): string {
+  return cleanValue(value).replace(/^(?:que\s+)?(?:tiver(?:em)?|tenha(?:m)?)\s+/i, '').trim()
+}
+
 function splitCategoryPath(raw: string): { categoryName: string; subCategoryName?: string } {
   const parts = raw.split('/').map(part => cleanValue(part)).filter(Boolean)
   return {
@@ -109,16 +113,16 @@ export function buildFinanceCommandPlan(prompt: string): FinanceCommandPlan {
   }
 
   const directAssignPatterns = [
-    /tudo que tiver\s+(.+?)\s+coloque\s+(?:em|como)\s+(.+)/i,
-    /todas as descri(?:c|ç)ões que existirem como\s+(.+?)\s+sejam consideradas\s+(.+)/i,
-    /descri(?:c|ç)ões que contenham\s+(.+?)\s+sejam\s+(.+)/i,
+    /(?:quero que\s+)?(?:tudo\s+que\s+tiver|o\s+que\s+tiver|se\s+tiver|quando\s+tiver|todas?\s+as?\s+descri(?:c|ç)(?:ões|oes)?\s+que\s+tiverem|descri(?:c|ç)(?:ão|ao)\s+contendo|descri(?:c|ç)(?:ões|oes)\s+que\s+contenham)\s+(.+?)\s+(?:coloque\s+(?:em|como)|considere\s+como|considere|seja(?:m)?|sejam?\s+consideradas?\s+como|classifique\s+como|classifique|marque\s+como|marque)\s+(.+)/i,
+    /(?:quero que\s+)?(.+?)\s+(?:coloque\s+(?:em|como)|considere\s+como|considere|seja(?:m)?|classifique\s+como|classifique|marque\s+como|marque)\s+(.+)/i,
     /(.+?)\s+deve ser\s+(.+)/i,
   ]
 
   for (const pattern of directAssignPatterns) {
     const match = originalPrompt.match(pattern)
     if (!match) continue
-    const needle = cleanValue(match[1])
+    const needle = cleanNeedle(match[1])
+    if (!needle) continue
     const target = splitCategoryPath(cleanValue(match[2]))
     const existing = findExistingNames(target)
     plan.intent = target.subCategoryName ? 'bulk_subcategorize' : 'bulk_categorize'

@@ -80,7 +80,52 @@ function inferMacroCategoryId(name: string | undefined): string | undefined {
   return aliases.find(([pattern]) => pattern.test(norm))?.[1]
 }
 
+const GENERIC_DESCRIPTION_TOKENS = new Set([
+  'A',
+  'AS',
+  'BOLETO',
+  'COM',
+  'CONTA',
+  'DA',
+  'DE',
+  'DO',
+  'DOS',
+  'E',
+  'EM',
+  'NA',
+  'NO',
+  'O',
+  'OS',
+  'PAGAMENTO',
+  'PARA',
+  'PIX',
+  'POR',
+  'TED',
+  'UM',
+  'UMA',
+])
+
+function tokenizeNormalizedText(value: string): string[] {
+  return normalizeText(value).split(/\s+/).filter(Boolean)
+}
+
+function matchesDescriptionTerm(haystack: string, term: string): boolean {
+  const normalizedTerm = normalizeText(term)
+  if (!normalizedTerm) return false
+  if (haystack.includes(normalizedTerm)) return true
+
+  const importantTokens = tokenizeNormalizedText(term).filter(token => (
+    token.length >= 3 && !GENERIC_DESCRIPTION_TOKENS.has(token)
+  ))
+
+  if (importantTokens.length === 0) return false
+  if (importantTokens.length === 1) return importantTokens[0].length >= 5 && haystack.includes(importantTokens[0])
+  return importantTokens.every(token => haystack.includes(token))
+}
+
 function matchTransactions(plan: FinanceCommandPlan, transactions: Transaction[], subCategories: SubCategory[]): Transaction[] {
+  if (plan.intent === 'unknown') return []
+
   return transactions.filter(tx => {
     if (plan.filters.onlyUncategorized && tx.macroCategoryId) return false
     if (plan.filters.type && plan.filters.type !== 'any') {
@@ -95,7 +140,7 @@ function matchTransactions(plan: FinanceCommandPlan, transactions: Transaction[]
 
     const haystack = normalizeText(`${tx.description} ${tx.originalDescription ?? ''} ${tx.pluggyReceiverName ?? ''} ${tx.pluggyPayerName ?? ''}`)
     if (plan.filters.descriptionContains?.length) {
-      const ok = plan.filters.descriptionContains.every(term => haystack.includes(normalizeText(term)))
+      const ok = plan.filters.descriptionContains.every(term => matchesDescriptionTerm(haystack, term))
       if (!ok) return false
     }
     if (plan.filters.accountContains?.length) {

@@ -25,6 +25,16 @@ function isPreview(output: CommandOutput): output is FinanceCommandPreview {
   return Boolean(output && 'matchedTransactions' in output)
 }
 
+function buildPreviewFilterLabel(preview: FinanceCommandPreview): string {
+  return preview.plan.filters.descriptionContains?.join(', ') || 'não identificado'
+}
+
+function buildPreviewTargetLabel(preview: FinanceCommandPreview): string {
+  const { categoryName, subCategoryName } = preview.plan.actions
+  if (categoryName && subCategoryName) return `${categoryName} / ${subCategoryName}`
+  return categoryName || subCategoryName || 'não identificado'
+}
+
 export function FinanceAssistantPage() {
   const { transactions, subCategories, updateTransactions, saveSubCategory, deleteSubCategory, reload } = useData()
   const [prompt, setPrompt] = useState('')
@@ -67,6 +77,11 @@ export function FinanceAssistantPage() {
   }
 
   const parsedPlan = useMemo(() => buildFinanceCommandPlan(prompt), [prompt])
+  const previewMessage = isPreview(output) && output.plan.intent === 'unknown'
+    ? 'Não entendi o comando. Tente algo como: Tudo que tiver BANCO INTER coloque em Movimentação Financeira / Pg. Cartão de Credito.'
+    : isPreview(output) && output.matchedTransactions.length > 100
+      ? 'Filtro amplo demais. Refine o comando antes de aplicar.'
+      : null
 
   return (
     <main className="page-shell">
@@ -135,10 +150,17 @@ export function FinanceAssistantPage() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <InfoPill label="Intent" value={output.plan.intent} />
               <InfoPill label="Lançamentos" value={String(output.matchedTransactions.length)} />
+              <InfoPill label="Filtro" value={buildPreviewFilterLabel(output)} />
+              <InfoPill label="Destino" value={buildPreviewTargetLabel(output)} />
               <InfoPill label="Criar categoria" value={output.wouldCreateCategories.join(', ') || 'não'} />
               <InfoPill label="Criar subcat." value={output.wouldCreateSubCategories.join(', ') || 'não'} />
               <InfoPill label="Criar regra" value={output.wouldCreateRules.join(', ') || 'não'} />
             </div>
+            {previewMessage && (
+              <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(214, 140, 44, 0.08)', border: '1px solid rgba(214, 140, 44, 0.28)' }}>
+                <p style={{ fontSize: 12, color: 'var(--ink-2)' }}>{previewMessage}</p>
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {output.matchedTransactions.slice(0, 12).map(tx => (
                 <div key={tx.id} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
