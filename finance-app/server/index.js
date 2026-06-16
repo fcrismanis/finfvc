@@ -495,6 +495,173 @@ app.post('/api/pluggy/debug-transactions', async (req, res) => {
   }
 })
 
+// ── AI: transaction categorization ───────────────────────────────────────────
+const MAX_CATEGORIZE_BATCH = 80
+
+function buildCategorizationPrompt(transactions, categories, subCategories, rules) {
+  const catList = categories.map(c => `${c.id} — ${c.name} (${c.classificationType})`).join('\n')
+  const subList = subCategories.slice(0, 60).map(s => `${s.id} — ${s.name} (mac: ${s.macroCategoryId})`).join('\n')
+  const ruleList = rules.slice(0, 30).map(r =>
+    `pattern="${r.pattern}" → macro=${r.macroCategoryId}${r.subCategoryId ? ` sub=${r.subCategoryId}` : ''}`
+  ).join('\n')
+
+  const txLines = transactions.map(t => JSON.stringify({
+    id: t.id,
+    description: t.description,
+    originalDescription: t.originalDescription,
+    amount: t.amount,
+    type: t.type,
+    pluggyCategory: t.pluggyCategory,
+    pluggyCategoryId: t.pluggyCategoryId,
+    receiverName: t.pluggyReceiverName,
+    payerName: t.pluggyPayerName,
+    paymentMethod: t.paymentMethod,
+  })).join('\n')
+
+  return `Você é um classificador de transações financeiras familiares brasileiras.
+
+CATEGORIAS DISPONÍVEIS (use apenas estes IDs):
+${catList}
+
+SUBCATEGORIAS DISPONÍVEIS (use apenas estes IDs):
+${subList || '(nenhuma)'}
+
+REGRAS JÁ APRENDIDAS (não repita, apenas considere o contexto):
+${ruleList || '(nenhuma)'}
+
+TRANSAÇÕES A CLASSIFICAR:
+${txLines}
+
+Responda APENAS com JSON válido, sem markdown, no formato:
+{
+  "suggestions": [
+    {
+      "id": "<id da transação>",
+      "macroCategoryId": "<id>",
+      "subCategoryId": "<id ou null>",
+      "classificationType": "<tipo>",
+      "tags": [],
+      "confidence": "high|medium|low",
+      "reason": "<motivo curto em pt-BR>",
+      "rulePattern": "<texto para regra aprendida>"
+    }
+  ]
+}
+
+Regras obrigatórias:
+- confidence "high" apenas quando certeza absoluta pelo nome do estabelecimento ou descrição clara.
+- confidence "low" para ambíguos; não invente categoria.
+- classificationType deve corresponder à macro escolhida.
+- Para PIX/transferências entre contas: macroCategoryId="mac_movfin", classificationType="neutral".
+- rulePattern: padrão normalizado (maiúsculas, sem acentos) para aprendizagem futura.
+- Não inclua transações que não consegue classificar com segurança (omita-as).`
+}
+
+async function categorizeClaude(transactions, categories, subCategories, rules) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null
+
+  const model = process.env.CATEGORIZE_CLAUDE_MODEL ?? 'claude-haiku-4-5-20251001'
+  const content = buildCategorizationPrompt(transactions, categories, subCategories, rules)
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      messages: [{ role: 'user', content }],
+    }),
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`Anthropic ${res.status}: ${txt.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const text = data.content?.filter(c => c.type === 'text').map(c => c.text).join('') ?? ''
+  return JSON.parse(text)
+}
+
+async function categorizeGPT(transactions, categories, subCategories, rules) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return null
+
+  const model = process.env.CATEGORIZE_OPENAI_MODEL ?? 'gpt-4o-mini'
+  const content = buildCategorizationPrompt(transactions, categories, subCategories, rules)
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'user', content }],
+    }),
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`OpenAI ${res.status}: ${txt.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const text = data.choices?.[0]?.message?.content ?? '{}'
+  return JSON.parse(text)
+}
+
+app.post('/api/ai/categorize-transactions', async (req, res) => {
+  const hasClaude = !!(process.env.ANTHROPIC_API_KEY)
+  const hasGPT    = !!(process.env.OPENAI_API_KEY)
+
+  if (!hasClaude && !hasGPT) {
+    return res.status(503).json({
+      ok: false,
+      error: 'Nenhuma chave de IA configurada. Configure ANTHROPIC_API_KEY ou OPENAI_API_KEY no servidor.',
+    })
+  }
+
+  const { transactions, categories, subCategories, rules } = req.body ?? {}
+
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return res.status(400).json({ ok: false, error: 'transactions[] obrigatório e não vazio' })
+  }
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return res.status(400).json({ ok: false, error: 'categories[] obrigatório' })
+  }
+
+  const batch = transactions.slice(0, MAX_CATEGORIZE_BATCH)
+  const cats  = Array.isArray(categories)    ? categories    : []
+  const subs  = Array.isArray(subCategories) ? subCategories : []
+  const rls   = Array.isArray(rules)         ? rules         : []
+
+  try {
+    let result = null
+    let provider = ''
+
+    if (hasClaude) {
+      result = await categorizeClaude(batch, cats, subs, rls)
+      provider = 'claude'
+    } else {
+      result = await categorizeGPT(batch, cats, subs, rls)
+      provider = 'gpt'
+    }
+
+    if (!result || !Array.isArray(result.suggestions)) {
+      return res.status(502).json({ ok: false, error: 'Resposta da IA não é válida.' })
+    }
+
+    return res.json({ ok: true, provider, suggestions: result.suggestions, processed: batch.length })
+  } catch (err) {
+    console.error('[ai/categorize] error:', err.message)
+    return res.status(500).json({ ok: false, error: 'Erro ao chamar IA: ' + err.message })
+  }
+})
+
 const VALID_PROVIDERS = ['mock', 'gpt', 'claude']
 
 // Provider availability — lets the UI disable unconfigured providers
