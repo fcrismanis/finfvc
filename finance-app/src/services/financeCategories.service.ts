@@ -18,7 +18,9 @@ function saveCustomCategories(categories: Category[]): void {
 }
 
 export function getAllCategories(): Category[] {
-  return [...CATEGORIES, ...loadCustomCategories()]
+  const customs = loadCustomCategories()
+  const customIds = new Set(customs.map(c => c.id))
+  return [...CATEGORIES.filter(c => !customIds.has(c.id)), ...customs]
 }
 
 export function isCustomCategoryId(categoryId: string | undefined): boolean {
@@ -41,6 +43,28 @@ export function newCustomCategoryId(name: string): string {
   return `cat_cmd_${slug}_${Math.random().toString(36).slice(2, 6)}`
 }
 
+export function overrideDefaultCategory(baseId: string, patch: {
+  keywords?: string[]
+  budgetClassification?: import('../types').BudgetClassification
+  active?: boolean
+}): Category {
+  const base = CATEGORIES.find(c => c.id === baseId)
+  if (!base) throw new Error(`Category ${baseId} not found in defaults`)
+  const customs = loadCustomCategories()
+  const existing = customs.find(c => c.id === baseId)
+  const next: Category = {
+    ...(existing ?? base),
+    keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
+    budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
+    active: patch.active ?? existing?.active ?? base.active ?? true,
+  }
+  const idx = existing ? customs.findIndex(c => c.id === baseId) : -1
+  if (idx >= 0) customs[idx] = next
+  else customs.push(next)
+  saveCustomCategories(customs)
+  return next
+}
+
 export function upsertCustomCategory(input: {
   id?: string
   name: string
@@ -49,6 +73,7 @@ export function upsertCustomCategory(input: {
   keywords?: string[]
   budgetClassification?: import('../types').BudgetClassification
   group?: 'personal' | 'business'
+  active?: boolean
 }): Category {
   const categories = loadCustomCategories()
   const normalizedName = normalizeText(input.name)
@@ -68,7 +93,7 @@ export function upsertCustomCategory(input: {
     defaultIncludeInBudget: macro?.displayInBudget ?? true,
     isInternalTransferDefault: false,
     sortOrder: existing?.sortOrder ?? (categories.length + 1),
-    active: true,
+    active: input.active ?? existing?.active ?? true,
     keywords: input.keywords ?? [],
     budgetClassification: input.budgetClassification ?? 'none',
     group: input.group ?? 'personal',

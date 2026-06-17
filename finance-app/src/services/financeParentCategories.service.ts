@@ -17,7 +17,31 @@ function saveCustomMacroCategories(items: MacroCategory[]): void {
 }
 
 export function getAllMacroCategories(): MacroCategory[] {
-  return [...MACRO_CATEGORIES, ...loadCustomMacroCategories()]
+  const customs = loadCustomMacroCategories()
+  const customIds = new Set(customs.map(m => m.id))
+  return [...MACRO_CATEGORIES.filter(m => !customIds.has(m.id)), ...customs]
+}
+
+export function overrideDefaultMacro(baseId: string, patch: {
+  keywords?: string[]
+  budgetClassification?: BudgetClassification
+  group?: 'personal' | 'business'
+}): MacroCategory {
+  const base = MACRO_CATEGORIES.find(m => m.id === baseId)
+  if (!base) throw new Error(`MacroCategory ${baseId} not found in defaults`)
+  const customs = loadCustomMacroCategories()
+  const existing = customs.find(m => m.id === baseId)
+  const next: MacroCategory = {
+    ...(existing ?? base),
+    keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
+    budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
+    group: patch.group ?? existing?.group ?? base.group ?? 'personal',
+  }
+  const idx = existing ? customs.findIndex(m => m.id === baseId) : -1
+  if (idx >= 0) customs[idx] = next
+  else customs.push(next)
+  saveCustomMacroCategories(customs)
+  return next
 }
 
 export function findMacroById(id: string): MacroCategory | undefined {
