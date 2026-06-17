@@ -18,6 +18,8 @@ import {
 import {
   diagnosePluggyStorage,
   recoverPluggyStorage,
+  hasPluggyConnectionsBackup,
+  restorePluggyConnectionsFromBackup,
   type DiagnosticResult,
   type RecoveryResult,
 } from '../services/pluggyStorage.service'
@@ -27,6 +29,7 @@ import type { PluggyLocalConnection, MapResult } from '../services/pluggy.servic
 import type { Transaction } from '../types'
 
 const IS_DEV = import.meta.env.DEV
+const DEBUG_DATES = IS_DEV && import.meta.env.VITE_DEBUG_PLUGGY_DATES
 
 interface ReclassExample {
   description: string
@@ -71,17 +74,13 @@ function buildReclassPreview(pluggyTxs: Transaction[]): ReclassPreview {
   const now = new Date().toISOString()
 
   for (const tx of pluggyTxs) {
-    // Protege ajustes manuais
     if (tx.manualCategoryOverride || tx.manualSubCategoryOverride || (tx.manualEditedAt && tx.macroCategoryId)) {
       willSkip++
       continue
     }
-    // Só reclassifica sem categoria ou marcado "a revisar"
     if (tx.macroCategoryId && !tx.needsReview) continue
 
-    // 1) mapa Pluggy (categoryId → category name)
     let result = lookupPluggyCategory(tx.pluggyCategoryId ?? null, tx.pluggyCategory ?? null)
-    // 2) fallback: inferência por texto (descrição, contraparte, operação)
     if (!result) {
       const descParts = [tx.description, tx.originalDescription, tx.pluggyOperationType, tx.pluggyPaymentMethod]
         .filter(Boolean).join(' ')
@@ -300,8 +299,8 @@ export function PluggyPage() {
   const [registering, setRegistering] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
   const [sync, setSync] = useState<SyncSession | null>(null)
-  const [debugPayload, setDebugPayload] = useState<object | null>(null)
-  const [debugLoading, setDebugLoading] = useState<string | null>(null)
+  const [syncAll, setSyncAll] = useState(false)
+  const [showBackupBanner, setShowBackupBanner] = useState(false)
   const [reclassPreview, setReclassPreview] = useState<ReclassPreview | null>(null)
   const [reclassRunning, setReclassRunning] = useState(false)
   const [repairPreview, setRepairPreview] = useState<PluggyDateRepairPreview | null>(null)
@@ -315,11 +314,15 @@ export function PluggyPage() {
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((d: { configured: boolean }) => setBackendStatus(d.configured ? 'configured' : 'not_configured'))
       .catch(() => setBackendStatus('not_configured'))
-    setConnections(getLocalConnections())
+    const loaded = getLocalConnections()
+    setConnections(loaded)
+    if (loaded.length === 0 && hasPluggyConnectionsBackup()) {
+      setShowBackupBanner(true)
+    }
   }, [])
 
   useEffect(() => {
-    if (!IS_DEV || !pendingPersistTraceRef.current?.length) return
+    if (!DEBUG_DATES || !pendingPersistTraceRef.current?.length) return
     const pendingIds = new Set(pendingPersistTraceRef.current)
     const persisted = transactions.filter(tx => pendingIds.has(tx.id))
     if (persisted.length === 0) return
@@ -329,11 +332,8 @@ export function PluggyPage() {
       transactionDate: tx.transactionDate,
       competenceDate: tx.competenceDate,
       paymentDate: tx.paymentDate,
-      pluggyRawDate: tx.pluggyRawDate,
-      pluggyRawTransactionDate: tx.pluggyRawTransactionDate,
-      pluggyRawPaymentDate: tx.pluggyRawPaymentDate,
-      pluggyRawCompetenceDate: tx.pluggyRawCompetenceDate,
-      pluggyRawOperationDate: tx.pluggyRawOperationDate,
+      providerRawDate: tx.providerRawDate,
+      providerDateField: tx.providerDateField,
     })))
     pendingPersistTraceRef.current = null
   }, [transactions])
@@ -350,6 +350,21 @@ export function PluggyPage() {
       setConnections(getLocalConnections())
     }
     setRecoveryDiag(null)
+  }
+
+  function handleRestoreBackup() {
+    const result = restorePluggyConnectionsFromBackup()
+    if (result.ok && result.count > 0) {
+      setConnections(getLocalConnections())
+      setRecoveryResult({
+        ok: true,
+        source: 'fin_pluggy_connections_backup',
+        count: result.count,
+        backupKey: null,
+        message: result.message,
+      })
+    }
+    setShowBackupBanner(false)
   }
 
   async function handleConnect() {
@@ -373,6 +388,7 @@ export function PluggyPage() {
       const conn = await registerConnection(item.id)
       saveLocalConnection(conn)
       setConnections(getLocalConnections())
+      setShowBackupBanner(false)
     } catch (err) {
       setTokenError(err instanceof Error ? err.message : 'Erro ao salvar conexão')
     } finally {
@@ -393,24 +409,6 @@ export function PluggyPage() {
     setConnections(getLocalConnections())
   }
 
-  async function handleDebugPayload(accountId: string) {
-    setDebugLoading(accountId)
-    setDebugPayload(null)
-    try {
-      const res = await fetch('/api/pluggy/debug-transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId, from: '2024-01-01', to: currentFinancialDate(), limit: 5 }),
-      })
-      const data = await res.json()
-      setDebugPayload(data)
-    } catch (err) {
-      setDebugPayload({ error: err instanceof Error ? err.message : 'Erro desconhecido' })
-    } finally {
-      setDebugLoading(null)
-    }
-  }
-
   function handleReclassPreview() {
     const pluggyTxs = transactions.filter(isLikelyPluggyTransaction)
     setReclassPreview(buildReclassPreview(pluggyTxs))
@@ -423,7 +421,6 @@ export function PluggyPage() {
       for (const { id, patch } of reclassPreview.patches) {
         updateTransaction(id, patch)
       }
-      // Give the last update time to persist before closing
       await new Promise(r => setTimeout(r, 200))
     } finally {
       setReclassRunning(false)
@@ -504,6 +501,7 @@ export function PluggyPage() {
     }
   }
 
+  const allAccounts = connections.flatMap(c => c.accounts)
   const bankAccounts = connections.flatMap(c => c.accounts.filter(a => a.type === 'BANK'))
   const creditCards  = connections.flatMap(c => c.accounts.filter(a => a.type === 'CREDIT'))
 
@@ -528,6 +526,16 @@ export function PluggyPage() {
             Recuperar dados Pluggy
           </button>
         </div>
+
+        {showBackupBanner && (
+          <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--warn-soft, var(--well))', border: '1px solid var(--warn)', fontSize: 12.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <p style={{ color: 'var(--ink-2)' }}>Há backup local de contas Pluggy. Deseja restaurar?</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleRestoreBackup}>Restaurar</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowBackupBanner(false)}>Ignorar</button>
+            </div>
+          </div>
+        )}
 
         {backendStatus === 'not_configured' && (
           <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--faint)' }}>
@@ -558,7 +566,7 @@ export function PluggyPage() {
 
         {/* Connections list */}
         <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>
               Conexões ativas
               {connections.length > 0 && (
@@ -567,14 +575,25 @@ export function PluggyPage() {
                 </span>
               )}
             </h3>
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={backendStatus !== 'configured' || fetchingToken || registering}
-              onClick={handleConnect}
-              style={{ opacity: backendStatus !== 'configured' ? 0.4 : 1 }}
-            >
-              {fetchingToken ? 'Obtendo token…' : '+ Conectar banco/cartão'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {allAccounts.length >= 1 && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setSyncAll(true)}
+                  style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+                >
+                  Sincronizar todas as contas
+                </button>
+              )}
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={backendStatus !== 'configured' || fetchingToken || registering}
+                onClick={handleConnect}
+                style={{ opacity: backendStatus !== 'configured' ? 0.4 : 1 }}
+              >
+                {fetchingToken ? 'Obtendo token…' : '+ Conectar banco/cartão'}
+              </button>
+            </div>
           </div>
 
           {connections.length === 0 ? (
@@ -659,17 +678,6 @@ export function PluggyPage() {
                             >
                               Sincronizar
                             </button>
-                            {IS_DEV && (
-                              <button
-                                onClick={() => handleDebugPayload(acc.id)}
-                                disabled={debugLoading === acc.id}
-                                className="btn btn-secondary btn-sm"
-                                style={{ fontSize: 10, whiteSpace: 'nowrap', opacity: 0.7 }}
-                                title="Inspecionar payload raw da Pluggy (apenas dev)"
-                              >
-                                {debugLoading === acc.id ? '…' : 'Debug payload'}
-                              </button>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -725,8 +733,14 @@ export function PluggyPage() {
         />
       )}
 
-      {debugPayload && (
-        <DebugPayloadModal payload={debugPayload} onClose={() => setDebugPayload(null)} />
+      {syncAll && (
+        <SyncAllModal
+          connections={connections}
+          existingTxs={transactions}
+          appendTransactions={appendTransactions as (txs: Transaction[]) => Promise<void>}
+          onSyncComplete={() => setConnections(getLocalConnections())}
+          onClose={() => setSyncAll(false)}
+        />
       )}
 
       {reclassPreview && (
@@ -904,35 +918,6 @@ function RepairDatesModal({ preview, running, onConfirm, onClose }: {
   )
 }
 
-function DebugPayloadModal({ payload, onClose }: { payload: object; onClose: () => void }) {
-  const json = JSON.stringify(payload, null, 2)
-  const [copied, setCopied] = useState(false)
-  function handleCopy() {
-    navigator.clipboard.writeText(json).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
-  }
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--card-bg)', borderRadius: 14, width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Debug payload Pluggy</p>
-            <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 2 }}>Payload sanitizado para análise de campos. Não contém tokens.</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleCopy} className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
-              {copied ? 'Copiado!' : 'Copiar JSON'}
-            </button>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 20, lineHeight: 1, fontFamily: 'var(--ui)', padding: 4 }}>×</button>
-          </div>
-        </div>
-        <pre style={{ flex: 1, overflow: 'auto', margin: 0, padding: '16px 20px', fontSize: 11, lineHeight: 1.55, color: 'var(--ink-2)', fontFamily: 'var(--mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-          {json}
-        </pre>
-      </div>
-    </div>
-  )
-}
-
 function SummaryChip({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
@@ -977,7 +962,6 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
           )}
         </div>
 
-        {/* Period selector — initial step */}
         {phase === 'period_select' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
@@ -1024,26 +1008,22 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
           </div>
         )}
 
-        {/* Fetching */}
         {phase === 'fetching' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <p style={{ fontSize: 13, color: 'var(--faint)' }}>Buscando transações na Pluggy…</p>
           </div>
         )}
 
-        {/* Importing */}
         {phase === 'importing' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <p style={{ fontSize: 13, color: 'var(--faint)' }}>Importando lançamentos…</p>
           </div>
         )}
 
-        {/* Error */}
         {phase === 'error' && error && (
           <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)', fontSize: 12.5, color: 'var(--crit)' }}>{error}</div>
         )}
 
-        {/* Preview */}
         {phase === 'preview' && result && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -1152,7 +1132,6 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
           </div>
         )}
 
-        {/* Done */}
         {phase === 'done' && result && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             <p style={{ fontSize: 22, marginBottom: 8 }}>✓</p>
@@ -1167,7 +1146,6 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
           </div>
         )}
 
-        {/* Footer buttons (not shown in period_select — buttons inline above) */}
         {phase !== 'period_select' && (
           <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
             {phase === 'done' ? (
@@ -1184,6 +1162,342 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
             ) : phase === 'error' ? (
               <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
             ) : null}
+          </div>
+        )}
+
+      </div>
+    </div>
+  )
+}
+
+// ── SyncAllModal ──────────────────────────────────────────────────────────────
+
+interface SyncAllAccountInfo {
+  id: string
+  itemId: string
+  name: string
+  type: 'BANK' | 'CREDIT'
+  institutionName: string
+  institutionLogoUrl: string | null
+  lastSyncAt?: string
+}
+
+interface SyncAllAccountResult {
+  accountId: string
+  accountName: string
+  itemId: string
+  status: 'pending' | 'fetching' | 'done' | 'error'
+  result?: MapResult
+  error?: string
+}
+
+type SyncAllPhase = 'setup' | 'fetching' | 'preview' | 'importing' | 'done'
+
+interface SyncAllModalProps {
+  connections: PluggyLocalConnection[]
+  existingTxs: Transaction[]
+  appendTransactions: (txs: Transaction[]) => Promise<void>
+  onSyncComplete: () => void
+  onClose: () => void
+}
+
+function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComplete, onClose }: SyncAllModalProps) {
+  const allAccounts: SyncAllAccountInfo[] = connections.flatMap(c =>
+    c.accounts.map(a => ({
+      id: a.id,
+      itemId: c.itemId,
+      name: a.name,
+      type: a.type,
+      institutionName: c.connectorName,
+      institutionLogoUrl: c.connectorImageUrl,
+      lastSyncAt: a.lastSyncAt,
+    }))
+  )
+
+  const [phase, setPhase] = useState<SyncAllPhase>('setup')
+  const [period, setPeriod] = useState<PeriodPreset>('last_7d')
+  const [customFrom, setCustomFrom] = useState('2024-01-01')
+  const [customTo, setCustomTo] = useState(currentFinancialDate())
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(allAccounts.map(a => a.id)))
+  const [accountResults, setAccountResults] = useState<SyncAllAccountResult[]>([])
+  const [allNewTxs, setAllNewTxs] = useState<Transaction[]>([])
+  const localFmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  const isWorking = phase === 'fetching' || phase === 'importing'
+  const selectedAccounts = allAccounts.filter(a => selectedIds.has(a.id))
+
+  function toggleAccount(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAll() { setSelectedIds(new Set(allAccounts.map(a => a.id))) }
+  function deselectAll() { setSelectedIds(new Set()) }
+
+  async function handleFetchAll() {
+    if (selectedAccounts.length === 0) return
+    const { from, to } = period === 'custom'
+      ? { from: customFrom, to: customTo }
+      : getPeriodDates(period)
+
+    const initial: SyncAllAccountResult[] = selectedAccounts.map(a => ({
+      accountId: a.id, accountName: a.name, itemId: a.itemId, status: 'pending',
+    }))
+    setAccountResults(initial)
+    setPhase('fetching')
+
+    const batchAccepted: Transaction[] = []
+    const finalResults: SyncAllAccountResult[] = initial.map(r => ({ ...r }))
+
+    for (let i = 0; i < selectedAccounts.length; i++) {
+      const acc = selectedAccounts[i]
+      finalResults[i] = { ...finalResults[i], status: 'fetching' }
+      setAccountResults([...finalResults])
+
+      try {
+        const raw = await fetchPluggyTransactions({ accountId: acc.id, from, to })
+        const allExisting = [...existingTxs, ...batchAccepted]
+        const connInfo: ConnInfo = {
+          accountName: acc.name,
+          institutionName: acc.institutionName,
+          institutionLogoUrl: acc.institutionLogoUrl,
+        }
+        const result = mapPluggyToTransactions(raw, acc.id, allExisting, connInfo)
+        batchAccepted.push(...result.newTxs)
+        finalResults[i] = { ...finalResults[i], status: 'done', result }
+      } catch (err) {
+        finalResults[i] = { ...finalResults[i], status: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar' }
+      }
+      setAccountResults([...finalResults])
+    }
+
+    setAllNewTxs(batchAccepted)
+    setPhase('preview')
+  }
+
+  async function handleImport() {
+    if (allNewTxs.length === 0) return
+    setPhase('importing')
+    try {
+      await appendTransactions(allNewTxs)
+      for (const r of accountResults) {
+        if (r.status === 'done' && r.result && r.result.newTxs.length > 0) {
+          updateConnectionSyncMeta(r.itemId, r.accountId, r.result.newTxs.length)
+        }
+      }
+      onSyncComplete()
+      setPhase('done')
+    } catch {
+      setPhase('preview')
+    }
+  }
+
+  const totalNew = allNewTxs.length
+  const totalDupes = accountResults.reduce((s, r) => s + (r.result?.duplicateCount ?? 0), 0)
+  const totalUncategorized = allNewTxs.filter(t => !t.macroCategoryId && t.classificationType !== 'neutral').length
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,15,10,.45)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && !isWorking && onClose()}
+    >
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>Sincronizar contas Pluggy</h2>
+          {!isWorking && (
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 20, lineHeight: 1, fontFamily: 'var(--ui)', padding: 4 }}>×</button>
+          )}
+        </div>
+
+        {/* Setup */}
+        {phase === 'setup' && (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)' }}>Contas</p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={selectAll} style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>Selecionar tudo</button>
+                  <button onClick={deselectAll} style={{ fontSize: 11, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>Desmarcar tudo</button>
+                </div>
+              </div>
+              {allAccounts.map(acc => (
+                <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--well)', border: `1px solid ${selectedIds.has(acc.id) ? 'var(--accent)' : 'var(--line)'}`, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(acc.id)}
+                    onChange={() => toggleAccount(acc.id)}
+                    style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.name}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                        background: acc.type === 'CREDIT' ? 'var(--accent-soft)' : 'var(--pos-soft)',
+                        color: acc.type === 'CREDIT' ? 'var(--accent)' : 'var(--pos)',
+                        border: `1px solid ${acc.type === 'CREDIT' ? 'var(--accent)' : 'var(--pos)'}40`,
+                      }}>
+                        {acc.type === 'CREDIT' ? 'CARTÃO' : 'CONTA'}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
+                      {acc.institutionName}
+                      {acc.lastSyncAt && ` · última sync: ${fmtDate(acc.lastSyncAt)}`}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ fontSize: 12.5, color: 'var(--ink-2)', fontWeight: 700 }}>Período</p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(['last_7d', 'current_month', 'last_30d', 'last_90d', 'custom'] as PeriodPreset[]).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPeriod(p)}
+                    style={{
+                      fontSize: 12, padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+                      fontFamily: 'var(--ui)', fontWeight: period === p ? 700 : 400,
+                      background: period === p ? 'var(--accent-soft)' : 'var(--well)',
+                      border: `1px solid ${period === p ? 'var(--accent)' : 'var(--line)'}`,
+                      color: period === p ? 'var(--accent)' : 'var(--ink-2)',
+                    }}
+                  >
+                    {PERIOD_LABELS[p]}
+                    {p === 'last_7d' && <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: 'var(--pos)', background: 'var(--pos-soft)', border: '1px solid var(--pos)40', borderRadius: 3, padding: '0 4px' }}>REC</span>}
+                  </button>
+                ))}
+              </div>
+              {period === 'custom' && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
+                  <span style={{ fontSize: 12, color: 'var(--faint)' }}>até</span>
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="login-field" style={{ fontSize: 12, flex: 1 }} />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn btn-primary"
+                disabled={selectedIds.size === 0 || (period === 'custom' && (!customFrom || !customTo))}
+                onClick={handleFetchAll}
+              >
+                Buscar transações ({selectedIds.size} conta{selectedIds.size !== 1 ? 's' : ''})
+              </button>
+              <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            </div>
+          </>
+        )}
+
+        {/* Fetching */}
+        {phase === 'fetching' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ fontSize: 13, color: 'var(--faint)', textAlign: 'center', marginBottom: 4 }}>Buscando transações…</p>
+            {accountResults.map(r => (
+              <div key={r.accountId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
+                <span style={{ fontSize: 12.5, flex: 1, color: 'var(--ink)' }}>{r.accountName}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: r.status === 'done' ? 'var(--pos)' : r.status === 'error' ? 'var(--crit)' : r.status === 'fetching' ? 'var(--warn)' : 'var(--faint)' }}>
+                  {r.status === 'pending' ? '—' : r.status === 'fetching' ? 'buscando…' : r.status === 'done' ? `${r.result?.newTxs.length ?? 0} novas` : 'erro'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Preview */}
+        {phase === 'preview' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Resultado consolidado</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {([
+                  ['Novas', String(totalNew), 'var(--pos)'],
+                  ['Duplicadas', String(totalDupes), 'var(--faint)'],
+                  ['Sem categoria', String(totalUncategorized), totalUncategorized > 0 ? 'var(--warn)' : 'var(--faint)'],
+                ] as [string, string, string][]).map(([label, val, color]) => (
+                  <div key={label} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', textAlign: 'center' }}>
+                    <p style={{ fontSize: 18, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</p>
+                    <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Por conta</p>
+              {accountResults.map(r => (
+                <div key={r.accountId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
+                  <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{r.accountName}</span>
+                  <span style={{ fontWeight: 700, color: r.status === 'error' ? 'var(--crit)' : (r.result?.newTxs.length ?? 0) === 0 ? 'var(--faint)' : 'var(--pos)' }}>
+                    {r.status === 'error'
+                      ? (r.error ?? 'Erro')
+                      : `${r.result?.newTxs.length ?? 0} novas · ${r.result?.duplicateCount ?? 0} dup`}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {totalNew > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)30' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--pos)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Entradas</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{localFmtBRL(allNewTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0))}</p>
+                </div>
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)30' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--crit)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Saídas</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{localFmtBRL(allNewTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0))}</p>
+                </div>
+              </div>
+            )}
+
+            {totalNew === 0 && (
+              <p style={{ fontSize: 12.5, color: 'var(--faint)', textAlign: 'center' }}>
+                Nenhuma transação nova — todas já importadas ou período sem dados.
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+              {totalNew > 0 ? (
+                <>
+                  <button className="btn btn-primary" onClick={handleImport}>
+                    Importar {totalNew} lançamento{totalNew !== 1 ? 's' : ''}
+                  </button>
+                  <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+                </>
+              ) : (
+                <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Importing */}
+        {phase === 'importing' && (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--faint)' }}>Importando lançamentos…</p>
+          </div>
+        )}
+
+        {/* Done */}
+        {phase === 'done' && (
+          <div style={{ textAlign: 'center', padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <p style={{ fontSize: 22 }}>✓</p>
+            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)' }}>
+              {allNewTxs.length} lançamento{allNewTxs.length !== 1 ? 's' : ''} importado{allNewTxs.length !== 1 ? 's' : ''}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--faint)' }}>
+              {accountResults.filter(r => r.status === 'done').length} conta{accountResults.filter(r => r.status === 'done').length !== 1 ? 's' : ''} sincronizada{accountResults.filter(r => r.status === 'done').length !== 1 ? 's' : ''}
+              {accountResults.some(r => r.status === 'error') && ` · ${accountResults.filter(r => r.status === 'error').length} com erro`}
+            </p>
+            <button className="btn btn-primary" onClick={onClose}>Fechar</button>
           </div>
         )}
 
