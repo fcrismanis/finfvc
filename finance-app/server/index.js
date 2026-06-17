@@ -133,7 +133,7 @@ async function handleClaude(question, month, ctx) {
     return { provider: 'claude', answer: '', error: 'ANTHROPIC_API_KEY não configurada no backend. Obtenha em console.anthropic.com.' }
   }
 
-  const model = process.env.ADVISOR_CLAUDE_MODEL ?? 'claude-sonnet-4-5'
+  const model = process.env.ADVISOR_CLAUDE_MODEL ?? 'claude-sonnet-4-6'
   const content = buildContent(question, month, ctx)
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -790,4 +790,16 @@ app.listen(PORT, () => {
   console.log(`[advisor] http://localhost:${PORT}`)
   console.log(`[advisor] GPT:    ${s.gpt ? '✓ configurado' : '✗ OPENAI_API_KEY ausente'}`)
   console.log(`[advisor] Claude: ${s.claude ? '✓ configurado' : '✗ ANTHROPIC_API_KEY ausente'}`)
+  const pluggyOk = !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET)
+  console.log(`[advisor] Pluggy: ${pluggyOk ? '✓ configurado' : '✗ PLUGGY_CLIENT_SECRET ausente'}`)
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[advisor] ERRO: porta ${PORT} já está em uso.`)
+    console.error(`[advisor] O servidor pode já estar rodando. Verifique:`)
+    console.error(`[advisor]   lsof -ti:${PORT}`)
+    console.error(`[advisor]   kill $(lsof -ti:${PORT})`)
+    process.exit(1)
+  }
+  console.error('[advisor] Erro ao iniciar servidor:', err.message)
+  process.exit(1)
 })

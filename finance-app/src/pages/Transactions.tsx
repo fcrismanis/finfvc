@@ -316,7 +316,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       patch.needsReview = false
       if (catChanged) {
         const macro = allMacros.find(m => m.id === patch.macroCategoryId)
-        if (macro) patch.classificationType = macro.classificationType
+        if (macro) {
+          patch.classificationType = macro.classificationType
+          patch.includeInOperationalResult = macro.displayInResult
+          patch.includeInCashflow = macro.displayInCashflow
+          patch.includeInBudget = macro.displayInBudget
+        } else if (!patch.macroCategoryId) {
+          // cleared — keep original flags
+        }
       }
     }
     updateTransaction(modalTx.id, patch)
@@ -332,6 +339,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
       captureScrollAnchor(txId)
       const macro = allMacros.find(m => m.id === newCatId)
+      const inclResult = macro ? macro.displayInResult : tx.includeInOperationalResult
+      const inclCashflow = macro ? macro.displayInCashflow : tx.includeInCashflow
+      const inclBudget = macro ? macro.displayInBudget : tx.includeInBudget
       updateTransaction(txId, {
         macroCategoryId: newCatId || undefined,
         subCategoryId: undefined,
@@ -340,6 +350,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         categoryConfidence: 'high',
         needsReview: false,
         classificationType: macro?.classificationType ?? tx.classificationType,
+        includeInOperationalResult: inclResult,
+        includeInCashflow: inclCashflow,
+        includeInBudget: inclBudget,
       })
 
       const updatedTx: Transaction = {
@@ -347,6 +360,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         macroCategoryId: newCatId,
         subCategoryId: undefined,
         classificationType: macro?.classificationType ?? tx.classificationType,
+        includeInOperationalResult: inclResult,
+        includeInCashflow: inclCashflow,
+        includeInBudget: inclBudget,
         categorySuggestionSource: 'manual',
       }
       const learnedRule = learnRuleFromTransaction(updatedTx, 'manual')
@@ -356,10 +372,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
       if (similar.highConfidence.length > 0) {
         for (const candidate of similar.highConfidence) {
+          const candidateMacro = allMacros.find(m => m.id === newCatId)
           updateTransaction(candidate.id, {
             macroCategoryId: newCatId,
             subCategoryId: propagateSub,
             classificationType: macro?.classificationType ?? candidate.classificationType,
+            includeInOperationalResult: candidateMacro ? candidateMacro.displayInResult : candidate.includeInOperationalResult,
+            includeInCashflow: candidateMacro ? candidateMacro.displayInCashflow : candidate.includeInCashflow,
+            includeInBudget: candidateMacro ? candidateMacro.displayInBudget : candidate.includeInBudget,
             categorySuggestionSource: 'rule',
             categoryConfidence: 'high',
             needsReview: false,

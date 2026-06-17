@@ -1,9 +1,13 @@
 import type {
   Transaction, Budget, MacroCategoryTotal, BudgetComparison,
-  MonthSummaryData, AlertItem, MonthlyTrend, TopTransaction
+  MonthSummaryData, AlertItem, MonthlyTrend, TopTransaction, MacroCategory
 } from '../types'
-import { MACRO_CATEGORIES, getMacroById } from '../config/categories'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { getCompetenceMonth, formatMonthLabel, getLast6Months } from '../utils/date'
+
+function getMacroById(id: string): MacroCategory | undefined {
+  return getAllMacroCategories().find(m => m.id === id)
+}
 
 function txInMonth(tx: Transaction, month: string): boolean {
   return getCompetenceMonth(tx.competenceDate) === month && tx.status !== 'cancelled'
@@ -79,7 +83,7 @@ function getAvgIncome(txns: Transaction[], refMonth: string, nMonths: number): n
 }
 
 export function getMacroCategoryTotals(txns: Transaction[], month: string): MacroCategoryTotal[] {
-  const expenseMacros = MACRO_CATEGORIES.filter(m =>
+  const expenseMacros = getAllMacroCategories().filter(m =>
     ['operational_expense', 'debt_cost'].includes(m.classificationType)
   )
 
