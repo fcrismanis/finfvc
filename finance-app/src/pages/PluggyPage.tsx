@@ -13,6 +13,7 @@ import {
   inferCategoryFromText,
   updateConnectionSyncMeta,
   getPeriodDates,
+  restoreConnectionsFromServer,
   type ConnInfo,
 } from '../services/pluggy.service'
 import {
@@ -316,9 +317,18 @@ export function PluggyPage() {
       .then((d: { configured: boolean }) => setBackendStatus(d.configured ? 'configured' : 'not_configured'))
       .catch(() => setBackendStatus('not_configured'))
     const loaded = getLocalConnections()
-    setConnections(loaded)
-    if (loaded.length === 0 && hasPluggyConnectionsBackup()) {
-      setShowBackupBanner(true)
+    if (loaded.length > 0) {
+      setConnections(loaded)
+    } else {
+      if (hasPluggyConnectionsBackup()) {
+        setShowBackupBanner(true)
+      }
+      restoreConnectionsFromServer().then(restored => {
+        if (restored.length > 0) {
+          setConnections(restored)
+          setShowBackupBanner(false)
+        }
+      })
     }
   }, [])
 

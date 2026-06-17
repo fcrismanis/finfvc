@@ -1,6 +1,9 @@
 # Backend secrets — never commit .env with real keys
 server/.env
 
+# Server-side data (Pluggy connection backups, etc.)
+server/.data/
+
 # Debug payload samples — never commit real transaction data
 tmp/
 *.sanitized.json

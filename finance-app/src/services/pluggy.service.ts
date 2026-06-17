@@ -190,12 +190,34 @@ export function saveLocalConnection(conn: PluggyLocalConnection): void {
   else all.push(conn)
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+  backupConnectionsToServer(all)
 }
 
 export function removeLocalConnection(itemId: string): void {
   const updated = getLocalConnections().filter(c => c.itemId !== itemId)
-  // Only write if this is an explicit user removal (array may become [])
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(updated))
+  if (updated.length > 0) backupConnectionsToServer(updated)
+}
+
+function backupConnectionsToServer(connections: PluggyLocalConnection[]): void {
+  if (connections.length === 0) return
+  fetch('/api/pluggy/backup-connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connections }),
+  }).catch(() => {})
+}
+
+export async function restoreConnectionsFromServer(): Promise<PluggyLocalConnection[]> {
+  try {
+    const res = await fetch('/api/pluggy/backup-connections')
+    if (!res.ok) return []
+    const data = await res.json() as { ok: boolean; connections?: PluggyLocalConnection[] }
+    if (!data.ok || !Array.isArray(data.connections) || data.connections.length === 0) return []
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(data.connections))
+    backupPluggyConnectionsSafe(data.connections)
+    return data.connections
+  } catch { return [] }
 }
 
 export async function registerConnection(itemId: string): Promise<PluggyLocalConnection> {
@@ -519,6 +541,7 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
   acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+  backupConnectionsToServer(all)
 }
 
 // ── Compute period date range from a preset ───────────────────────────────────

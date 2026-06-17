@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const app = express()
 const PORT = process.env.PORT ?? 8787
@@ -784,6 +787,49 @@ app.post('/api/advisor', async (req, res) => {
 })
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString(), providers: getProviderStatus() }))
+
+// ── Pluggy connections file backup (survives localStorage wipe) ──────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const DATA_DIR = join(__dirname, '.data')
+const CONNECTIONS_FILE = join(DATA_DIR, 'pluggy-connections.json')
+
+function ensureDataDir() {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
+}
+
+app.post('/api/pluggy/backup-connections', (req, res) => {
+  const connections = req.body?.connections
+  if (!Array.isArray(connections) || connections.length === 0) {
+    return res.status(400).json({ ok: false, error: 'connections array vazio ou ausente' })
+  }
+  try {
+    ensureDataDir()
+    writeFileSync(CONNECTIONS_FILE, JSON.stringify(connections, null, 2), 'utf-8')
+    console.log(`[pluggy] backup saved: ${connections.length} connection(s) → ${CONNECTIONS_FILE}`)
+    return res.json({ ok: true, count: connections.length })
+  } catch (err) {
+    console.error('[pluggy] backup write error:', err.message)
+    return res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.get('/api/pluggy/backup-connections', (_req, res) => {
+  try {
+    if (!existsSync(CONNECTIONS_FILE)) {
+      return res.json({ ok: true, connections: [], source: 'none' })
+    }
+    const raw = readFileSync(CONNECTIONS_FILE, 'utf-8')
+    const connections = JSON.parse(raw)
+    if (!Array.isArray(connections)) {
+      return res.json({ ok: true, connections: [], source: 'invalid' })
+    }
+    return res.json({ ok: true, connections, source: 'file' })
+  } catch (err) {
+    console.error('[pluggy] backup read error:', err.message)
+    return res.status(500).json({ ok: false, error: err.message })
+  }
+})
 
 app.listen(PORT, () => {
   const s = getProviderStatus()
