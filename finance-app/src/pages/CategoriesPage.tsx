@@ -1,10 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
-  Utensils, Repeat, Home, Car, HeartPulse, GraduationCap, Briefcase, Smile,
-  PawPrint, Shield, ArrowLeftRight, Wallet, TrendingUp, Circle, ShoppingBag,
-  RefreshCw, Coins, Gift, BookOpen, Receipt, Sparkles, Ticket, Users, Wrench,
-  Plane, MoreHorizontal, PiggyBank, HandHeart, AlertTriangle, Pencil, Check,
-  X as XIcon, Minus, Star, Dumbbell, Music,
+  Circle, Pencil, Check, X as XIcon, Minus,
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
@@ -19,6 +15,7 @@ import {
 } from '../services/financeCategories.service'
 import { BUDGET_CLASSIFICATION_LABELS, matchCategoryByKeywords } from '../services/categoryHelpers'
 import { newSubCategoryId } from '../services/subcategory.service'
+import { ICON_MAP, ICON_ENTRIES } from '../utils/categoryIcons'
 import type {
   MacroCategory, Category, SubCategory, Transaction,
   SubCategoryEssentiality, BudgetClassification, CategoryTabType,
@@ -30,23 +27,9 @@ interface Props {
 
 type ActiveTab = 'expense' | 'income'
 
-// ─── Icon map ────────────────────────────────────────────────────────────────
+// ─── Icon render helper ───────────────────────────────────────────────────────
 
 type IconComp = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
-
-const ICON_MAP: Record<string, IconComp> = {
-  'utensils': Utensils, 'repeat': Repeat, 'home': Home, 'car': Car,
-  'heart-pulse': HeartPulse, 'graduation-cap': GraduationCap, 'briefcase': Briefcase,
-  'smile': Smile, 'paw-print': PawPrint, 'shield': Shield,
-  'arrow-left-right': ArrowLeftRight, 'wallet': Wallet, 'trending-up': TrendingUp,
-  'shopping-bag': ShoppingBag, 'refresh-cw': RefreshCw, 'coins': Coins,
-  'gift': Gift, 'book-open': BookOpen, 'receipt': Receipt, 'sparkles': Sparkles,
-  'ticket': Ticket, 'users': Users, 'wrench': Wrench, 'plane': Plane,
-  'more-horizontal': MoreHorizontal, 'piggy-bank': PiggyBank, 'hand-heart': HandHeart,
-  'alert-triangle': AlertTriangle, 'star': Star, 'dumbbell': Dumbbell,
-  'music': Music, 'circle': Circle, 'minus': Minus,
-}
-const ICON_ENTRIES = Object.entries(ICON_MAP)
 
 function IconComp({ name, size = 14, color }: { name?: string; size?: number; color?: string }) {
   const Ic = name ? (ICON_MAP[name] ?? Circle) : Minus

@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
-import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Tag, Download } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ChevronDown, FlaskConical, X, ArrowLeft, Pencil, Tag, Download, MoreHorizontal } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import { MACRO_CATEGORIES } from '../config/categories'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { ICON_MAP } from '../utils/categoryIcons'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth, normalizeFinancialDate } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
@@ -79,6 +80,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
+  const [openActionMenu, setOpenActionMenu] = useState<string | null>(null)
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineSubEdit, setInlineSubEdit] = useState<{ id: string; subId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
@@ -163,6 +165,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter }
     localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(payload))
   }, [filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter])
+
+  const allMacros = useMemo(() => getAllMacroCategories(), [])
 
   const dqCtx = useMemo(() => ({
     threshold: highValueThreshold(transactions),
@@ -302,7 +306,20 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   function saveModal() {
     if (!modalTx) return
-    updateTransaction(modalTx.id, modalPatch)
+    const patch = { ...modalPatch }
+    const catChanged = patch.macroCategoryId !== modalTx.macroCategoryId
+    const subChanged = patch.subCategoryId !== modalTx.subCategoryId
+    if (catChanged || subChanged) {
+      patch.manualCategoryOverride = true
+      patch.categorySuggestionSource = 'manual'
+      patch.categoryConfidence = 'high'
+      patch.needsReview = false
+      if (catChanged) {
+        const macro = allMacros.find(m => m.id === patch.macroCategoryId)
+        if (macro) patch.classificationType = macro.classificationType
+      }
+    }
+    updateTransaction(modalTx.id, patch)
     setModalTx(null)
   }
 
@@ -314,7 +331,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const tx = transactions.find(t => t.id === txId)
     if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
       captureScrollAnchor(txId)
-      const macro = MACRO_CATEGORIES.find(m => m.id === newCatId)
+      const macro = allMacros.find(m => m.id === newCatId)
       updateTransaction(txId, {
         macroCategoryId: newCatId || undefined,
         subCategoryId: undefined,
@@ -419,7 +436,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   function exportCsv() {
     const headers = ['Data', 'Descrição', 'Valor', 'Tipo', 'Classificação', 'Categoria', 'Subcategoria', 'Tags', 'Status']
     const rows = filtered.map(t => {
-      const macroName = MACRO_CATEGORIES.find(m => m.id === t.macroCategoryId)?.name ?? ''
+      const macroName = allMacros.find(m => m.id === t.macroCategoryId)?.name ?? ''
       const subName = t.subCategoryId ? (subCategories.find(s => s.id === t.subCategoryId)?.name ?? '') : ''
       return [
         t.transactionDate,
@@ -603,7 +620,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
             <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Categoria">
               <option value="">Todas categorias</option>
-              {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {allMacros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
 
             {allTags.length > 0 && (
@@ -724,7 +741,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         </td>
                       </tr>
                       {items.map(tx => {
-                        const macro = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
+                        const macro = allMacros.find(m => m.id === tx.macroCategoryId)
                         const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
                         const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                         const isInlineCat = inlineCatEdit?.id === tx.id
@@ -900,7 +917,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   style={{ fontSize: 11, minWidth: 130 }}
                                 >
                                   <option value="">Sem categoria</option>
-                                  {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                  {allMacros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                               ) : (
                                 <div
@@ -913,19 +930,25 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                 >
                                   {macro ? (
                                     <span style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      display: 'inline-flex', alignItems: 'center', gap: 5,
                                       fontSize: 10, padding: '2px 7px', borderRadius: 4,
                                       border: `1px solid ${macro.color}50`, color: macro.color,
                                       fontWeight: 600, background: `${macro.color}12`,
                                     }}>
+                                      <TxCatIcon iconName={sub?.icon ?? macro.icon} size={11} color={macro.color} />
                                       {macro.name}
+                                      {sub && (
+                                        <span style={{ color: `${macro.color}bb`, fontWeight: 500 }}>
+                                          › {sub.name}
+                                        </span>
+                                      )}
                                     </span>
                                   ) : (
                                     <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 600, padding: '2px 4px', borderRadius: 4, border: '1px dashed var(--line)', whiteSpace: 'nowrap' }}>
                                       A classificar
                                     </span>
                                   )}
-                                  {macro && (isInlineSub ? (
+                                  {macro && isInlineSub && (
                                     <select
                                       autoFocus
                                       value={inlineSubEdit.subId}
@@ -942,31 +965,60 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       <option value="">sem subcat.</option>
                                       {subOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                     </select>
-                                  ) : (
+                                  )}
+                                  {macro && !isInlineSub && !sub && subOptions.length > 0 && (
                                     <span
                                       role="button"
                                       tabIndex={0}
-                                      onClick={e => { e.stopPropagation(); if (subOptions.length > 0) setInlineSubEdit({ id: tx.id, subId: tx.subCategoryId ?? '' }) }}
-                                      title={subOptions.length > 0 ? 'Clique para editar subcategoria' : undefined}
-                                      style={{ fontSize: 10.5, color: sub ? 'var(--ink-2)' : 'var(--faint)', fontWeight: 500, fontStyle: sub ? 'normal' : 'italic', cursor: subOptions.length > 0 ? 'pointer' : 'default' }}
+                                      onClick={e => { e.stopPropagation(); setInlineSubEdit({ id: tx.id, subId: '' }) }}
+                                      style={{ fontSize: 9.5, color: 'var(--faint)', fontStyle: 'italic', cursor: 'pointer' }}
                                     >
-                                      · {sub ? sub.name : subOptions.length > 0 ? 'sem subcat.' : '—'}
+                                      + sub
                                     </span>
-                                  ))}
+                                  )}
                                 </div>
                               )}
                             </td>
 
-                            {/* Edit button */}
-                            <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                            {/* Actions menu */}
+                            <td className="table-td" style={{ whiteSpace: 'nowrap', position: 'relative' }}>
                               <button
-                                onClick={() => openModal(tx)}
-                                aria-label="Editar lançamento"
-                                title="Editar"
+                                onClick={e => { e.stopPropagation(); setOpenActionMenu(openActionMenu === tx.id ? null : tx.id) }}
+                                aria-label="Ações"
+                                title="Ações"
                                 style={{ display: 'flex', alignItems: 'center', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 5px', borderRadius: 5 }}
                               >
-                                <Pencil size={12} />
+                                <MoreHorizontal size={14} />
                               </button>
+                              {openActionMenu === tx.id && (
+                                <div
+                                  style={{
+                                    position: 'absolute', right: 0, top: '100%', zIndex: 50,
+                                    background: 'var(--card-bg)', border: '1px solid var(--line)',
+                                    borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.13)',
+                                    minWidth: 120, overflow: 'hidden',
+                                  }}
+                                  onMouseLeave={() => setOpenActionMenu(null)}
+                                >
+                                  <button
+                                    onClick={() => { openModal(tx); setOpenActionMenu(null) }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', padding: '8px 14px', textAlign: 'left', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)', fontFamily: 'var(--ui)' }}
+                                  >
+                                    <Pencil size={11} /> Editar
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm('Marcar lançamento como cancelado?')) {
+                                        updateTransaction(tx.id, { status: 'cancelled' })
+                                      }
+                                      setOpenActionMenu(null)
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', padding: '8px 14px', textAlign: 'left', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--crit)', fontFamily: 'var(--ui)' }}
+                                  >
+                                    <X size={11} /> Excluir
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )
@@ -1086,36 +1138,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               </ModalField>
 
               <ModalField label="Categoria">
-                <select
-                  value={modalPatch.macroCategoryId ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined, subCategoryId: undefined }))}
-                  className="ledger-select"
-                  style={{ width: '100%', fontSize: 12 }}
-                >
-                  <option value="">Sem categoria</option>
-                  {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                <CategorySelector
+                  macroCategoryId={modalPatch.macroCategoryId}
+                  subCategoryId={modalPatch.subCategoryId}
+                  allMacros={allMacros}
+                  subCategories={subCategories}
+                  onChange={(macroId, subId) => setModalPatch(p => ({ ...p, macroCategoryId: macroId, subCategoryId: subId }))}
+                />
               </ModalField>
-
-              {modalPatch.macroCategoryId && (() => {
-                const filteredSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
-                if (filteredSubs.length === 0) return null
-                return (
-                  <ModalField label="Subcategoria">
-                    <select
-                      value={modalPatch.subCategoryId ?? ''}
-                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
-                      className="ledger-select"
-                      style={{ width: '100%', fontSize: 12 }}
-                    >
-                      <option value="">Sem subcategoria</option>
-                      {filteredSubs.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </ModalField>
-                )
-              })()}
 
               <ModalTagsField
                 tags={(modalPatch.tags as string[] | undefined) ?? []}
@@ -1173,7 +1203,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               </p>
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-              Categoria proposta: <strong>{MACRO_CATEGORIES.find(m => m.id === similarModal.macroCategoryId)?.name ?? similarModal.macroCategoryId}</strong>
+              Categoria proposta: <strong>{allMacros.find(m => m.id === similarModal.macroCategoryId)?.name ?? similarModal.macroCategoryId}</strong>
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
               {similarModal.candidates.map(tx => (
@@ -1200,7 +1230,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 className="btn btn-primary btn-sm"
                 disabled={selectedSimilar.size === 0}
                 onClick={() => {
-                  const macro = MACRO_CATEGORIES.find(m => m.id === similarModal.macroCategoryId)
+                  const macro = allMacros.find(m => m.id === similarModal.macroCategoryId)
                   for (const tx of similarModal.candidates) {
                     if (!selectedSimilar.has(tx.id)) continue
                     updateTransaction(tx.id, {
@@ -1228,6 +1258,169 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       )}
 
     </main>
+  )
+}
+
+function TxCatIcon({ iconName, size = 12, color }: { iconName?: string; size?: number; color?: string }) {
+  const Ic = iconName ? (ICON_MAP[iconName] ?? null) : null
+  if (!Ic) return null
+  return <Ic size={size} color={color} strokeWidth={2} />
+}
+
+function CategorySelector({
+  macroCategoryId,
+  subCategoryId,
+  allMacros,
+  subCategories,
+  onChange,
+}: {
+  macroCategoryId?: string
+  subCategoryId?: string
+  allMacros: import('../types').MacroCategory[]
+  subCategories: import('../types').SubCategory[]
+  onChange: (macroId: string | undefined, subId: string | undefined) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const selectedMacro = allMacros.find(m => m.id === macroCategoryId)
+  const selectedSub = subCategoryId ? subCategories.find(s => s.id === subCategoryId) : null
+
+  const label = selectedMacro
+    ? selectedSub
+      ? `${selectedMacro.name} › ${selectedSub.name}`
+      : selectedMacro.name
+    : 'Sem categoria'
+
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return allMacros.flatMap(m => {
+      const allSubs = subCategories.filter(s => s.macroCategoryId === m.id && s.active)
+      if (!q) return [{ macro: m, subs: allSubs }]
+      const macroHit = m.name.toLowerCase().includes(q) || (m.keywords ?? []).some(k => k.toLowerCase().includes(q))
+      const matchSubs = allSubs.filter(s =>
+        s.name.toLowerCase().includes(q) || (s.keywords ?? []).some(k => k.toLowerCase().includes(q))
+      )
+      if (macroHit || matchSubs.length > 0) {
+        return [{ macro: m, subs: macroHit ? allSubs : matchSubs }]
+      }
+      return []
+    })
+  }, [allMacros, subCategories, search])
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const iconName = selectedSub?.icon ?? selectedMacro?.icon
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)',
+          background: 'var(--paper)', cursor: 'pointer', fontSize: 12.5,
+          color: selectedMacro ? 'var(--ink)' : 'var(--faint)',
+          fontFamily: 'var(--ui)', textAlign: 'left',
+        }}
+      >
+        {selectedMacro && iconName && (
+          <TxCatIcon iconName={iconName} size={13} color={selectedMacro.color} />
+        )}
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </span>
+        <ChevronDown size={12} color="var(--faint)" />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+          background: 'var(--card-bg)', border: '1px solid var(--line)',
+          borderRadius: 8, boxShadow: '0 6px 24px rgba(0,0,0,.15)',
+          overflow: 'hidden',
+        }}>
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nome ou keyword…"
+              style={{
+                width: '100%', fontSize: 12, padding: '5px 8px', borderRadius: 6,
+                border: '1px solid var(--line)', outline: 'none',
+                background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            <button
+              type="button"
+              onClick={() => { onChange(undefined, undefined); setOpen(false); setSearch('') }}
+              style={{
+                display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
+                fontSize: 12, background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--faint)', fontFamily: 'var(--ui)', borderBottom: '1px solid var(--line)',
+              }}
+            >
+              Sem categoria
+            </button>
+            {filteredGroups.map(({ macro, subs }) => (
+              <div key={macro.id}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                    padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
+                    background: macroCategoryId === macro.id && !subCategoryId ? 'var(--accent-soft)' : 'none',
+                    border: 'none', cursor: 'pointer', color: macro.color ?? 'var(--ink)',
+                    fontFamily: 'var(--ui)',
+                  }}
+                >
+                  <TxCatIcon iconName={macro.icon} size={13} color={macro.color} />
+                  {macro.name}
+                </button>
+                {subs.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => { onChange(macro.id, s.id); setOpen(false); setSearch('') }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                      padding: '5px 14px 5px 32px', textAlign: 'left', fontSize: 12,
+                      background: subCategoryId === s.id ? 'var(--accent-soft)' : 'none',
+                      border: 'none', cursor: 'pointer', color: 'var(--ink-2)',
+                      fontFamily: 'var(--ui)',
+                    }}
+                  >
+                    <TxCatIcon iconName={s.icon ?? macro.icon} size={11} color={macro.color} />
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {filteredGroups.length === 0 && (
+              <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--faint)', textAlign: 'center' }}>
+                Nenhuma categoria encontrada
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
