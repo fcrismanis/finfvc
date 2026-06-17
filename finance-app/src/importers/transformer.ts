@@ -2,6 +2,7 @@ import type { Transaction, PaymentMethod } from '../types'
 import type { ParsedImportItem } from './types'
 import { normalizePaymentMethod, parseInstallment } from './normalizer'
 import { suggestFromRules, canAutoCategorize, incrementRuleUseCount, loadRules } from '../services/categoryRules.service'
+import { matchCategoryByKeywords } from '../services/categoryHelpers'
 
 export function toTransaction(item: ParsedImportItem, batchId: string): Transaction {
   const now = new Date().toISOString()
@@ -58,6 +59,18 @@ export function toTransaction(item: ParsedImportItem, batchId: string): Transact
       tx.categorySuggestionSource = 'rule'
       tx.categoryConfidence = match.confidence ?? 'high'
       incrementRuleUseCount(match.ruleId)
+    }
+  }
+
+  // Apply keyword matching (Priority 2) if still no category and no manual override
+  if (!tx.macroCategoryId && !tx.manualCategoryOverride) {
+    const kwMatch = matchCategoryByKeywords(tx.description)
+    if (kwMatch) {
+      tx.macroCategoryId = kwMatch.macroCategoryId
+      if (kwMatch.categoryId) tx.categoryId = kwMatch.categoryId
+      if (kwMatch.subCategoryId) tx.subCategoryId = kwMatch.subCategoryId
+      tx.categorySuggestionSource = 'rule'
+      tx.categoryConfidence = kwMatch.confidence
     }
   }
 
