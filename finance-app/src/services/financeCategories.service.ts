@@ -45,7 +45,10 @@ export function upsertCustomCategory(input: {
   id?: string
   name: string
   macroCategoryId: string
-  classificationType: ClassificationType
+  classificationType?: ClassificationType
+  keywords?: string[]
+  budgetClassification?: import('../types').BudgetClassification
+  group?: 'personal' | 'business'
 }): Category {
   const categories = loadCustomCategories()
   const normalizedName = normalizeText(input.name)
@@ -54,17 +57,21 @@ export function upsertCustomCategory(input: {
     || normalizeText(category.name) === normalizedName
   )
   const macro = MACRO_CATEGORIES.find(item => item.id === input.macroCategoryId)
+  const classType: ClassificationType = input.classificationType ?? macro?.classificationType ?? 'operational_expense'
   const next: Category = {
     id: existing?.id ?? input.id ?? newCustomCategoryId(input.name),
     name: input.name.trim(),
     macroCategoryId: input.macroCategoryId,
-    classificationType: input.classificationType,
+    classificationType: classType,
     defaultIncludeInOperationalResult: macro?.displayInResult ?? true,
     defaultIncludeInCashflow: macro?.displayInCashflow ?? true,
     defaultIncludeInBudget: macro?.displayInBudget ?? true,
     isInternalTransferDefault: false,
     sortOrder: existing?.sortOrder ?? (categories.length + 1),
     active: true,
+    keywords: input.keywords ?? [],
+    budgetClassification: input.budgetClassification ?? 'none',
+    group: input.group ?? 'personal',
   }
 
   const idx = existing ? categories.findIndex(category => category.id === existing.id) : -1

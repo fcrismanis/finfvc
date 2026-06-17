@@ -81,6 +81,9 @@ export interface Transaction {
   updatedAt: string
 }
 
+export type BudgetClassification = 'essential' | 'non_essential' | 'none'
+export type CategoryTabType = 'expense' | 'income' | 'both' | 'none'
+
 export interface MacroCategory {
   id: string
   name: string
@@ -91,6 +94,13 @@ export interface MacroCategory {
   color: string
   icon: string
   sortOrder: number
+  // New fields for categories UI
+  tabType?: CategoryTabType
+  keywords?: string[]
+  budgetClassification?: BudgetClassification
+  group?: 'personal' | 'business'
+  isNeutral?: boolean
+  isDefault?: boolean
 }
 
 export interface Category {
@@ -106,6 +116,10 @@ export interface Category {
   icon?: string
   sortOrder: number
   active: boolean
+  // New fields for categories UI
+  keywords?: string[]
+  budgetClassification?: BudgetClassification
+  group?: 'personal' | 'business'
 }
 
 export interface Budget {
