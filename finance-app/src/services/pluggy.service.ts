@@ -156,12 +156,14 @@ export interface PluggyLocalAccount {
   name: string
   type: 'BANK' | 'CREDIT'
   subtype: string | null
-  balance: number
+  balance: number | null
+  availableBalance: number | null
   currencyCode: string
   limit: number | null
   availableLimit: number | null
   closeDate: string | null
   dueDate: string | null
+  lastUpdatedAt: string | null
   lastSyncAt?: string
   lastSyncCount?: number
 }
@@ -241,6 +243,9 @@ export interface MapResult {
   needsReviewCount: number
   uncategorizedCount: number
   bySourceCount: Record<string, number>
+  rawReturnedCount: number
+  missingFinancialDateCount: number
+  dateConfidenceCounts: { high: number; medium: number; low: number }
 }
 
 export interface ConnInfo {
@@ -255,6 +260,20 @@ export interface PluggyDatePickResult {
   date: string
   sourceField: 'transactionDate' | 'date' | 'operationDate' | 'paymentDate' | 'competenceDate' | 'unknown'
   rawValue: string | null
+  confidence: 'high' | 'medium' | 'low'
+}
+
+// transactionDate = high confidence (the actual financial transaction date)
+// date / operationDate = medium (posting date, usually correct but may differ for credit cards)
+// paymentDate / competenceDate = low (billing/accounting dates, not the purchase date)
+// unknown = low (fell back to today's date)
+const DATE_CONFIDENCE: Record<PluggyDatePickResult['sourceField'], PluggyDatePickResult['confidence']> = {
+  transactionDate: 'high',
+  date:            'medium',
+  operationDate:   'medium',
+  paymentDate:     'low',
+  competenceDate:  'low',
+  unknown:         'low',
 }
 
 export function pickPluggyFinancialDate(
@@ -271,10 +290,10 @@ export function pickPluggyFinancialDate(
   for (const [value, field] of candidates) {
     if (typeof value === 'string' && value.trim().length > 0) {
       const normalized = normalizeFinancialDate(value, '')
-      if (normalized) return { date: normalized, sourceField: field, rawValue: value }
+      if (normalized) return { date: normalized, sourceField: field, rawValue: value, confidence: DATE_CONFIDENCE[field] }
     }
   }
-  return { date: fallbackDate, sourceField: 'unknown', rawValue: null }
+  return { date: fallbackDate, sourceField: 'unknown', rawValue: null, confidence: 'low' }
 }
 
 export function mapPluggyToTransactions(
@@ -288,9 +307,13 @@ export function mapPluggyToTransactions(
   const batchId = `pluggy_${Date.now().toString(36)}`
   const now = new Date().toISOString()
   const fallbackDate = currentFinancialDate()
+  const dateConfidenceCounts = { high: 0, medium: 0, low: 0 }
+  let missingFinancialDateCount = 0
 
   const allMapped: import('../types').Transaction[] = pluggyTxs.map(ptx => {
     const picked = pickPluggyFinancialDate(ptx, fallbackDate)
+    if (picked.sourceField === 'unknown') missingFinancialDateCount++
+    dateConfidenceCounts[picked.confidence]++
     const financialDate = picked.date
     const competenceDate = normalizeFinancialDate(ptx.competenceDate ?? picked.rawValue, financialDate)
     const paymentDate = ptx.paymentDate ? normalizeFinancialDate(ptx.paymentDate, '') : undefined
@@ -345,6 +368,7 @@ export function mapPluggyToTransactions(
       pluggyRawUpdatedAt: ptx.updatedAt ?? undefined,
       providerRawDate: picked.rawValue ?? undefined,
       providerDateField: picked.sourceField,
+      providerDateConfidence: picked.confidence,
       createdAt: now,
       updatedAt: now,
     }
@@ -477,6 +501,9 @@ export function mapPluggyToTransactions(
     needsReviewCount,
     uncategorizedCount,
     bySourceCount,
+    rawReturnedCount: pluggyTxs.length,
+    missingFinancialDateCount,
+    dateConfidenceCounts,
   }
 }
 

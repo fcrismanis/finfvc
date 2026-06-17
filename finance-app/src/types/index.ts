@@ -76,6 +76,7 @@ export interface Transaction {
   pluggyRawUpdatedAt?: string
   providerRawDate?: string
   providerDateField?: 'transactionDate' | 'date' | 'operationDate' | 'paymentDate' | 'competenceDate' | 'unknown'
+  providerDateConfidence?: 'high' | 'medium' | 'low'
   group?: string
   tags?: string[]
   notes?: string

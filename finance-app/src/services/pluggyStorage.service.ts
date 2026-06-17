@@ -306,3 +306,35 @@ export function getSafeStorageSummary(): Record<string, unknown> {
   const d = diagnosePluggyStorage()
   return maskSensitive(d) as Record<string, unknown>
 }
+
+// ── Import diagnostics per account ──────────────────────────────────────────
+
+export const IMPORT_DIAGNOSTICS_KEY = 'fin_pluggy_import_diagnostics'
+
+export interface PluggyImportDiagnostics {
+  accountId: string
+  accountName: string
+  lastSyncAt: string
+  rawReturnedCount: number
+  newTxsCount: number
+  duplicateCount: number
+  missingFinancialDateCount: number
+  dateConfidenceCounts: { high: number; medium: number; low: number }
+}
+
+export function loadImportDiagnostics(): Record<string, PluggyImportDiagnostics> {
+  try {
+    const raw = localStorage.getItem(IMPORT_DIAGNOSTICS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, PluggyImportDiagnostics>
+      : {}
+  } catch { return {} }
+}
+
+export function updateAccountDiagnostics(diag: PluggyImportDiagnostics): void {
+  const all = loadImportDiagnostics()
+  all[diag.accountId] = diag
+  localStorage.setItem(IMPORT_DIAGNOSTICS_KEY, JSON.stringify(all))
+}
