@@ -33,7 +33,7 @@ const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ defau
 const FinanceAssistantPage = lazy(() => import('./pages/FinanceAssistantPage').then(m => ({ default: m.FinanceAssistantPage })))
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
-const SubcategoriesPage = lazy(() => import('./pages/SubcategoriesPage').then(m => ({ default: m.SubcategoriesPage })))
+// SubcategoriesPage kept for reference but route redirects to /categorias
 const CategoryRulesPage = lazy(() => import('./pages/CategoryRulesPage').then(m => ({ default: m.CategoryRulesPage })))
 const AccountsPage     = lazy(() => import('./pages/AccountsPage').then(m => ({ default: m.AccountsPage })))
 const CardsPage        = lazy(() => import('./pages/CardsPage').then(m => ({ default: m.CardsPage })))
@@ -102,7 +102,7 @@ function AppShell() {
     const r = sessionStorage.getItem('fin_route')
     if (!r) return '/'
     const known = ['/', '/conectar', '/lancamentos', '/orcamento', '/revisao', '/fechamento',
-      '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/subcategorias', '/regras',
+      '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/regras',
       '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
       '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes']
     return known.includes(r) ? r : '/'
@@ -143,7 +143,7 @@ function AppShell() {
       case '/assistente':    return <FinanceAssistantPage />
       case '/configuracoes': return <Settings onNavigate={navigate} />
       case '/categorias':    return <CategoriesPage onNavigate={navigate} />
-      case '/subcategorias': return <SubcategoriesPage />
+      case '/subcategorias': { navigate('/categorias'); return null }
       case '/regras':        return <CategoryRulesPage />
       case '/contas':        return <AccountsPage onNavigate={navigate} />
       case '/cartoes':       return <CardsPage onNavigate={navigate} />
