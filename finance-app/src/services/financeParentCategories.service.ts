@@ -26,6 +26,7 @@ export function overrideDefaultMacro(baseId: string, patch: {
   keywords?: string[]
   budgetClassification?: BudgetClassification
   group?: 'personal' | 'business'
+  icon?: string
 }): MacroCategory {
   const base = MACRO_CATEGORIES.find(m => m.id === baseId)
   if (!base) throw new Error(`MacroCategory ${baseId} not found in defaults`)
@@ -36,6 +37,7 @@ export function overrideDefaultMacro(baseId: string, patch: {
     keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
     budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
     group: patch.group ?? existing?.group ?? base.group ?? 'personal',
+    icon: patch.icon ?? existing?.icon ?? base.icon,
   }
   const idx = existing ? customs.findIndex(m => m.id === baseId) : -1
   if (idx >= 0) customs[idx] = next

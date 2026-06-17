@@ -47,6 +47,7 @@ export function overrideDefaultCategory(baseId: string, patch: {
   keywords?: string[]
   budgetClassification?: import('../types').BudgetClassification
   active?: boolean
+  icon?: string
 }): Category {
   const base = CATEGORIES.find(c => c.id === baseId)
   if (!base) throw new Error(`Category ${baseId} not found in defaults`)
@@ -57,6 +58,7 @@ export function overrideDefaultCategory(baseId: string, patch: {
     keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
     budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
     active: patch.active ?? existing?.active ?? base.active ?? true,
+    icon: patch.icon ?? existing?.icon ?? base.icon,
   }
   const idx = existing ? customs.findIndex(c => c.id === baseId) : -1
   if (idx >= 0) customs[idx] = next

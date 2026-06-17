@@ -232,4 +232,5 @@ export interface SubCategory {
   active: boolean
   createdAt: string
   keywords?: string[]
+  icon?: string
 }

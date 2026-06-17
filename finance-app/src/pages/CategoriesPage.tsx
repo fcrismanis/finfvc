@@ -1,4 +1,11 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import {
+  Utensils, Repeat, Home, Car, HeartPulse, GraduationCap, Briefcase, Smile,
+  PawPrint, Shield, ArrowLeftRight, Wallet, TrendingUp, Circle, ShoppingBag,
+  RefreshCw, Coins, Gift, BookOpen, Receipt, Sparkles, Ticket, Users, Wrench,
+  Plane, MoreHorizontal, PiggyBank, HandHeart, AlertTriangle, Pencil, Check,
+  X as XIcon, Minus, Star, Dumbbell, Music,
+} from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import {
@@ -9,7 +16,6 @@ import {
 import {
   loadCustomCategories,
   overrideDefaultCategory,
-  upsertCustomCategory,
 } from '../services/financeCategories.service'
 import { BUDGET_CLASSIFICATION_LABELS, matchCategoryByKeywords } from '../services/categoryHelpers'
 import { newSubCategoryId } from '../services/subcategory.service'
@@ -24,6 +30,29 @@ interface Props {
 
 type ActiveTab = 'expense' | 'income'
 
+// ─── Icon map ────────────────────────────────────────────────────────────────
+
+type IconComp = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
+
+const ICON_MAP: Record<string, IconComp> = {
+  'utensils': Utensils, 'repeat': Repeat, 'home': Home, 'car': Car,
+  'heart-pulse': HeartPulse, 'graduation-cap': GraduationCap, 'briefcase': Briefcase,
+  'smile': Smile, 'paw-print': PawPrint, 'shield': Shield,
+  'arrow-left-right': ArrowLeftRight, 'wallet': Wallet, 'trending-up': TrendingUp,
+  'shopping-bag': ShoppingBag, 'refresh-cw': RefreshCw, 'coins': Coins,
+  'gift': Gift, 'book-open': BookOpen, 'receipt': Receipt, 'sparkles': Sparkles,
+  'ticket': Ticket, 'users': Users, 'wrench': Wrench, 'plane': Plane,
+  'more-horizontal': MoreHorizontal, 'piggy-bank': PiggyBank, 'hand-heart': HandHeart,
+  'alert-triangle': AlertTriangle, 'star': Star, 'dumbbell': Dumbbell,
+  'music': Music, 'circle': Circle, 'minus': Minus,
+}
+const ICON_ENTRIES = Object.entries(ICON_MAP)
+
+function IconComp({ name, size = 14, color }: { name?: string; size?: number; color?: string }) {
+  const Ic = name ? (ICON_MAP[name] ?? Circle) : Minus
+  return <Ic size={size} color={color} strokeWidth={2} />
+}
+
 // ─── Budget classification helpers ───────────────────────────────────────────
 
 function essentialityToBudgetClass(e: SubCategoryEssentiality): BudgetClassification {
@@ -31,42 +60,41 @@ function essentialityToBudgetClass(e: SubCategoryEssentiality): BudgetClassifica
   if (e === 'non_essential') return 'non_essential'
   return 'none'
 }
-
 function budgetClassToEssentiality(bc: BudgetClassification): SubCategoryEssentiality {
   if (bc === 'essential') return 'essential'
   if (bc === 'non_essential') return 'non_essential'
   return 'inherit'
 }
 
-// ─── Modal state ──────────────────────────────────────────────────────────────
+// ─── Inline edit state ────────────────────────────────────────────────────────
 
-type EditKind = 'macro' | 'defaultMacro' | 'cat' | 'defaultCat' | 'sub' | null
-
-interface ModalState {
-  open: boolean
-  editKind: EditKind
-  editId?: string            // ID being edited (any kind)
-  parentMacroId: string      // '' = creating/editing parent category
+interface InlineEdit {
+  id: string
+  kind: 'macro' | 'defaultMacro' | 'defaultCat' | 'sub'
+  nameReadOnly: boolean
   name: string
-  type: ActiveTab
-  keywords: string[]
-  kwDraft: string
+  icon: string
+  kwText: string
   budgetClassification: BudgetClassification
-  group: 'personal' | 'business'
   active: boolean
 }
 
+// ─── Create modal state (new items only) ─────────────────────────────────────
+
+interface ModalState {
+  open: boolean
+  parentMacroId: string
+  name: string
+  type: ActiveTab
+  icon: string
+  keywords: string[]
+  kwDraft: string
+  budgetClassification: BudgetClassification
+}
+
 const MODAL_BLANK: ModalState = {
-  open: false,
-  editKind: null,
-  parentMacroId: '',
-  name: '',
-  type: 'expense',
-  keywords: [],
-  kwDraft: '',
-  budgetClassification: 'none',
-  group: 'personal',
-  active: true,
+  open: false, parentMacroId: '', name: '', type: 'expense',
+  icon: 'circle', keywords: [], kwDraft: '', budgetClassification: 'none',
 }
 
 // ─── Apply-keywords preview ───────────────────────────────────────────────────
@@ -78,18 +106,15 @@ interface KwSuggestion {
   subCategoryId?: string
   confidence: 'high' | 'medium' | 'low'
   matchedKeyword: string
-  matchedOn: string
 }
 
 // ─── Migration (idempotent) ───────────────────────────────────────────────────
 
-function migrateLegacySubcategoriesIntoCategories(subs: SubCategory[]): void {
-  const DONE_KEY = 'fin_subcats_migrated_v1'
-  if (localStorage.getItem(DONE_KEY)) return
-  localStorage.setItem(DONE_KEY, '1')
-  if (subs.length > 0) {
-    console.log(`[CategoriesPage] Legacy migration: ${subs.length} subcats now visible in category tree`)
-  }
+function migrateLegacy(subs: SubCategory[]): void {
+  const KEY = 'fin_subcats_migrated_v1'
+  if (localStorage.getItem(KEY)) return
+  localStorage.setItem(KEY, '1')
+  if (subs.length > 0) console.log(`[CategoriesPage] ${subs.length} subcats in category tree`)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -102,14 +127,12 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
   const [modal, setModal] = useState<ModalState>(MODAL_BLANK)
   const [customMacros, setCustomMacros] = useState<MacroCategory[]>(() => loadCustomMacroCategories())
   const [customCats, setCustomCats] = useState<Category[]>(() => loadCustomCategories())
+  const [inlineEdit, setInlineEdit] = useState<InlineEdit | null>(null)
   const [kwPreview, setKwPreview] = useState<KwSuggestion[] | null>(null)
   const [kwApplying, setKwApplying] = useState(false)
 
-  useEffect(() => {
-    migrateLegacySubcategoriesIntoCategories(subCategories)
-  }, [subCategories])
+  useEffect(() => { migrateLegacy(subCategories) }, [subCategories])
 
-  // Merged macros: custom overrides win over static defaults
   const allMacros = useMemo(() => {
     const customIds = new Set(customMacros.map(m => m.id))
     return [
@@ -123,7 +146,6 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     [allMacros, tab],
   )
 
-  // For a given macro: merged static+custom categories, then user SubCategories
   function getDefaultsForMacro(macroId: string): Category[] {
     const customIds = new Set(customCats.map(c => c.id))
     const merged = [
@@ -149,85 +171,133 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     })
   }
 
-  function inactiveSubCount(): number {
-    return subCategories.filter(s => !s.active).length
-  }
+  function inactiveSubCount() { return subCategories.filter(s => !s.active).length }
 
-  // ── keyword helpers ─────────────────────────────────────────────────────────
+  // ── inline edit ─────────────────────────────────────────────────────────────
 
-  function addKeyword(kw: string) {
-    const trimmed = kw.trim().toLowerCase()
-    if (!trimmed || modal.keywords.includes(trimmed)) return
-    setModal(m => ({ ...m, keywords: [...m.keywords, trimmed], kwDraft: '' }))
-  }
-
-  function removeKeyword(kw: string) {
-    setModal(m => ({ ...m, keywords: m.keywords.filter(k => k !== kw) }))
-  }
-
-  function handleKwKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault()
-      addKeyword(modal.kwDraft)
-    }
-  }
-
-  // ── open modal ──────────────────────────────────────────────────────────────
-
-  function openNewParent() {
-    setModal({ ...MODAL_BLANK, open: true, type: tab })
-  }
-
-  function openNewSub(macroId: string) {
-    setModal({ ...MODAL_BLANK, open: true, type: tab, parentMacroId: macroId })
-  }
-
-  function openEditMacro(macro: MacroCategory) {
-    setModal({
-      ...MODAL_BLANK,
-      open: true,
-      editKind: macro.isDefault ? 'defaultMacro' : 'macro',
-      editId: macro.id,
+  function startEditMacro(macro: MacroCategory) {
+    setInlineEdit({
+      id: macro.id,
+      kind: macro.isDefault ? 'defaultMacro' : 'macro',
+      nameReadOnly: macro.isDefault ?? false,
       name: macro.name,
-      type: (macro.tabType === 'income' ? 'income' : 'expense') as ActiveTab,
-      parentMacroId: '',
-      keywords: macro.keywords ?? [],
+      icon: macro.icon ?? 'circle',
+      kwText: (macro.keywords ?? []).join(', '),
       budgetClassification: macro.budgetClassification ?? 'none',
-      group: macro.group ?? 'personal',
       active: true,
     })
   }
 
-  function openEditCat(cat: Category) {
-    setModal({
-      ...MODAL_BLANK,
-      open: true,
-      editKind: 'defaultCat',
-      editId: cat.id,
+  function startEditCat(cat: Category) {
+    setInlineEdit({
+      id: cat.id,
+      kind: 'defaultCat',
+      nameReadOnly: true,
       name: cat.name,
-      type: tab,
-      parentMacroId: cat.macroCategoryId,
-      keywords: cat.keywords ?? [],
+      icon: cat.icon ?? 'circle',
+      kwText: (cat.keywords ?? []).join(', '),
       budgetClassification: cat.budgetClassification ?? 'none',
-      group: cat.group ?? 'personal',
       active: cat.active,
     })
   }
 
-  function openEditSub(sub: SubCategory) {
-    setModal({
-      ...MODAL_BLANK,
-      open: true,
-      editKind: 'sub',
-      editId: sub.id,
+  function startEditSub(sub: SubCategory) {
+    setInlineEdit({
+      id: sub.id,
+      kind: 'sub',
+      nameReadOnly: false,
       name: sub.name,
-      type: tab,
-      parentMacroId: sub.macroCategoryId,
-      keywords: sub.keywords ?? [],
+      icon: (sub as SubCategory & { icon?: string }).icon ?? 'circle',
+      kwText: (sub.keywords ?? []).join(', '),
       budgetClassification: essentialityToBudgetClass(sub.essentiality),
-      group: 'personal',
       active: sub.active,
     })
+  }
+
+  async function saveInlineEdit() {
+    const e = inlineEdit
+    if (!e) return
+    const kws = e.kwText.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+
+    switch (e.kind) {
+      case 'defaultMacro': {
+        const saved = overrideDefaultMacro(e.id, {
+          keywords: kws, budgetClassification: e.budgetClassification, icon: e.icon,
+        })
+        setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
+        break
+      }
+      case 'macro': {
+        const macro = allMacros.find(m => m.id === e.id)
+        const saved = upsertCustomMacroCategory({
+          id: e.id, name: e.name.trim(),
+          tabType: (macro?.tabType ?? (tab === 'expense' ? 'expense' : 'income')) as CategoryTabType,
+          icon: e.icon, keywords: kws, budgetClassification: e.budgetClassification,
+        })
+        setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
+        break
+      }
+      case 'defaultCat': {
+        const saved = overrideDefaultCategory(e.id, {
+          keywords: kws, budgetClassification: e.budgetClassification,
+          active: e.active, icon: e.icon,
+        })
+        setCustomCats(prev => [...prev.filter(c => c.id !== saved.id), saved])
+        break
+      }
+      case 'sub': {
+        const base = subCategories.find(s => s.id === e.id)
+        const sub: SubCategory & { icon?: string } = {
+          ...(base ?? { id: e.id, macroCategoryId: '', createdAt: new Date().toISOString() }),
+          id: e.id,
+          name: e.name.trim(),
+          essentiality: budgetClassToEssentiality(e.budgetClassification),
+          active: e.active,
+          keywords: kws,
+          icon: e.icon,
+        }
+        await saveSubCategory(sub as SubCategory)
+        break
+      }
+    }
+    setInlineEdit(null)
+  }
+
+  // ── create modal ─────────────────────────────────────────────────────────────
+
+  function addKeyword(kw: string) {
+    const t = kw.trim().toLowerCase()
+    if (!t || modal.keywords.includes(t)) return
+    setModal(m => ({ ...m, keywords: [...m.keywords, t], kwDraft: '' }))
+  }
+  function removeKeyword(kw: string) {
+    setModal(m => ({ ...m, keywords: m.keywords.filter(k => k !== kw) }))
+  }
+  function handleKwKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addKeyword(modal.kwDraft) }
+  }
+
+  async function saveModal() {
+    if (!modal.name.trim()) return
+    if (!modal.parentMacroId) {
+      const saved = upsertCustomMacroCategory({
+        name: modal.name.trim(),
+        tabType: modal.type === 'expense' ? 'expense' : 'income',
+        icon: modal.icon, keywords: modal.keywords,
+        budgetClassification: modal.budgetClassification,
+      })
+      setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
+    } else {
+      await saveSubCategory({
+        id: newSubCategoryId(), name: modal.name.trim(),
+        macroCategoryId: modal.parentMacroId,
+        essentiality: budgetClassToEssentiality(modal.budgetClassification),
+        active: true, createdAt: new Date().toISOString(),
+        keywords: modal.keywords,
+        ...({ icon: modal.icon } as object),
+      } as SubCategory)
+    }
+    setModal(MODAL_BLANK)
   }
 
   async function removeSubCat(id: string) {
@@ -235,121 +305,14 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     await deleteSubCategory(id)
   }
 
-  // ── save modal ──────────────────────────────────────────────────────────────
-
-  async function saveModal() {
-    if (!modal.name.trim()) return
-
-    switch (modal.editKind) {
-      case 'defaultMacro': {
-        // Patch only editable fields on a default macro
-        const saved = overrideDefaultMacro(modal.editId!, {
-          keywords: modal.keywords,
-          budgetClassification: modal.budgetClassification,
-          group: modal.group,
-        })
-        setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
-        break
-      }
-      case 'macro': {
-        const saved = upsertCustomMacroCategory({
-          id: modal.editId,
-          name: modal.name.trim(),
-          tabType: modal.type === 'expense' ? 'expense' : 'income',
-          keywords: modal.keywords,
-          budgetClassification: modal.budgetClassification,
-          group: modal.group,
-        })
-        setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
-        break
-      }
-      case null: {
-        // New parent category
-        if (!modal.parentMacroId) {
-          const tabType: CategoryTabType = modal.type === 'expense' ? 'expense' : 'income'
-          const saved = upsertCustomMacroCategory({
-            name: modal.name.trim(),
-            tabType,
-            keywords: modal.keywords,
-            budgetClassification: modal.budgetClassification,
-            group: modal.group,
-          })
-          setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
-          break
-        }
-        // New subcategory (fall through to sub logic)
-        const sub: SubCategory = {
-          id: newSubCategoryId(),
-          name: modal.name.trim(),
-          macroCategoryId: modal.parentMacroId,
-          essentiality: budgetClassToEssentiality(modal.budgetClassification),
-          active: true,
-          createdAt: new Date().toISOString(),
-          keywords: modal.keywords,
-        }
-        await saveSubCategory(sub)
-        break
-      }
-      case 'defaultCat': {
-        const saved = overrideDefaultCategory(modal.editId!, {
-          keywords: modal.keywords,
-          budgetClassification: modal.budgetClassification,
-          active: modal.active,
-        })
-        setCustomCats(prev => [...prev.filter(c => c.id !== saved.id), saved])
-        break
-      }
-      case 'cat': {
-        const saved = upsertCustomCategory({
-          id: modal.editId,
-          name: modal.name.trim(),
-          macroCategoryId: modal.parentMacroId,
-          keywords: modal.keywords,
-          budgetClassification: modal.budgetClassification,
-          group: modal.group,
-          active: modal.active,
-        })
-        setCustomCats(prev => [...prev.filter(c => c.id !== saved.id), saved])
-        break
-      }
-      case 'sub': {
-        const sub: SubCategory = {
-          id: modal.editId ?? newSubCategoryId(),
-          name: modal.name.trim(),
-          macroCategoryId: modal.parentMacroId,
-          essentiality: budgetClassToEssentiality(modal.budgetClassification),
-          active: modal.active,
-          createdAt: new Date().toISOString(),
-          keywords: modal.keywords,
-        }
-        await saveSubCategory(sub)
-        break
-      }
-    }
-
-    setModal(MODAL_BLANK)
-  }
-
-  // ── apply keywords to uncategorized transactions ────────────────────────────
+  // ── apply keywords ──────────────────────────────────────────────────────────
 
   function buildKwPreview() {
-    const uncategorized = transactions.filter(
-      t => !t.macroCategoryId && !t.manualCategoryOverride,
-    )
+    const uncategorized = transactions.filter(t => !t.macroCategoryId && !t.manualCategoryOverride)
     const suggestions: KwSuggestion[] = []
     for (const tx of uncategorized) {
       const match = matchCategoryByKeywords(tx.description)
-      if (match) {
-        suggestions.push({
-          tx,
-          macroCategoryId: match.macroCategoryId,
-          categoryId: match.categoryId,
-          subCategoryId: match.subCategoryId,
-          confidence: match.confidence,
-          matchedKeyword: match.matchedKeyword,
-          matchedOn: match.matchedOn,
-        })
-      }
+      if (match) suggestions.push({ tx, ...match })
     }
     setKwPreview(suggestions)
   }
@@ -357,7 +320,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
   async function applyKwSuggestions() {
     if (!kwPreview?.length) return
     setKwApplying(true)
-    const patches = kwPreview.map(s => ({
+    await updateTransactions(kwPreview.map(s => ({
       id: s.tx.id,
       patch: {
         macroCategoryId: s.macroCategoryId,
@@ -366,34 +329,21 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
         categorySuggestionSource: 'rule' as const,
         categoryConfidence: s.confidence,
       },
-    }))
-    await updateTransactions(patches, { markManual: false })
+    })), { markManual: false })
     setKwApplying(false)
     setKwPreview(null)
   }
 
   // ── render helpers ──────────────────────────────────────────────────────────
 
-  const kwRow = (keywords: string[] | undefined) => {
-    if (!keywords?.length) return null
-    return (
-      <span style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400, lineHeight: 1.4 }}>
-        {keywords.join(', ')}
-      </span>
-    )
-  }
-
-  const badgeClass = (bc: BudgetClassification) => {
+  const badgeStyle = (bc: BudgetClassification) => {
     if (bc === 'essential') return { bg: '#dcfce7', color: '#16a34a', border: '#bbf7d0' }
     if (bc === 'non_essential') return { bg: '#fef9c3', color: '#a16207', border: '#fef08a' }
     return null
   }
 
-  const confidenceColor = (c: 'high' | 'medium' | 'low') => {
-    if (c === 'high') return '#16a34a'
-    if (c === 'medium') return '#a16207'
-    return '#6b7280'
-  }
+  const confidenceColor = (c: 'high' | 'medium' | 'low') =>
+    c === 'high' ? '#16a34a' : c === 'medium' ? '#a16207' : '#6b7280'
 
   // ── main render ─────────────────────────────────────────────────────────────
 
@@ -405,28 +355,16 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Categorias</h1>
-            <div style={{ fontSize: 12.5, color: 'var(--faint)', marginTop: 2 }}>
-              Organize suas categorias por grupo
-            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--faint)', marginTop: 2 }}>Organize suas categorias por grupo</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={buildKwPreview}
-              style={{ fontSize: 11 }}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={buildKwPreview} style={{ fontSize: 11 }}>
               Verificar sem categoria
             </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowInactive(v => !v)}
-              style={{ fontSize: 11 }}
-            >
-              {showInactive
-                ? 'Ocultar desativadas'
-                : `Mostrar desativadas${inactiveSubCount() > 0 ? ` (${inactiveSubCount()})` : ''}`}
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowInactive(v => !v)} style={{ fontSize: 11 }}>
+              {showInactive ? 'Ocultar desativadas' : `Mostrar desativadas${inactiveSubCount() > 0 ? ` (${inactiveSubCount()})` : ''}`}
             </button>
-            <button className="btn btn-primary btn-sm" onClick={openNewParent}>
+            <button className="btn btn-primary btn-sm" onClick={() => setModal({ ...MODAL_BLANK, open: true, type: tab })}>
               + Nova Categoria
             </button>
           </div>
@@ -435,18 +373,14 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 2, borderBottom: '2px solid var(--line)' }}>
           {(['expense', 'income'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                padding: '8px 22px', fontSize: 13,
-                fontWeight: tab === t ? 750 : 500,
-                color: tab === t ? 'var(--accent)' : 'var(--faint)',
-                background: 'none', border: 'none',
-                borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-                marginBottom: -2, cursor: 'pointer', fontFamily: 'var(--ui)',
-              }}
-            >
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '8px 22px', fontSize: 13,
+              fontWeight: tab === t ? 750 : 500,
+              color: tab === t ? 'var(--accent)' : 'var(--faint)',
+              background: 'none', border: 'none',
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: -2, cursor: 'pointer', fontFamily: 'var(--ui)',
+            }}>
               {t === 'expense' ? 'Despesas' : 'Receitas'}
             </button>
           ))}
@@ -459,119 +393,168 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
             const userSubs = getSubCatsForMacro(macro.id)
             const expanded = expandedIds.has(macro.id)
             const totalCount = defaults.length + userSubs.length
+            const isEditingThis = inlineEdit?.id === macro.id
 
             return (
               <div key={macro.id} className="card" style={{ overflow: 'hidden' }}>
-                {/* Parent row */}
-                <div
-                  onClick={() => toggleExpand(macro.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '12px 16px', cursor: 'pointer',
-                    borderBottom: expanded ? '1px solid var(--line)' : 'none',
-                  }}
-                >
-                  <span style={{ width: 9, height: 9, borderRadius: 3, background: macro.color, flexShrink: 0 }} />
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{macro.name}</span>
-                      {macro.isDefault && <Chip label="Padrão" color={macro.color} />}
-                      {macro.isNeutral && <Chip label="Neutra" color="#9CA3AF" />}
-                    </div>
-                    {kwRow(macro.keywords)}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {totalCount > 0 && (
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        background: `${macro.color}18`, color: macro.color, border: `1px solid ${macro.color}30`,
-                      }}>{totalCount}</span>
-                    )}
-                    <button
-                      onClick={e => { e.stopPropagation(); openEditMacro(macro) }}
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: 10, padding: '2px 6px' }}
-                    >editar</button>
-                    <span style={{ fontSize: 11, color: 'var(--faint)', userSelect: 'none' }}>
-                      {expanded ? '▲' : '▼'}
+                {/* ── Parent row ── */}
+                {isEditingThis ? (
+                  <InlineEditRow
+                    edit={inlineEdit}
+                    color={macro.color}
+                    onChangeEdit={setInlineEdit}
+                    onSave={() => void saveInlineEdit()}
+                    onCancel={() => setInlineEdit(null)}
+                    showActive={false}
+                    borderBottom={expanded}
+                  />
+                ) : (
+                  <div
+                    onClick={() => toggleExpand(macro.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '11px 14px', cursor: 'pointer',
+                      borderBottom: expanded ? '1px solid var(--line)' : 'none',
+                    }}
+                  >
+                    <span style={{ color: macro.color, flexShrink: 0, display: 'flex' }}>
+                      <IconComp name={macro.icon} size={15} color={macro.color} />
                     </span>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{macro.name}</span>
+                        {macro.isNeutral && <Chip label="Neutra" color="#9CA3AF" />}
+                      </div>
+                      {macro.keywords?.length ? (
+                        <span style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.4 }}>
+                          {macro.keywords.join(', ')}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {totalCount > 0 && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                          background: `${macro.color}18`, color: macro.color, border: `1px solid ${macro.color}30`,
+                        }}>{totalCount}</span>
+                      )}
+                      <PencilBtn onClick={e => { e.stopPropagation(); startEditMacro(macro) }} />
+                      <span style={{ fontSize: 11, color: 'var(--faint)', userSelect: 'none' }}>
+                        {expanded ? '▲' : '▼'}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Expanded: defaults then user subs */}
+                {/* ── Expanded children ── */}
                 {expanded && (
                   <div style={{ background: 'var(--well)' }}>
-                    {/* Static/overridden default categories */}
+
+                    {/* Static default categories */}
                     {defaults.map((cat, i) => {
                       const bc = cat.budgetClassification ?? 'none'
-                      const badge = badgeClass(bc)
+                      const badge = badgeStyle(bc)
+                      const isEditingCat = inlineEdit?.id === cat.id
                       return (
                         <div key={cat.id} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 8,
-                          padding: '9px 16px 9px 36px',
                           borderBottom: (i < defaults.length - 1 || userSubs.length > 0) ? '1px solid var(--line)' : 'none',
                           opacity: cat.active ? 1 : 0.5,
                         }}>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{cat.name}</span>
-                              <Chip label="Padrão" color="#94a3b8" small />
-                              {!cat.active && <span style={{ fontSize: 10, color: 'var(--faint)' }}>desativada</span>}
+                          {isEditingCat ? (
+                            <InlineEditRow
+                              edit={inlineEdit}
+                              color={macro.color}
+                              onChangeEdit={setInlineEdit}
+                              onSave={() => void saveInlineEdit()}
+                              onCancel={() => setInlineEdit(null)}
+                              showActive
+                              indent
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 14px 9px 36px' }}>
+                              <span style={{ marginTop: 1, flexShrink: 0, color: macro.color, opacity: 0.6 }}>
+                                <IconComp name={cat.icon ?? macro.icon} size={13} color={macro.color} />
+                              </span>
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{cat.name}</span>
+                                  <Chip label="Padrão" color="#94a3b8" small />
+                                  {!cat.active && <span style={{ fontSize: 10, color: 'var(--faint)' }}>desativada</span>}
+                                </div>
+                                {cat.keywords?.length ? (
+                                  <span style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.4 }}>
+                                    {cat.keywords.join(', ')}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginTop: 1 }}>
+                                {badge && (
+                                  <span style={{
+                                    fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                                    background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                                  }}>{BUDGET_CLASSIFICATION_LABELS[bc]}</span>
+                                )}
+                                <PencilBtn onClick={() => startEditCat(cat)} />
+                              </div>
                             </div>
-                            {kwRow(cat.keywords)}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            {badge && (
-                              <span style={{
-                                fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                                background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                              }}>{BUDGET_CLASSIFICATION_LABELS[bc]}</span>
-                            )}
-                            <button
-                              onClick={() => openEditCat(cat)}
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: 10, padding: '2px 6px' }}
-                            >editar</button>
-                          </div>
+                          )}
                         </div>
                       )
                     })}
 
-                    {/* User-created SubCategories */}
+                    {/* User SubCategories */}
                     {userSubs.map((sub, i) => {
                       const bc = essentialityToBudgetClass(sub.essentiality)
-                      const badge = badgeClass(bc)
+                      const badge = badgeStyle(bc)
+                      const isEditingSub = inlineEdit?.id === sub.id
+                      const subIcon = (sub as SubCategory & { icon?: string }).icon
                       return (
                         <div key={sub.id} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 8,
-                          padding: '9px 16px 9px 36px',
                           borderBottom: i < userSubs.length - 1 ? '1px solid var(--line)' : 'none',
                           opacity: sub.active ? 1 : 0.5,
                         }}>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{sub.name}</span>
-                              {!sub.active && <span style={{ fontSize: 10, color: 'var(--faint)' }}>desativada</span>}
+                          {isEditingSub ? (
+                            <InlineEditRow
+                              edit={inlineEdit}
+                              color={macro.color}
+                              onChangeEdit={setInlineEdit}
+                              onSave={() => void saveInlineEdit()}
+                              onCancel={() => setInlineEdit(null)}
+                              showActive
+                              indent
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 14px 9px 36px' }}>
+                              <span style={{ marginTop: 1, flexShrink: 0, color: macro.color, opacity: 0.55 }}>
+                                <IconComp name={subIcon ?? macro.icon} size={13} color={macro.color} />
+                              </span>
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{sub.name}</span>
+                                  {!sub.active && <span style={{ fontSize: 10, color: 'var(--faint)' }}>desativada</span>}
+                                </div>
+                                {sub.keywords?.length ? (
+                                  <span style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.4 }}>
+                                    {sub.keywords.join(', ')}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginTop: 1 }}>
+                                {badge && (
+                                  <span style={{
+                                    fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                                    background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                                  }}>{BUDGET_CLASSIFICATION_LABELS[bc]}</span>
+                                )}
+                                <PencilBtn onClick={() => startEditSub(sub)} />
+                                <button
+                                  onClick={() => removeSubCat(sub.id)}
+                                  style={{ fontSize: 12, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', lineHeight: 1, fontFamily: 'var(--ui)' }}
+                                  title="Remover"
+                                >×</button>
+                              </div>
                             </div>
-                            {kwRow(sub.keywords)}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            {badge && (
-                              <span style={{
-                                fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                                background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                              }}>{BUDGET_CLASSIFICATION_LABELS[bc]}</span>
-                            )}
-                            <button
-                              onClick={() => openEditSub(sub)}
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: 10, padding: '2px 6px' }}
-                            >editar</button>
-                            <button
-                              onClick={() => removeSubCat(sub.id)}
-                              style={{ fontSize: 10, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)', padding: '2px 4px' }}
-                            >×</button>
-                          </div>
+                          )}
                         </div>
                       )
                     })}
@@ -582,10 +565,9 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
                       </div>
                     )}
 
-                    {/* Add sub */}
-                    <div style={{ padding: '8px 16px 8px 36px', borderTop: '1px solid var(--line)' }}>
+                    <div style={{ padding: '8px 14px 8px 36px', borderTop: '1px solid var(--line)' }}>
                       <button
-                        onClick={() => openNewSub(macro.id)}
+                        onClick={() => setModal({ ...MODAL_BLANK, open: true, type: tab, parentMacroId: macro.id })}
                         style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
                       >+ Adicionar subcategoria</button>
                     </div>
@@ -597,32 +579,202 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
         </div>
       </div>
 
-      {/* Edit/New Category Modal */}
+      {/* Create modal */}
       {modal.open && (
-        <CategoryModal
-          modal={modal}
-          setModal={setModal}
+        <CreateModal
+          modal={modal} setModal={setModal}
           allMacros={allMacros}
-          onAddKeyword={addKeyword}
-          onRemoveKeyword={removeKeyword}
+          onAddKeyword={addKeyword} onRemoveKeyword={removeKeyword}
           onKwKeyDown={handleKwKeyDown}
-          onSave={saveModal}
+          onSave={() => void saveModal()}
           onClose={() => setModal(MODAL_BLANK)}
         />
       )}
 
-      {/* Apply keywords preview modal */}
+      {/* Apply keywords preview */}
       {kwPreview !== null && (
         <KwPreviewModal
-          suggestions={kwPreview}
-          allMacros={allMacros}
-          applying={kwApplying}
-          confidenceColor={confidenceColor}
+          suggestions={kwPreview} allMacros={allMacros}
+          applying={kwApplying} confidenceColor={confidenceColor}
           onApply={() => void applyKwSuggestions()}
           onClose={() => setKwPreview(null)}
         />
       )}
     </main>
+  )
+}
+
+// ─── PencilBtn ────────────────────────────────────────────────────────────────
+
+function PencilBtn({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Editar"
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px',
+        borderRadius: 4, color: 'var(--faint)', display: 'flex', alignItems: 'center',
+        lineHeight: 1, flexShrink: 0,
+      }}
+      onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink-2)')}
+      onMouseLeave={e => (e.currentTarget.style.color = 'var(--faint)')}
+    >
+      <Pencil size={12} strokeWidth={2} />
+    </button>
+  )
+}
+
+// ─── InlineEditRow ────────────────────────────────────────────────────────────
+
+function InlineEditRow({
+  edit, color, onChangeEdit, onSave, onCancel, showActive, indent, borderBottom,
+}: {
+  edit: InlineEdit
+  color: string
+  onChangeEdit: React.Dispatch<React.SetStateAction<InlineEdit | null>>
+  onSave: () => void
+  onCancel: () => void
+  showActive: boolean
+  indent?: boolean
+  borderBottom?: boolean
+}) {
+  const pl = indent ? 36 : 14
+
+  const upd = (patch: Partial<InlineEdit>) => onChangeEdit(prev => prev ? { ...prev, ...patch } : prev)
+
+  return (
+    <div style={{
+      padding: `10px 14px 12px ${pl}px`,
+      background: 'var(--accent-soft)',
+      borderBottom: borderBottom ? '1px solid var(--line)' : 'none',
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      {/* Row 1: icon + name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <IconPicker value={edit.icon} onChange={icon => upd({ icon })} color={color} />
+        {edit.nameReadOnly ? (
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{edit.name}</span>
+        ) : (
+          <input
+            value={edit.name}
+            onChange={e => upd({ name: e.target.value })}
+            className="login-field"
+            style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}
+            autoFocus
+          />
+        )}
+        <button
+          onClick={onSave}
+          style={{
+            background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6,
+            padding: '4px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+          }}
+        ><Check size={11} />Salvar</button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'none', border: '1px solid var(--line)', borderRadius: 6,
+            padding: '4px 8px', fontSize: 11.5, color: 'var(--faint)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', flexShrink: 0,
+          }}
+        ><XIcon size={11} /></button>
+      </div>
+
+      {/* Row 2: keywords */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>Keywords</span>
+        <input
+          value={edit.kwText}
+          onChange={e => upd({ kwText: e.target.value })}
+          placeholder="supermercado, delivery, mercado..."
+          className="login-field"
+          style={{ fontSize: 11.5, flex: 1 }}
+        />
+      </div>
+
+      {/* Row 3: budget + active */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>Orçamento</span>
+        <select
+          value={edit.budgetClassification}
+          onChange={e => upd({ budgetClassification: e.target.value as BudgetClassification })}
+          className="ledger-select"
+          style={{ fontSize: 11.5 }}
+        >
+          <option value="none">Sem classificação</option>
+          <option value="essential">Essencial</option>
+          <option value="non_essential">Não essencial</option>
+        </select>
+        {showActive && (
+          <>
+            <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginLeft: 8 }}>Status</span>
+            <ToggleGroup
+              options={[{ value: 'true', label: 'Ativo' }, { value: 'false', label: 'Inativo' }]}
+              value={edit.active ? 'true' : 'false'}
+              onChange={v => upd({ active: v === 'true' })}
+              small
+            />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── IconPicker ───────────────────────────────────────────────────────────────
+
+function IconPicker({ value, onChange, color }: { value: string; onChange: (v: string) => void; color: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Mudar ícone"
+        style={{
+          width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', cursor: 'pointer',
+          background: `${color}18`, border: `1px solid ${color}30`, color,
+        }}
+      >
+        <IconComp name={value} size={14} color={color} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 34, left: 0, zIndex: 200,
+          background: 'var(--card-bg)', border: '1px solid var(--line)', borderRadius: 10,
+          padding: 8, display: 'grid', gridTemplateColumns: 'repeat(6, 30px)', gap: 3,
+          boxShadow: '0 6px 24px rgba(0,0,0,.14)',
+        }}>
+          {ICON_ENTRIES.map(([name, Ic]) => (
+            <button
+              key={name}
+              onClick={() => { onChange(name); setOpen(false) }}
+              title={name}
+              style={{
+                width: 30, height: 30, borderRadius: 6, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer', border: 'none',
+                background: value === name ? 'var(--accent-soft)' : 'none',
+                color: value === name ? 'var(--accent)' : 'var(--ink-2)',
+              }}
+            >
+              <Ic size={14} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -632,17 +784,16 @@ function Chip({ label, color, small }: { label: string; color: string; small?: b
   return (
     <span style={{
       fontSize: small ? 8.5 : 9, fontWeight: 700, padding: small ? '1px 4px' : '1px 5px',
-      borderRadius: 3, background: `${color}18`, color,
-      border: `1px solid ${color}30`, letterSpacing: '.04em',
+      borderRadius: 3, background: `${color}18`, color, border: `1px solid ${color}30`, letterSpacing: '.04em',
     }}>
       {label.toUpperCase()}
     </span>
   )
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// ─── CreateModal ──────────────────────────────────────────────────────────────
 
-interface ModalProps {
+interface CreateModalProps {
   modal: ModalState
   setModal: React.Dispatch<React.SetStateAction<ModalState>>
   allMacros: MacroCategory[]
@@ -653,18 +804,9 @@ interface ModalProps {
   onClose: () => void
 }
 
-function CategoryModal({
-  modal, setModal, allMacros,
-  onAddKeyword, onRemoveKeyword, onKwKeyDown,
-  onSave, onClose,
-}: ModalProps) {
-  const isEditing = Boolean(modal.editKind)
+function CreateModal({ modal, setModal, allMacros, onAddKeyword, onRemoveKeyword, onKwKeyDown, onSave, onClose }: CreateModalProps) {
   const isParent = !modal.parentMacroId
-  const isDefaultItem = modal.editKind === 'defaultMacro' || modal.editKind === 'defaultCat'
-  const showActiveToggle = isEditing && (modal.editKind === 'sub' || modal.editKind === 'defaultCat' || modal.editKind === 'cat')
   const typeLabel = isParent ? 'categoria' : 'subcategoria'
-  const title = isEditing ? `Editar ${typeLabel}` : `Nova ${typeLabel}`
-
   const parentOptions = allMacros
     .filter(m => m.tabType === modal.type || m.tabType === 'both')
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -673,49 +815,30 @@ function CategoryModal({
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
-        background: 'rgba(16,15,10,.55)',
-        backdropFilter: 'blur(3px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16,
+        background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
       }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div style={{
         background: 'var(--card-bg)', borderRadius: 14,
         boxShadow: '0 12px 40px rgba(0,0,0,.22)',
-        width: '100%', maxWidth: 480,
-        maxHeight: '90vh', overflowY: 'auto',
+        width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto',
         display: 'flex', flexDirection: 'column',
       }}>
-        {/* Header */}
         <div style={{
           padding: '18px 22px 14px', borderBottom: '1px solid var(--line)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1,
         }}>
-          <h3 style={{ fontSize: 15, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>{title}</h3>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--faint)', lineHeight: 1, padding: '0 2px' }}
-          >×</button>
+          <h3 style={{ fontSize: 15, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>Nova {typeLabel}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--faint)', lineHeight: 1, padding: '0 2px' }}>×</button>
         </div>
 
-        {/* Body */}
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Grupo */}
-          {!isDefaultItem && (
-            <Field label="Grupo">
-              <ToggleGroup
-                options={[{ value: 'personal', label: 'Pessoal' }, { value: 'business', label: 'Negócio' }]}
-                value={modal.group}
-                onChange={v => setModal(m => ({ ...m, group: v as 'personal' | 'business' }))}
-              />
-            </Field>
-          )}
-
-          {/* Tipo (only when creating parent, not editing default) */}
-          {isParent && !isDefaultItem && (
+          {/* Tipo */}
+          {isParent && (
             <Field label="Tipo">
               <ToggleGroup
                 options={[{ value: 'expense', label: 'Despesa' }, { value: 'income', label: 'Receita' }]}
@@ -725,49 +848,38 @@ function CategoryModal({
             </Field>
           )}
 
-          {/* Nome — read-only for default items */}
-          {!isDefaultItem ? (
-            <>
-              {/* Categoria Pai (shown only when not editing parent and not a default item) */}
-              {(!isEditing || !isParent) && (
-                <Field label="Categoria Pai">
-                  <select
-                    value={modal.parentMacroId}
-                    onChange={e => setModal(m => ({ ...m, parentMacroId: e.target.value }))}
-                    className="ledger-select"
-                    style={{ fontSize: 12.5, width: '100%' }}
-                  >
-                    <option value="">Nenhuma (criar categoria principal)</option>
-                    {parentOptions.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              <Field label="Nome">
-                <input
-                  value={modal.name}
-                  onChange={e => setModal(m => ({ ...m, name: e.target.value }))}
-                  onKeyDown={e => { if (e.key === 'Enter') void onSave() }}
-                  placeholder={isParent ? 'Ex: Alimentação' : 'Ex: Açougue'}
-                  className="login-field"
-                  style={{ fontSize: 13, width: '100%' }}
-                  autoFocus
-                />
-              </Field>
-            </>
-          ) : (
-            <Field label="Nome">
-              <div style={{
-                padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)',
-                background: 'var(--well)', fontSize: 13, color: 'var(--ink-2)',
-              }}>
-                {modal.name}
-              </div>
+          {/* Categoria Pai */}
+          {!isParent && (
+            <Field label="Categoria Pai">
+              <select
+                value={modal.parentMacroId}
+                onChange={e => setModal(m => ({ ...m, parentMacroId: e.target.value }))}
+                className="ledger-select"
+                style={{ fontSize: 12.5, width: '100%' }}
+              >
+                <option value="">Nenhuma (criar categoria principal)</option>
+                {parentOptions.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
             </Field>
           )}
 
-          {/* Classificação do Orçamento */}
+          {/* Ícone + Nome */}
+          <Field label="Nome">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <IconPicker value={modal.icon} onChange={v => setModal(m => ({ ...m, icon: v }))} color="var(--accent)" />
+              <input
+                value={modal.name}
+                onChange={e => setModal(m => ({ ...m, name: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') void onSave() }}
+                placeholder={isParent ? 'Ex: Alimentação' : 'Ex: Açougue'}
+                className="login-field"
+                style={{ fontSize: 13, flex: 1 }}
+                autoFocus
+              />
+            </div>
+          </Field>
+
+          {/* Classificação */}
           <Field label="Classificação do Orçamento">
             <select
               value={modal.budgetClassification}
@@ -781,29 +893,16 @@ function CategoryModal({
             </select>
           </Field>
 
-          {/* Ativo toggle (only for editable active items) */}
-          {showActiveToggle && (
-            <Field label="Status">
-              <ToggleGroup
-                options={[{ value: 'true', label: 'Ativo' }, { value: 'false', label: 'Inativo' }]}
-                value={modal.active ? 'true' : 'false'}
-                onChange={v => setModal(m => ({ ...m, active: v === 'true' }))}
-              />
-            </Field>
-          )}
-
-          {/* Palavras-chave */}
+          {/* Keywords */}
           <Field label="Palavras-chave para organização automática">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{
                 display: 'flex', flexWrap: 'wrap', gap: 5, minHeight: 36,
                 padding: '5px 8px', border: '1px solid var(--line)', borderRadius: 8,
-                background: 'var(--well)', cursor: 'text',
+                background: 'var(--well)',
               }}>
                 {modal.keywords.length === 0 && (
-                  <span style={{ fontSize: 11.5, color: 'var(--faint)', alignSelf: 'center' }}>
-                    Nenhuma palavra-chave adicionada
-                  </span>
+                  <span style={{ fontSize: 11.5, color: 'var(--faint)', alignSelf: 'center' }}>Nenhuma palavra-chave</span>
                 )}
                 {modal.keywords.map(kw => (
                   <span key={kw} style={{
@@ -813,10 +912,7 @@ function CategoryModal({
                     border: '1px solid var(--accent-border)',
                   }}>
                     {kw}
-                    <button
-                      onClick={() => onRemoveKeyword(kw)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, color: 'var(--faint)' }}
-                    >×</button>
+                    <button onClick={() => onRemoveKeyword(kw)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, color: 'var(--faint)' }}>×</button>
                   </span>
                 ))}
               </div>
@@ -825,33 +921,26 @@ function CategoryModal({
                   value={modal.kwDraft}
                   onChange={e => setModal(m => ({ ...m, kwDraft: e.target.value }))}
                   onKeyDown={onKwKeyDown}
-                  placeholder="Ex: supermercado — pressione Enter para adicionar"
+                  placeholder="Ex: supermercado — Enter para adicionar"
                   className="login-field"
                   style={{ fontSize: 12, flex: 1 }}
                 />
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => onAddKeyword(modal.kwDraft)}
-                  style={{ flexShrink: 0 }}
-                >Adicionar</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => onAddKeyword(modal.kwDraft)} style={{ flexShrink: 0 }}>
+                  Adicionar
+                </button>
               </div>
             </div>
           </Field>
         </div>
 
-        {/* Footer */}
         <div style={{
           padding: '14px 22px', borderTop: '1px solid var(--line)',
           display: 'flex', justifyContent: 'flex-end', gap: 8,
           position: 'sticky', bottom: 0, background: 'var(--card-bg)',
         }}>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancelar</button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => void onSave()}
-            disabled={!isDefaultItem && !modal.name.trim()}
-          >
-            {isEditing ? 'Salvar alterações' : `Criar ${typeLabel}`}
+          <button className="btn btn-primary btn-sm" onClick={() => void onSave()} disabled={!modal.name.trim()}>
+            Criar {typeLabel}
           </button>
         </div>
       </div>
@@ -872,97 +961,63 @@ function KwPreviewModal({
   onClose: () => void
 }) {
   const macroMap = useMemo(() => new Map(allMacros.map(m => [m.id, m])), [allMacros])
-
   return (
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
         background: 'rgba(16,15,10,.55)', backdropFilter: 'blur(3px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
       }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div style={{
         background: 'var(--card-bg)', borderRadius: 14,
         boxShadow: '0 12px 40px rgba(0,0,0,.22)',
-        width: '100%', maxWidth: 620,
-        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        width: '100%', maxWidth: 620, maxHeight: '90vh', display: 'flex', flexDirection: 'column',
       }}>
-        {/* Header */}
         <div style={{
           padding: '18px 22px 14px', borderBottom: '1px solid var(--line)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1,
         }}>
           <div>
-            <h3 style={{ fontSize: 15, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>
-              Lançamentos sem categoria
-            </h3>
+            <h3 style={{ fontSize: 15, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>Lançamentos sem categoria</h3>
             <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3 }}>
               {suggestions.length === 0
                 ? 'Nenhum lançamento encontrado com sugestão de keyword.'
                 : `${suggestions.length} sugestão${suggestions.length !== 1 ? 'ões' : ''} encontrada${suggestions.length !== 1 ? 's' : ''}`}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--faint)', lineHeight: 1, padding: '0 2px' }}
-          >×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--faint)', lineHeight: 1, padding: '0 2px' }}>×</button>
         </div>
-
-        {/* Body */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 0' }}>
           {suggestions.length === 0 ? (
             <div style={{ padding: '20px 22px', fontSize: 13, color: 'var(--faint)', textAlign: 'center' }}>
               Todos os lançamentos já têm categoria ou nenhuma keyword correspondeu.
             </div>
-          ) : (
-            suggestions.map(s => {
-              const macro = macroMap.get(s.macroCategoryId)
-              return (
-                <div key={s.tx.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12,
-                  padding: '10px 22px', borderBottom: '1px solid var(--line)',
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 2 }}>
-                      {s.tx.description}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--faint)' }}>
-                      {s.tx.competenceDate} · R$ {Math.abs(s.tx.amount).toFixed(2)}
-                    </div>
-                  </div>
-                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: macro?.color ?? 'var(--ink-2)' }}>
-                      {macro?.name ?? s.macroCategoryId}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: 'var(--faint)' }}>
-                      via <em>{s.matchedKeyword}</em>
-                    </div>
-                    <div style={{ fontSize: 10, color: confidenceColor(s.confidence), fontWeight: 700 }}>
-                      {s.confidence === 'high' ? 'Alta' : s.confidence === 'medium' ? 'Média' : 'Baixa'} confiança
-                    </div>
+          ) : suggestions.map(s => {
+            const macro = macroMap.get(s.macroCategoryId)
+            return (
+              <div key={s.tx.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 22px', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 2 }}>{s.tx.description}</div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)' }}>{s.tx.competenceDate} · R$ {Math.abs(s.tx.amount).toFixed(2)}</div>
+                </div>
+                <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: macro?.color ?? 'var(--ink-2)' }}>{macro?.name ?? s.macroCategoryId}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--faint)' }}>via <em>{s.matchedKeyword}</em></div>
+                  <div style={{ fontSize: 10, color: confidenceColor(s.confidence), fontWeight: 700 }}>
+                    {s.confidence === 'high' ? 'Alta' : s.confidence === 'medium' ? 'Média' : 'Baixa'} confiança
                   </div>
                 </div>
-              )
-            })
-          )}
+              </div>
+            )
+          })}
         </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: '14px 22px', borderTop: '1px solid var(--line)',
-          display: 'flex', justifyContent: 'flex-end', gap: 8,
-          position: 'sticky', bottom: 0, background: 'var(--card-bg)',
-        }}>
+        <div style={{ padding: '14px 22px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8, position: 'sticky', bottom: 0, background: 'var(--card-bg)' }}>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
           {suggestions.length > 0 && (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={onApply}
-              disabled={applying}
-            >
+            <button className="btn btn-primary btn-sm" onClick={onApply} disabled={applying}>
               {applying ? 'Aplicando…' : `Aplicar ${suggestions.length} sugestão${suggestions.length !== 1 ? 'ões' : ''}`}
             </button>
           )}
@@ -972,15 +1027,12 @@ function KwPreviewModal({
   )
 }
 
-// ─── Field row ────────────────────────────────────────────────────────────────
+// ─── Field ────────────────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <label style={{
-        fontSize: 10.5, fontWeight: 700, color: 'var(--faint)',
-        textTransform: 'uppercase', letterSpacing: '.06em',
-      }}>
+      <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
         {label}
       </label>
       {children}
@@ -988,12 +1040,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-// ─── Toggle group ─────────────────────────────────────────────────────────────
+// ─── ToggleGroup ──────────────────────────────────────────────────────────────
 
-function ToggleGroup({ options, value, onChange }: {
+function ToggleGroup({ options, value, onChange, small }: {
   options: { value: string; label: string }[]
   value: string
   onChange: (v: string) => void
+  small?: boolean
 }) {
   return (
     <div style={{ display: 'flex', gap: 4 }}>
@@ -1002,7 +1055,7 @@ function ToggleGroup({ options, value, onChange }: {
           key={o.value}
           onClick={() => onChange(o.value)}
           style={{
-            padding: '5px 16px', fontSize: 12.5,
+            padding: small ? '3px 10px' : '5px 16px', fontSize: small ? 11 : 12.5,
             fontWeight: value === o.value ? 700 : 400,
             color: value === o.value ? 'var(--accent)' : 'var(--ink-2)',
             background: value === o.value ? 'var(--accent-soft)' : 'var(--card-bg)',
