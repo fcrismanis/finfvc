@@ -22,7 +22,7 @@ export function CardsPage({ onNavigate }: Props) {
       .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl }))
   )
 
-  const totalBill  = creditCards.reduce((s, a) => s + a.balance, 0)
+  const totalBill  = creditCards.reduce((s, a) => s + (a.balance ?? 0), 0)
   const totalLimit = creditCards.reduce((s, a) => s + (a.limit ?? 0), 0)
 
   return (
@@ -119,7 +119,7 @@ export function CardsPage({ onNavigate }: Props) {
                         </div>
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: 'var(--crit)' }}>
-                        {fmtBRL(card.balance)}
+                        {card.balance !== null ? fmtBRL(card.balance) : '—'}
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--ink-2)' }}>
                         {card.limit != null ? fmtBRL(card.limit) : '—'}

@@ -22,7 +22,7 @@ export function AccountsPage({ onNavigate }: Props) {
       .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl }))
   )
 
-  const totalBalance = bankAccounts.reduce((s, a) => s + a.balance, 0)
+  const totalBalance = bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
 
   return (
     <main className="page-shell">
@@ -110,8 +110,8 @@ export function AccountsPage({ onNavigate }: Props) {
                           <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{acc.connectorName}</span>
                         </div>
                       </td>
-                      <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: acc.balance >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
-                        {fmtBRL(acc.balance)}
+                      <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: (acc.balance ?? 0) >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                        {acc.balance !== null ? fmtBRL(acc.balance) : '—'}
                       </td>
                       <td className="table-td">
                         {acc.lastSyncAt ? (

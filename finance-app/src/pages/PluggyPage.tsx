@@ -20,6 +20,7 @@ import {
   recoverPluggyStorage,
   hasPluggyConnectionsBackup,
   restorePluggyConnectionsFromBackup,
+  updateAccountDiagnostics,
   type DiagnosticResult,
   type RecoveryResult,
 } from '../services/pluggyStorage.service'
@@ -494,6 +495,16 @@ export function PluggyPage() {
       pendingPersistTraceRef.current = result.newTxs.map(tx => tx.id)
       await appendTransactions(result.newTxs as Transaction[])
       updateConnectionSyncMeta(itemId, accountId, result.newTxs.length)
+      updateAccountDiagnostics({
+        accountId,
+        accountName: sync.accountName,
+        lastSyncAt: new Date().toISOString(),
+        rawReturnedCount: result.rawReturnedCount,
+        newTxsCount: result.newTxs.length,
+        duplicateCount: result.duplicateCount,
+        missingFinancialDateCount: result.missingFinancialDateCount,
+        dateConfidenceCounts: result.dateConfidenceCounts,
+      })
       setConnections(getLocalConnections())
       setSync(s => s ? { ...s, phase: 'done' } : s)
     } catch (err) {
@@ -666,9 +677,17 @@ export function PluggyPage() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <div style={{ textAlign: 'right' }}>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(acc.balance)}</p>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: acc.balance !== null ? 'var(--ink)' : 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
+                                {acc.balance !== null ? fmtBRL(acc.balance) : 'Saldo indisponível'}
+                              </p>
                               {acc.type === 'CREDIT' && acc.limit != null && (
-                                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Limite: {fmtBRL(acc.limit)}</p>
+                                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
+                                  Limite: {fmtBRL(acc.limit)}
+                                  {acc.availableLimit != null && ` · Disponível: ${fmtBRL(acc.availableLimit)}`}
+                                </p>
+                              )}
+                              {acc.type === 'BANK' && acc.availableBalance !== null && acc.availableBalance !== acc.balance && (
+                                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Disponível: {fmtBRL(acc.availableBalance)}</p>
                               )}
                             </div>
                             <button
@@ -692,8 +711,8 @@ export function PluggyPage() {
         {/* Summary chips */}
         {connections.length > 0 && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {bankAccounts.length > 0 && <SummaryChip label="Contas bancárias" value={fmtBRL(bankAccounts.reduce((s, a) => s + a.balance, 0))} />}
-            {creditCards.length > 0 && <SummaryChip label="Cartões — fatura" value={fmtBRL(creditCards.reduce((s, a) => s + a.balance, 0))} />}
+            {bankAccounts.length > 0 && <SummaryChip label="Contas bancárias" value={fmtBRL(bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
+            {creditCards.length > 0 && <SummaryChip label="Cartões — fatura" value={fmtBRL(creditCards.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
           </div>
         )}
 
@@ -1063,6 +1082,32 @@ function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: SyncModa
               </div>
             )}
 
+            {result.rawReturnedCount > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 600 }}>Confiança de data:</span>
+                {result.dateConfidenceCounts.high > 0 && (
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: 'var(--pos-soft)', border: '1px solid var(--pos)40', color: 'var(--pos)', fontWeight: 600 }}>
+                    alta {result.dateConfidenceCounts.high}
+                  </span>
+                )}
+                {result.dateConfidenceCounts.medium > 0 && (
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', fontWeight: 600 }}>
+                    média {result.dateConfidenceCounts.medium}
+                  </span>
+                )}
+                {result.dateConfidenceCounts.low > 0 && (
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: 'var(--warn-soft, var(--well))', border: '1px solid var(--warn)40', color: 'var(--warn)', fontWeight: 600 }}>
+                    baixa {result.dateConfidenceCounts.low}
+                  </span>
+                )}
+                {result.missingFinancialDateCount > 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }}>
+                    · {result.missingFinancialDateCount} sem data financeira
+                  </span>
+                )}
+              </div>
+            )}
+
             {result.newTxs.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)30' }}>
@@ -1284,9 +1329,22 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
     setPhase('importing')
     try {
       await appendTransactions(allNewTxs)
+      const syncedAt = new Date().toISOString()
       for (const r of accountResults) {
-        if (r.status === 'done' && r.result && r.result.newTxs.length > 0) {
-          updateConnectionSyncMeta(r.itemId, r.accountId, r.result.newTxs.length)
+        if (r.status === 'done' && r.result) {
+          if (r.result.newTxs.length > 0) {
+            updateConnectionSyncMeta(r.itemId, r.accountId, r.result.newTxs.length)
+          }
+          updateAccountDiagnostics({
+            accountId: r.accountId,
+            accountName: r.accountName,
+            lastSyncAt: syncedAt,
+            rawReturnedCount: r.result.rawReturnedCount,
+            newTxsCount: r.result.newTxs.length,
+            duplicateCount: r.result.duplicateCount,
+            missingFinancialDateCount: r.result.missingFinancialDateCount,
+            dateConfidenceCounts: r.result.dateConfidenceCounts,
+          })
         }
       }
       onSyncComplete()
@@ -1434,13 +1492,34 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Por conta</p>
               {accountResults.map(r => (
-                <div key={r.accountId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
-                  <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{r.accountName}</span>
-                  <span style={{ fontWeight: 700, color: r.status === 'error' ? 'var(--crit)' : (r.result?.newTxs.length ?? 0) === 0 ? 'var(--faint)' : 'var(--pos)' }}>
-                    {r.status === 'error'
-                      ? (r.error ?? 'Erro')
-                      : `${r.result?.newTxs.length ?? 0} novas · ${r.result?.duplicateCount ?? 0} dup`}
-                  </span>
+                <div key={r.accountId} style={{ padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{r.accountName}</span>
+                    <span style={{ fontWeight: 700, color: r.status === 'error' ? 'var(--crit)' : (r.result?.newTxs.length ?? 0) === 0 ? 'var(--faint)' : 'var(--pos)' }}>
+                      {r.status === 'error'
+                        ? (r.error ?? 'Erro')
+                        : `${r.result?.newTxs.length ?? 0} novas · ${r.result?.duplicateCount ?? 0} dup`}
+                    </span>
+                  </div>
+                  {r.result && r.result.rawReturnedCount > 0 && (
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+                      {r.result.dateConfidenceCounts.high > 0 && (
+                        <span style={{ fontSize: 9.5, padding: '0 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', fontWeight: 600, border: '1px solid var(--pos)30' }}>
+                          data alta: {r.result.dateConfidenceCounts.high}
+                        </span>
+                      )}
+                      {r.result.dateConfidenceCounts.medium > 0 && (
+                        <span style={{ fontSize: 9.5, padding: '0 5px', borderRadius: 3, background: 'var(--well)', color: 'var(--faint)', fontWeight: 600, border: '1px solid var(--line)' }}>
+                          média: {r.result.dateConfidenceCounts.medium}
+                        </span>
+                      )}
+                      {r.result.missingFinancialDateCount > 0 && (
+                        <span style={{ fontSize: 9.5, padding: '0 5px', borderRadius: 3, background: 'var(--warn-soft, var(--well))', color: 'var(--warn)', fontWeight: 600, border: '1px solid var(--warn)40' }}>
+                          sem data: {r.result.missingFinancialDateCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
