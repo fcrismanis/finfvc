@@ -6,6 +6,161 @@ import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import type { Transaction } from '../types'
 
+// ── Bill payment fix ──────────────────────────────────────────────────────────
+
+function isBillPaymentCandidate(tx: Transaction): boolean {
+  // An expense classified as operational_income is always wrong.
+  // These are card bill payments / boleto payments misclassified by Pluggy.
+  return tx.type === 'expense' && tx.classificationType === 'operational_income'
+}
+
+function BillPaymentFixPanel() {
+  const { transactions } = useData()
+  const [scanned, setScanned] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [done, setDone] = useState<{ fixed: number } | null>(null)
+
+  const candidates = useMemo(
+    () => (scanned ? transactions.filter(isBillPaymentCandidate) : []),
+    [scanned, transactions],
+  )
+
+  function scan() {
+    setScanned(true)
+    setDone(null)
+  }
+
+  function applyFix() {
+    if (DATA_PROVIDER === 'supabase') return
+    setApplying(true)
+    const raw = localStorage.getItem('finance_transactions')
+    if (!raw) { setApplying(false); return }
+
+    const all: Transaction[] = JSON.parse(raw)
+
+    // Backup before mutating
+    const backupKey = `finance_transactions_backup_bilfix_${Date.now()}`
+    localStorage.setItem(backupKey, raw)
+
+    const candidateIds = new Set(candidates.map(t => t.id))
+    const now = new Date().toISOString()
+
+    const updated = all.map(tx => {
+      if (!candidateIds.has(tx.id)) return tx
+      return {
+        ...tx,
+        classificationType: 'neutral' as const,
+        macroCategoryId: 'mac_neutra_desp',
+        categoryId: 'cat_pag_cartao',
+        includeInOperationalResult: false,
+        includeInBudget: false,
+        includeInCashflow: true,
+        updatedAt: now,
+      }
+    })
+
+    localStorage.setItem('finance_transactions', JSON.stringify(updated))
+    setApplying(false)
+    setDone({ fixed: candidateIds.size })
+    setScanned(false)
+    window.location.reload()
+  }
+
+  return (
+    <div className="card" style={{ padding: '18px 22px' }}>
+      <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>
+        Corrigir pagamentos de fatura
+      </h3>
+      <p style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 12, lineHeight: 1.6 }}>
+        Detecta transações do tipo <strong>expense</strong> classificadas como{' '}
+        <code style={{ fontSize: 11 }}>operational_income</code> — sempre incorreto.
+        Pagamentos de fatura de cartão (PAG BOLETO, PAG TIT INT, Pagamento de boleto) caem nesse padrão.
+        Preview obrigatório antes de aplicar. Backup automático salvo em localStorage.
+      </p>
+
+      {done && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--ok-soft)', border: '1px solid var(--ok)', fontSize: 12.5, color: 'var(--ok)', marginBottom: 12 }}>
+          Concluído: {done.fixed} lançamento(s) corrigido(s) → neutral / Pagamento de Cartão.
+          Backup salvo em <code style={{ fontSize: 11 }}>finance_transactions_backup_bilfix_*</code>.
+        </div>
+      )}
+
+      {!scanned ? (
+        <button className="btn btn-secondary btn-sm" onClick={scan} disabled={transactions.length === 0}>
+          Escanear lançamentos ({transactions.length} total)
+        </button>
+      ) : candidates.length === 0 ? (
+        <div>
+          <p style={{ fontSize: 12.5, color: 'var(--ok)', fontWeight: 600, marginBottom: 8 }}>
+            Nenhum lançamento com classificação incoerente encontrado.
+          </p>
+          <button className="btn btn-secondary btn-sm" onClick={() => setScanned(false)}>Voltar</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--warn)' }}>
+              {candidates.length} lançamento(s) encontrado(s)
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--faint)' }}>
+              expense + operational_income → neutral + cat_pag_cartao
+            </span>
+          </div>
+
+          <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+              <thead>
+                <tr style={{ background: 'var(--well)', textAlign: 'left' }}>
+                  <th style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Data</th>
+                  <th style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--ink-2)' }}>Descrição</th>
+                  <th style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--ink-2)', textAlign: 'right' }}>Valor</th>
+                  <th style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Atual</th>
+                  <th style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--ok)', whiteSpace: 'nowrap' }}>Novo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map((tx, i) => (
+                  <tr key={tx.id} style={{ borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+                    <td style={{ padding: '6px 10px', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                      {tx.transactionDate}
+                    </td>
+                    <td style={{ padding: '6px 10px', color: 'var(--ink)', maxWidth: 280 }} title={tx.description}>
+                      {tx.description.length > 48 ? tx.description.slice(0, 48) + '…' : tx.description}
+                    </td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--crit)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {formatBRL(tx.amount)}
+                    </td>
+                    <td style={{ padding: '6px 10px', color: 'var(--crit)', whiteSpace: 'nowrap' }}>
+                      {tx.classificationType}
+                    </td>
+                    <td style={{ padding: '6px 10px', color: 'var(--ok)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      neutral
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={applyFix}
+              disabled={applying}
+              style={{ background: 'var(--warn)', borderColor: 'var(--warn)' }}
+            >
+              {applying ? 'Aplicando…' : `Corrigir ${candidates.length} lançamento(s)`}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setScanned(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ALL_FIN_KEYS = [
   'finance_transactions',
   'finance_budgets',
@@ -332,6 +487,9 @@ export function DangerZonePage() {
             Ações destrutivas e irreversíveis. Proceed com cuidado.
           </div>
         </div>
+
+        {/* Bill payment fix */}
+        <BillPaymentFixPanel />
 
         {/* Duplicate cleanup */}
         <DuplicateCleanupPanel />

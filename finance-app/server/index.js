@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url'
 const app = express()
 const PORT = process.env.PORT ?? 8787
 
-// ── Payload limits ────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '128kb' }))
 
 // ── CORS: allow frontend dev server only ─────────────────────────────────────

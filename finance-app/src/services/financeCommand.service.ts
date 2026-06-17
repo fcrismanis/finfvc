@@ -133,8 +133,6 @@ export function buildFinanceCommandPlan(prompt: string): FinanceCommandPlan {
     plan.actions.categoryId = existing.category?.id
     plan.actions.subCategoryId = existing.subCategory?.id
     plan.actions.createCategoryIfMissing = !existing.category && !existing.macro
-      ? true
-      : Boolean(target.categoryName && !existing.category)
     plan.actions.createSubCategoryIfMissing = Boolean(target.subCategoryName && !existing.subCategory)
     plan.actions.classificationType = existing.category?.classificationType ?? existing.macro?.classificationType
     plan.actions.createRule = true
