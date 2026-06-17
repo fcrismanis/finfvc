@@ -5,6 +5,7 @@
 import type { PluggyLocalConnection } from './pluggy.service'
 
 export const CONNECTIONS_KEY = 'fin_pluggy_connections'
+export const CONNECTIONS_BACKUP_KEY = 'fin_pluggy_connections_backup'
 
 // Known legacy key names (historical key variants, for recovery scanning)
 const LEGACY_KEYS = [
@@ -54,7 +55,7 @@ export function loadPluggyConnectionsSafe(): PluggyLocalConnection[] {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    console.log(`[pluggy-storage] loaded ${parsed.length} connections from ${CONNECTIONS_KEY}`)
+    if (import.meta.env.DEV) console.debug(`[pluggy-storage] loaded ${parsed.length} connections`)
     return parsed as PluggyLocalConnection[]
   } catch {
     return []
@@ -68,6 +69,35 @@ export function savePluggyConnectionsSafe(connections: PluggyLocalConnection[]):
     return
   }
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(connections))
+}
+
+// ── Backup / Restore ────────────────────────────────────────────────────────
+
+export function backupPluggyConnectionsSafe(connections: PluggyLocalConnection[]): void {
+  if (connections.length === 0) return
+  localStorage.setItem(CONNECTIONS_BACKUP_KEY, JSON.stringify(connections))
+}
+
+export function loadPluggyConnectionsBackup(): PluggyLocalConnection[] {
+  try {
+    const raw = localStorage.getItem(CONNECTIONS_BACKUP_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as PluggyLocalConnection[]) : []
+  } catch { return [] }
+}
+
+export function hasPluggyConnectionsBackup(): boolean {
+  return loadPluggyConnectionsBackup().length > 0
+}
+
+export function restorePluggyConnectionsFromBackup(): { ok: boolean; count: number; message: string } {
+  const backup = loadPluggyConnectionsBackup()
+  if (backup.length === 0) {
+    return { ok: false, count: 0, message: 'Nenhum backup encontrado.' }
+  }
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(backup))
+  return { ok: true, count: backup.length, message: `${backup.length} conexão(ões) restaurada(s) do backup.` }
 }
 
 // ── Diagnosis ───────────────────────────────────────────────────────────────
@@ -259,7 +289,7 @@ export function recoverPluggyStorage(): RecoveryResult {
 
   // Write to current key
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(best.data))
-  console.log(`[pluggy-storage] migrated legacy ${best.key} to ${CONNECTIONS_KEY} (${best.data.length} connections)`)
+  if (import.meta.env.DEV) console.debug(`[pluggy-storage] migrated ${best.key} → ${CONNECTIONS_KEY} (${best.data.length} conn)`)
 
   return {
     ok: true,

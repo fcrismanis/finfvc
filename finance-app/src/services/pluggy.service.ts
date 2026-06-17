@@ -148,7 +148,7 @@ export function makeDeduplicationKey(tx: PluggyTransaction, accountId: string): 
 
 // ── Local persistence for connections (localStorage) ──────────────────────────
 
-import { CONNECTIONS_KEY, loadPluggyConnectionsSafe } from './pluggyStorage.service'
+import { CONNECTIONS_KEY, loadPluggyConnectionsSafe, backupPluggyConnectionsSafe } from './pluggyStorage.service'
 
 export interface PluggyLocalAccount {
   id: string
@@ -186,6 +186,7 @@ export function saveLocalConnection(conn: PluggyLocalConnection): void {
   const idx = all.findIndex(c => c.itemId === conn.itemId)
   if (idx >= 0) all[idx] = conn
   else all.push(conn)
+  backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
 }
 
@@ -248,11 +249,32 @@ export interface ConnInfo {
   institutionLogoUrl: string | null
 }
 
-function firstNonEmptyDate(...values: Array<string | null | undefined>): string | undefined {
-  for (const value of values) {
-    if (typeof value === 'string' && value.trim().length > 0) return value
+// pickPluggyFinancialDate below replaces firstNonEmptyDate
+
+export interface PluggyDatePickResult {
+  date: string
+  sourceField: 'transactionDate' | 'date' | 'operationDate' | 'paymentDate' | 'competenceDate' | 'unknown'
+  rawValue: string | null
+}
+
+export function pickPluggyFinancialDate(
+  rawTx: Pick<PluggyRawTransaction, 'transactionDate' | 'date' | 'operationDate' | 'paymentDate' | 'competenceDate'>,
+  fallbackDate: string,
+): PluggyDatePickResult {
+  const candidates: Array<[string | null | undefined, PluggyDatePickResult['sourceField']]> = [
+    [rawTx.transactionDate, 'transactionDate'],
+    [rawTx.date,            'date'],
+    [rawTx.operationDate,   'operationDate'],
+    [rawTx.paymentDate,     'paymentDate'],
+    [rawTx.competenceDate,  'competenceDate'],
+  ]
+  for (const [value, field] of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const normalized = normalizeFinancialDate(value, '')
+      if (normalized) return { date: normalized, sourceField: field, rawValue: value }
+    }
   }
-  return undefined
+  return { date: fallbackDate, sourceField: 'unknown', rawValue: null }
 }
 
 export function mapPluggyToTransactions(
@@ -268,15 +290,9 @@ export function mapPluggyToTransactions(
   const fallbackDate = currentFinancialDate()
 
   const allMapped: import('../types').Transaction[] = pluggyTxs.map(ptx => {
-    const rawPrimaryDate = firstNonEmptyDate(
-      ptx.transactionDate,
-      ptx.date,
-      ptx.operationDate,
-      ptx.paymentDate,
-      ptx.competenceDate,
-    )
-    const financialDate = normalizeFinancialDate(rawPrimaryDate, fallbackDate)
-    const competenceDate = normalizeFinancialDate(ptx.competenceDate ?? rawPrimaryDate, financialDate)
+    const picked = pickPluggyFinancialDate(ptx, fallbackDate)
+    const financialDate = picked.date
+    const competenceDate = normalizeFinancialDate(ptx.competenceDate ?? picked.rawValue, financialDate)
     const paymentDate = ptx.paymentDate ? normalizeFinancialDate(ptx.paymentDate, '') : undefined
     const importHash = ptx.providerCode
       ? `pluggy_${ptx.providerCode}`
@@ -327,19 +343,22 @@ export function mapPluggyToTransactions(
       pluggyRawOperationDate: ptx.operationDate ?? undefined,
       pluggyRawCreatedAt: ptx.createdAt ?? undefined,
       pluggyRawUpdatedAt: ptx.updatedAt ?? undefined,
+      providerRawDate: picked.rawValue ?? undefined,
+      providerDateField: picked.sourceField,
       createdAt: now,
       updatedAt: now,
     }
 
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && import.meta.env.VITE_DEBUG_PLUGGY_DATES) {
       console.debug('[PluggyDateTrace]', {
         providerCode: ptx.providerCode,
+        sourceField: picked.sourceField,
+        rawValue: picked.rawValue,
         rawDate: ptx.date,
         rawTransactionDate: ptx.transactionDate,
         rawPaymentDate: ptx.paymentDate,
         rawCompetenceDate: ptx.competenceDate,
         rawOperationDate: ptx.operationDate,
-        rawCreatedAt: ptx.createdAt,
         mappedDate: baseTx.transactionDate,
         mappedCompetenceDate: baseTx.competenceDate,
         mappedPaymentDate: baseTx.paymentDate,
@@ -471,6 +490,7 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
   if (!acc) return
   acc.lastSyncAt = new Date().toISOString()
   acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
+  backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
 }
 
