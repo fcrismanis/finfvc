@@ -1,9 +1,8 @@
-import type { MacroCategory, Category, BudgetClassification } from '../types'
+import type { MacroCategory, Category, SubCategory, BudgetClassification } from '../types'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
 import { loadCustomCategories } from './financeCategories.service'
 import { loadCustomMacroCategories } from './financeParentCategories.service'
 
-// Generic weights — lower = less specific
 const LOW_WEIGHT_KEYWORDS = new Set([
   'pagamento', 'boleto', 'pix', 'compra', 'débito', 'crédito',
   'payment', 'transfer', 'debit', 'credit',
@@ -17,10 +16,28 @@ function kwWeight(kw: string): number {
   return 6
 }
 
-interface KeywordMatch {
+function scoreToConfidence(score: number): 'high' | 'medium' | 'low' {
+  if (score >= 6) return 'high'
+  if (score >= 3) return 'medium'
+  return 'low'
+}
+
+function loadSubCategories(): SubCategory[] {
+  try {
+    const raw = localStorage.getItem('finance_subcategories')
+    return raw ? (JSON.parse(raw) as SubCategory[]) : []
+  } catch {
+    return []
+  }
+}
+
+export interface KeywordCategoryMatch {
   macroCategoryId: string
   categoryId?: string
-  score: number
+  subCategoryId?: string
+  confidence: 'high' | 'medium' | 'low'
+  matchedKeyword: string
+  matchedOn: 'subcategory' | 'category' | 'macro'
   reason: string
 }
 
@@ -28,28 +45,62 @@ export function matchCategoryByKeywords(
   description: string,
   macros?: MacroCategory[],
   cats?: Category[],
-): KeywordMatch | null {
+  subs?: SubCategory[],
+): KeywordCategoryMatch | null {
   const allMacros = macros ?? [...MACRO_CATEGORIES, ...loadCustomMacroCategories()]
   const allCats = cats ?? [...CATEGORIES, ...loadCustomCategories()]
+  const allSubs = subs ?? loadSubCategories()
   const text = description.toUpperCase()
-  let best: KeywordMatch | null = null
+  let bestScore = -1
+  let best: KeywordCategoryMatch | null = null
 
-  // Check subcategory keywords first (higher priority)
+  // 1. SubCategory keywords — highest priority (+4 bonus)
+  for (const sub of allSubs) {
+    if (!sub.active) continue
+    const kws = sub.keywords ?? []
+    for (const kw of kws) {
+      if (!kw.trim()) continue
+      if (text.includes(kw.toUpperCase())) {
+        const score = kwWeight(kw) + 4
+        if (score > bestScore) {
+          bestScore = score
+          best = {
+            macroCategoryId: sub.macroCategoryId,
+            subCategoryId: sub.id,
+            confidence: scoreToConfidence(score),
+            matchedKeyword: kw,
+            matchedOn: 'subcategory',
+            reason: `SubCategory keyword: "${kw}"`,
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Category keywords (+2 bonus)
   for (const cat of allCats) {
     if (!cat.active) continue
     const kws = cat.keywords ?? []
     for (const kw of kws) {
       if (!kw.trim()) continue
       if (text.includes(kw.toUpperCase())) {
-        const score = kwWeight(kw) + 2 // +2 = subcategory bonus
-        if (!best || score > best.score) {
-          best = { macroCategoryId: cat.macroCategoryId, categoryId: cat.id, score, reason: kw }
+        const score = kwWeight(kw) + 2
+        if (score > bestScore) {
+          bestScore = score
+          best = {
+            macroCategoryId: cat.macroCategoryId,
+            categoryId: cat.id,
+            confidence: scoreToConfidence(score),
+            matchedKeyword: kw,
+            matchedOn: 'category',
+            reason: `Category keyword: "${kw}"`,
+          }
         }
       }
     }
   }
 
-  // Then check parent category keywords
+  // 3. MacroCategory keywords (no bonus)
   for (const macro of allMacros) {
     if (macro.tabType === 'none') continue
     const kws = macro.keywords ?? []
@@ -57,8 +108,15 @@ export function matchCategoryByKeywords(
       if (!kw.trim()) continue
       if (text.includes(kw.toUpperCase())) {
         const score = kwWeight(kw)
-        if (!best || score > best.score) {
-          best = { macroCategoryId: macro.id, score, reason: kw }
+        if (score > bestScore) {
+          bestScore = score
+          best = {
+            macroCategoryId: macro.id,
+            confidence: scoreToConfidence(score),
+            matchedKeyword: kw,
+            matchedOn: 'macro',
+            reason: `MacroCategory keyword: "${kw}"`,
+          }
         }
       }
     }
@@ -73,13 +131,10 @@ export function getEffectiveBudgetClassification(
 ): BudgetClassification {
   const bc = item.budgetClassification
   if (bc && bc !== 'none') return bc
-
-  // If category has no classification, inherit from parent macro
   if (parent) {
     const pbc = parent.budgetClassification
     if (pbc && pbc !== 'none') return pbc
   }
-
   return 'none'
 }
 
