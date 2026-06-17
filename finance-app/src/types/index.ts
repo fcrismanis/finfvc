@@ -74,6 +74,8 @@ export interface Transaction {
   pluggyRawOperationDate?: string
   pluggyRawCreatedAt?: string
   pluggyRawUpdatedAt?: string
+  providerRawDate?: string
+  providerDateField?: 'transactionDate' | 'date' | 'operationDate' | 'paymentDate' | 'competenceDate' | 'unknown'
   group?: string
   tags?: string[]
   notes?: string
@@ -228,4 +230,5 @@ export interface SubCategory {
   essentiality: SubCategoryEssentiality
   active: boolean
   createdAt: string
+  keywords?: string[]
 }
