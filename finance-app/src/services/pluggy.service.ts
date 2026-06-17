@@ -182,15 +182,41 @@ export interface PluggyLocalConnection {
   accounts: PluggyLocalAccount[]
 }
 
+// Ensures every account has selectedForDailySync set.
+// undefined → true (new or old accounts without the flag)
+// false/true → preserved (explicit user choice)
+function applyAccountDefaults(conns: PluggyLocalConnection[]): { conns: PluggyLocalConnection[]; changed: boolean } {
+  let changed = false
+  for (const conn of conns) {
+    for (const acc of conn.accounts) {
+      if (acc.selectedForDailySync === undefined) {
+        acc.selectedForDailySync = true
+        changed = true
+      }
+    }
+  }
+  return { conns, changed }
+}
+
 export function getLocalConnections(): PluggyLocalConnection[] {
-  return loadPluggyConnectionsSafe()
+  const raw = loadPluggyConnectionsSafe()
+  if (raw.length === 0) return raw
+  const { conns, changed } = applyAccountDefaults(raw)
+  if (changed) {
+    backupPluggyConnectionsSafe(conns)
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(conns))
+    backupConnectionsToServer(conns)
+  }
+  return conns
 }
 
 export function saveLocalConnection(conn: PluggyLocalConnection): void {
+  // Apply defaults to incoming connection before merging
+  const { conns: [normalized] } = applyAccountDefaults([conn])
   const all = getLocalConnections()
-  const idx = all.findIndex(c => c.itemId === conn.itemId)
-  if (idx >= 0) all[idx] = conn
-  else all.push(conn)
+  const idx = all.findIndex(c => c.itemId === normalized.itemId)
+  if (idx >= 0) all[idx] = normalized
+  else all.push(normalized)
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
   backupConnectionsToServer(all)
@@ -217,9 +243,10 @@ export async function restoreConnectionsFromServer(): Promise<PluggyLocalConnect
     if (!res.ok) return []
     const data = await res.json() as { ok: boolean; connections?: PluggyLocalConnection[] }
     if (!data.ok || !Array.isArray(data.connections) || data.connections.length === 0) return []
-    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(data.connections))
-    backupPluggyConnectionsSafe(data.connections)
-    return data.connections
+    const { conns } = applyAccountDefaults(data.connections)
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(conns))
+    backupPluggyConnectionsSafe(conns)
+    return conns
   } catch { return [] }
 }
 
@@ -233,7 +260,9 @@ export async function registerConnection(itemId: string): Promise<PluggyLocalCon
   if (!res.ok || !data.ok || !data.connection) {
     throw new Error(data.error ?? 'Erro ao registrar conexão Pluggy')
   }
-  return { ...data.connection, savedAt: new Date().toISOString() }
+  const conn: PluggyLocalConnection = { ...data.connection, savedAt: new Date().toISOString() }
+  const { conns: [normalized] } = applyAccountDefaults([conn])
+  return normalized
 }
 
 // ── Pluggy category mapping — delegated to pluggyCategoryMap.ts ──────────────

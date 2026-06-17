@@ -28,6 +28,7 @@ import {
 } from '../services/pluggyStorage.service'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { currentFinancialDate, formatFinancialDateBR, normalizeFinancialDate } from '../utils/date'
+import { loadDailySyncStatus, type DailySyncStatus } from '../hooks/useDailyPluggySync'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 
@@ -310,6 +311,7 @@ export function PluggyPage() {
   const [repairRunning, setRepairRunning] = useState(false)
   const [recoveryDiag, setRecoveryDiag] = useState<DiagnosticResult | null>(null)
   const [recoveryResult, setRecoveryResult] = useState<RecoveryResult | null>(null)
+  const [dailySyncStatus, setDailySyncStatus] = useState<DailySyncStatus | null>(() => loadDailySyncStatus())
   const pendingPersistTraceRef = useRef<string[] | null>(null)
 
   useEffect(() => {
@@ -332,6 +334,20 @@ export function PluggyPage() {
       })
     }
   }, [])
+
+  // Poll daily sync status while it's running so the banner updates
+  useEffect(() => {
+    if (!dailySyncStatus?.running) return
+    const id = setInterval(() => {
+      const latest = loadDailySyncStatus()
+      setDailySyncStatus(latest)
+      if (!latest?.running) {
+        clearInterval(id)
+        setConnections(getLocalConnections())
+      }
+    }, 1500)
+    return () => clearInterval(id)
+  }, [dailySyncStatus?.running])
 
   useEffect(() => {
     if (!DEBUG_DATES || !pendingPersistTraceRef.current?.length) return
@@ -553,6 +569,27 @@ export function PluggyPage() {
             Recuperar dados Pluggy
           </button>
         </div>
+
+        {dailySyncStatus && (dailySyncStatus.running || dailySyncStatus.finishedAt) && (
+          <div style={{
+            padding: '10px 16px', borderRadius: 10, fontSize: 12.5,
+            background: dailySyncStatus.errors.length > 0 ? 'var(--warn-soft, var(--well))' : 'var(--pos-soft)',
+            border: `1px solid ${dailySyncStatus.errors.length > 0 ? 'var(--warn)' : 'var(--pos)'}`,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          }}>
+            {dailySyncStatus.running ? (
+              <p style={{ color: 'var(--ink-2)', flex: 1 }}>
+                Sync diária em andamento… {dailySyncStatus.accountsSynced} conta(s) · {dailySyncStatus.newTxsTotal} novos lançamentos
+              </p>
+            ) : (
+              <p style={{ color: 'var(--ink-2)', flex: 1 }}>
+                Sync diária concluída · {dailySyncStatus.accountsSynced} conta(s) · {dailySyncStatus.newTxsTotal} novos lançamentos
+                {dailySyncStatus.errors.length > 0 && ` · ${dailySyncStatus.errors.length} erro(s)`}
+              </p>
+            )}
+            <button onClick={() => setDailySyncStatus(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 16, lineHeight: 1 }}>×</button>
+          </div>
+        )}
 
         {showBackupBanner && (
           <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--warn-soft, var(--well))', border: '1px solid var(--warn)', fontSize: 12.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
