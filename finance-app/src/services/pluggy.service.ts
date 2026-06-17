@@ -166,6 +166,9 @@ export interface PluggyLocalAccount {
   lastUpdatedAt: string | null
   lastSyncAt?: string
   lastSyncCount?: number
+  selectedForDailySync?: boolean
+  lastDailySyncDate?: string    // 'YYYY-MM-DD' — last calendar date auto-synced
+  dailySyncError?: string | null
 }
 
 export interface PluggyLocalConnection {
@@ -539,6 +542,26 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
   if (!acc) return
   acc.lastSyncAt = new Date().toISOString()
   acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
+  backupPluggyConnectionsSafe(all)
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+  backupConnectionsToServer(all)
+}
+
+export function toggleAccountDailySync(
+  itemId: string,
+  accountId: string,
+  enabled: boolean,
+  lastDailySyncDate?: string,
+  error?: string | null,
+): void {
+  const all = getLocalConnections()
+  const conn = all.find(c => c.itemId === itemId)
+  if (!conn) return
+  const acc = conn.accounts.find(a => a.id === accountId)
+  if (!acc) return
+  acc.selectedForDailySync = enabled
+  if (lastDailySyncDate !== undefined) acc.lastDailySyncDate = lastDailySyncDate
+  if (error !== undefined) acc.dailySyncError = error ?? null
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
   backupConnectionsToServer(all)

@@ -12,6 +12,7 @@ import {
   lookupPluggyCategory,
   inferCategoryFromText,
   updateConnectionSyncMeta,
+  toggleAccountDailySync,
   getPeriodDates,
   restoreConnectionsFromServer,
   type ConnInfo,
@@ -420,6 +421,11 @@ export function PluggyPage() {
     setConnections(getLocalConnections())
   }
 
+  function handleToggleDailySync(itemId: string, accountId: string, enabled: boolean) {
+    toggleAccountDailySync(itemId, accountId, enabled)
+    setConnections(getLocalConnections())
+  }
+
   function handleReclassPreview() {
     const pluggyTxs = transactions.filter(isLikelyPluggyTransaction)
     setReclassPreview(buildReclassPreview(pluggyTxs))
@@ -677,15 +683,45 @@ export function PluggyPage() {
                               }}>
                                 {acc.type === 'CREDIT' ? 'CARTÃO' : 'CONTA'}
                               </span>
+                              {acc.selectedForDailySync && (
+                                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)40' }}>
+                                  SYNC DIÁRIA
+                                </span>
+                              )}
                             </div>
-                            {acc.lastSyncAt && (
-                              <p style={{ fontSize: 10.5, color: 'var(--faint)' }}>
-                                Última sync: {fmtDate(acc.lastSyncAt)}
-                                {acc.lastSyncCount != null && ` · ${acc.lastSyncCount} importados`}
-                              </p>
-                            )}
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              {acc.lastSyncAt && (
+                                <p style={{ fontSize: 10.5, color: 'var(--faint)' }}>
+                                  Última sync: {fmtDate(acc.lastSyncAt)}
+                                  {acc.lastSyncCount != null && ` · ${acc.lastSyncCount} importados`}
+                                </p>
+                              )}
+                              {acc.selectedForDailySync && acc.lastDailySyncDate && (
+                                <p style={{ fontSize: 10.5, color: 'var(--faint)' }}>
+                                  Auto: {acc.lastDailySyncDate} · Próx.: amanhã
+                                </p>
+                              )}
+                              {acc.dailySyncError && (
+                                <p style={{ fontSize: 10.5, color: 'var(--crit)' }} title={acc.dailySyncError}>
+                                  Erro sync auto
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <button
+                              onClick={() => handleToggleDailySync(conn.itemId, acc.id, !acc.selectedForDailySync)}
+                              title={acc.selectedForDailySync ? 'Desativar sync diária' : 'Ativar sync diária automática'}
+                              style={{
+                                fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5,
+                                cursor: 'pointer', fontFamily: 'var(--ui)', whiteSpace: 'nowrap',
+                                background: acc.selectedForDailySync ? 'var(--pos-soft)' : 'var(--well)',
+                                color: acc.selectedForDailySync ? 'var(--pos)' : 'var(--faint)',
+                                border: `1px solid ${acc.selectedForDailySync ? 'var(--pos)' : 'var(--line)'}`,
+                              }}
+                            >
+                              {acc.selectedForDailySync ? '● Auto' : '○ Auto'}
+                            </button>
                             <div style={{ textAlign: 'right' }}>
                               <p style={{ fontSize: 13, fontWeight: 700, color: acc.balance !== null ? 'var(--ink)' : 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
                                 {acc.balance !== null ? fmtBRL(acc.balance) : 'Saldo indisponível'}

@@ -21,6 +21,7 @@ import { Login } from './pages/Login'
 import { Placeholder } from './pages/Placeholder'
 import { currentYearMonth } from './utils/date'
 import { DATA_PROVIDER } from './config/env'
+import { useDailyPluggySync } from './hooks/useDailyPluggySync'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard        = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -112,6 +113,7 @@ function AppShell() {
   const [navFilter, setNavFilter] = useState<NavFilter | null>(null)
   const { loading, error, reload, transactions } = useData()
   const didInitMonth = useRef(false)
+  useDailyPluggySync(loading)
 
   useEffect(() => {
     if (didInitMonth.current || transactions.length === 0) return
