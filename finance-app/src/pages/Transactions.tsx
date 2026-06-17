@@ -311,6 +311,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const subChanged = patch.subCategoryId !== modalTx.subCategoryId
     if (catChanged || subChanged) {
       patch.manualCategoryOverride = true
+      patch.manualSubCategoryOverride = !!patch.subCategoryId
+      patch.manualEditedAt = new Date().toISOString()
       patch.categorySuggestionSource = 'manual'
       patch.categoryConfidence = 'high'
       patch.needsReview = false
@@ -321,8 +323,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           patch.includeInOperationalResult = macro.displayInResult
           patch.includeInCashflow = macro.displayInCashflow
           patch.includeInBudget = macro.displayInBudget
-        } else if (!patch.macroCategoryId) {
-          // cleared — keep original flags
         }
       }
     }
@@ -1313,20 +1313,40 @@ function CategorySelector({
       : selectedMacro.name
     : 'Sem categoria'
 
-  const filteredGroups = useMemo(() => {
+  // Build a group entry for one macro, applying the search filter
+  function buildGroup(m: import('../types').MacroCategory, q: string) {
+    const allSubs = subCategories.filter(s => s.macroCategoryId === m.id && s.active)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+    if (!q) return { macro: m, subs: allSubs }
+    const macroHit = m.name.toLowerCase().includes(q) ||
+      (m.keywords ?? []).some(k => k.toLowerCase().includes(q))
+    const matchSubs = allSubs.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      (s.keywords ?? []).some(k => k.toLowerCase().includes(q))
+    )
+    if (!macroHit && matchSubs.length === 0) return null
+    return { macro: m, subs: macroHit ? allSubs : matchSubs }
+  }
+
+  const { incomeGroups, expenseGroups, totalCount } = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return allMacros.flatMap(m => {
-      const allSubs = subCategories.filter(s => s.macroCategoryId === m.id && s.active)
-      if (!q) return [{ macro: m, subs: allSubs }]
-      const macroHit = m.name.toLowerCase().includes(q) || (m.keywords ?? []).some(k => k.toLowerCase().includes(q))
-      const matchSubs = allSubs.filter(s =>
-        s.name.toLowerCase().includes(q) || (s.keywords ?? []).some(k => k.toLowerCase().includes(q))
-      )
-      if (macroHit || matchSubs.length > 0) {
-        return [{ macro: m, subs: macroHit ? allSubs : matchSubs }]
-      }
-      return []
-    })
+    // Exclude tabType:'none' (legacy/internal like mac_movfin)
+    // Deduplicate by id (getAllMacroCategories already dedupes custom vs static)
+    const visibleMacros = allMacros
+      .filter(m => m.tabType !== 'none')
+      .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99) || a.name.localeCompare(b.name, 'pt-BR'))
+
+    const income = visibleMacros
+      .filter(m => m.tabType === 'income' || m.tabType === 'both')
+      .map(m => buildGroup(m, q))
+      .filter((g): g is NonNullable<typeof g> => g !== null)
+
+    const expense = visibleMacros
+      .filter(m => m.tabType === 'expense' || m.tabType === 'both')
+      .map(m => buildGroup(m, q))
+      .filter((g): g is NonNullable<typeof g> => g !== null)
+
+    return { incomeGroups: income, expenseGroups: expense, totalCount: income.length + expense.length }
   }, [allMacros, subCategories, search])
 
   useEffect(() => {
@@ -1339,6 +1359,44 @@ function CategorySelector({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
+
+  function renderGroup(macro: import('../types').MacroCategory, subs: import('../types').SubCategory[]) {
+    return (
+      <div key={macro.id}>
+        <button
+          type="button"
+          onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+            padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
+            background: macroCategoryId === macro.id && !subCategoryId ? 'var(--accent-soft)' : 'transparent',
+            border: 'none', cursor: 'pointer', color: macro.color ?? 'var(--ink)',
+            fontFamily: 'var(--ui)',
+          }}
+        >
+          <TxCatIcon iconName={macro.icon} size={13} color={macro.color} />
+          {macro.name}
+        </button>
+        {subs.map(s => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => { onChange(macro.id, s.id); setOpen(false); setSearch('') }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+              padding: '5px 14px 5px 34px', textAlign: 'left', fontSize: 11.5,
+              background: subCategoryId === s.id ? 'var(--accent-soft)' : 'transparent',
+              border: 'none', cursor: 'pointer', color: 'var(--ink-2)',
+              fontFamily: 'var(--ui)',
+            }}
+          >
+            <TxCatIcon iconName={s.icon ?? macro.icon} size={11} color={macro.color} />
+            {s.name}
+          </button>
+        ))}
+      </div>
+    )
+  }
 
   const iconName = selectedSub?.icon ?? selectedMacro?.icon
 
@@ -1368,7 +1426,7 @@ function CategorySelector({
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
           background: 'var(--card-bg)', border: '1px solid var(--line)',
-          borderRadius: 8, boxShadow: '0 6px 24px rgba(0,0,0,.15)',
+          borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,.14)',
           overflow: 'hidden',
         }}>
           <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
@@ -1381,61 +1439,61 @@ function CategorySelector({
                 width: '100%', fontSize: 12, padding: '5px 8px', borderRadius: 6,
                 border: '1px solid var(--line)', outline: 'none',
                 background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)',
-                boxSizing: 'border-box',
+                boxSizing: 'border-box' as const,
               }}
             />
           </div>
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {/* Sem categoria */}
             <button
               type="button"
               onClick={() => { onChange(undefined, undefined); setOpen(false); setSearch('') }}
               style={{
                 display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
-                fontSize: 12, background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--faint)', fontFamily: 'var(--ui)', borderBottom: '1px solid var(--line)',
+                fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer',
+                color: !macroCategoryId ? 'var(--accent)' : 'var(--faint)',
+                fontFamily: 'var(--ui)', borderBottom: '1px solid var(--line)',
               }}
             >
               Sem categoria
             </button>
-            {filteredGroups.map(({ macro, subs }) => (
-              <div key={macro.id}>
-                <button
-                  type="button"
-                  onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 7, width: '100%',
-                    padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
-                    background: macroCategoryId === macro.id && !subCategoryId ? 'var(--accent-soft)' : 'none',
-                    border: 'none', cursor: 'pointer', color: macro.color ?? 'var(--ink)',
-                    fontFamily: 'var(--ui)',
-                  }}
-                >
-                  <TxCatIcon iconName={macro.icon} size={13} color={macro.color} />
-                  {macro.name}
-                </button>
-                {subs.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => { onChange(macro.id, s.id); setOpen(false); setSearch('') }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 7, width: '100%',
-                      padding: '5px 14px 5px 32px', textAlign: 'left', fontSize: 12,
-                      background: subCategoryId === s.id ? 'var(--accent-soft)' : 'none',
-                      border: 'none', cursor: 'pointer', color: 'var(--ink-2)',
-                      fontFamily: 'var(--ui)',
-                    }}
-                  >
-                    <TxCatIcon iconName={s.icon ?? macro.icon} size={11} color={macro.color} />
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            ))}
-            {filteredGroups.length === 0 && (
+
+            {totalCount === 0 && (
               <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--faint)', textAlign: 'center' }}>
                 Nenhuma categoria encontrada
               </div>
+            )}
+
+            {/* Receitas */}
+            {incomeGroups.length > 0 && (
+              <>
+                <div style={{
+                  padding: '5px 14px 3px',
+                  fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em',
+                  textTransform: 'uppercase', color: 'var(--pos)',
+                  background: 'var(--well)',
+                  borderTop: '1px solid var(--line)',
+                }}>
+                  Receitas
+                </div>
+                {incomeGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
+              </>
+            )}
+
+            {/* Despesas */}
+            {expenseGroups.length > 0 && (
+              <>
+                <div style={{
+                  padding: '5px 14px 3px',
+                  fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em',
+                  textTransform: 'uppercase', color: 'var(--crit)',
+                  background: 'var(--well)',
+                  borderTop: '1px solid var(--line)',
+                }}>
+                  Despesas
+                </div>
+                {expenseGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
+              </>
             )}
           </div>
         </div>
