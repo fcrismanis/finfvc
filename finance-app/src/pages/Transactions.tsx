@@ -245,10 +245,23 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     })
   }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterInstitution, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
 
-  const summary = useMemo(() => ({
-    total: filtered.length,
-    pending: filtered.filter(t => t.status === 'pending').length,
-  }), [filtered])
+  const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
+
+  const summary = useMemo(() => {
+    const income = filtered
+      .filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType))
+      .reduce((s, t) => s + t.amount, 0)
+    const expense = filtered
+      .filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType))
+      .reduce((s, t) => s + t.amount, 0)
+    return {
+      total: filtered.length,
+      pending: filtered.filter(t => t.status === 'pending').length,
+      income,
+      expense,
+      result: income - expense,
+    }
+  }, [filtered, NEUTRAL_TYPES])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -523,6 +536,26 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 )}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Summary cards */}
+        {!isReviewMode && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Receitas</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--pos)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>+{formatBRL(summary.income)}</p>
+            </div>
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Despesas</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--crit)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>−{formatBRL(summary.expense)}</p>
+            </div>
+            <div className="card" style={{ padding: '14px 16px', background: 'var(--accent-soft)' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Resultado</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: summary.result >= 0 ? 'var(--pos)' : 'var(--crit)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>
+                {summary.result >= 0 ? '+' : ''}{formatBRL(summary.result)}
+              </p>
+            </div>
           </div>
         )}
 
