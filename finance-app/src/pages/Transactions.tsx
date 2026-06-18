@@ -778,7 +778,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   </div>
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
-                                    const account = tx.pluggyAccountName ?? pInfo?.name
+                                    const account = pInfo?.name ?? tx.pluggyAccountName
                                     const logo = tx.pluggyInstitutionLogoUrl ?? pInfo?.logoUrl
                                     if (!account) return null
                                     return (
