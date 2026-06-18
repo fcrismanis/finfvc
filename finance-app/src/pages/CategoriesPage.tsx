@@ -18,7 +18,7 @@ import { newSubCategoryId } from '../services/subcategory.service'
 import { ICON_MAP, ICON_ENTRIES } from '../utils/categoryIcons'
 import type {
   MacroCategory, Category, SubCategory, Transaction,
-  SubCategoryEssentiality, BudgetClassification, CategoryTabType,
+  SubCategoryEssentiality, BudgetClassification, CategoryTabType, ClassificationType,
 } from '../types'
 
 interface Props {
@@ -59,6 +59,7 @@ interface InlineEdit {
   icon: string
   kwText: string
   budgetClassification: BudgetClassification
+  classificationType?: ClassificationType
   active: boolean
 }
 
@@ -167,6 +168,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
       icon: macro.icon ?? 'circle',
       kwText: (macro.keywords ?? []).join(', '),
       budgetClassification: macro.budgetClassification ?? 'none',
+      classificationType: macro.classificationType,
       active: true,
     })
   }
@@ -206,6 +208,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
       case 'defaultMacro': {
         const saved = overrideDefaultMacro(e.id, {
           keywords: kws, budgetClassification: e.budgetClassification, icon: e.icon,
+          ...(e.classificationType ? { classificationType: e.classificationType } : {}),
         })
         setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
         break
@@ -216,6 +219,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
           id: e.id, name: e.name.trim(),
           tabType: (macro?.tabType ?? (tab === 'expense' ? 'expense' : 'income')) as CategoryTabType,
           icon: e.icon, keywords: kws, budgetClassification: e.budgetClassification,
+          ...(e.classificationType ? { classificationType: e.classificationType } : {}),
         })
         setCustomMacros(prev => [...prev.filter(m => m.id !== saved.id), saved])
         break
@@ -676,7 +680,7 @@ function InlineEditRow({
         />
       </div>
 
-      {/* Row 3: budget + active */}
+      {/* Row 3: budget + classificação + active */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>Orçamento</span>
         <select
@@ -689,6 +693,29 @@ function InlineEditRow({
           <option value="essential">Essencial</option>
           <option value="non_essential">Não essencial</option>
         </select>
+        {(edit.kind === 'macro' || edit.kind === 'defaultMacro') && (
+          <>
+            <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginLeft: 8, flexShrink: 0 }}>Classificação</span>
+            <select
+              value={edit.classificationType ?? ''}
+              onChange={e => upd({ classificationType: e.target.value as ClassificationType || undefined })}
+              className="ledger-select"
+              style={{ fontSize: 11.5 }}
+            >
+              <option value="">— automático —</option>
+              <option value="operational_income">Receita operacional</option>
+              <option value="extraordinary_income">Receita eventual</option>
+              <option value="operational_expense">Despesa operacional</option>
+              <option value="debt_cost">Custo de dívida</option>
+              <option value="investment">Investimento</option>
+              <option value="redemption">Resgate</option>
+              <option value="transfer">Transferência</option>
+              <option value="reimbursement">Reembolso</option>
+              <option value="neutral">Neutra</option>
+              <option value="adjustment">Ajuste</option>
+            </select>
+          </>
+        )}
         {showActive && (
           <>
             <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginLeft: 8 }}>Status</span>
