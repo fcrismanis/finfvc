@@ -243,7 +243,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterInstitution, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
 
   const summary = useMemo(() => ({
     total: filtered.length,
