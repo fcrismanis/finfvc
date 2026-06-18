@@ -184,7 +184,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const map = new Map<string, { name: string; institutionName: string; logoUrl: string | null }>()
     for (const conn of getLocalConnections()) {
       for (const acc of conn.accounts) {
-        map.set(acc.id, { name: acc.name, institutionName: conn.connectorName, logoUrl: conn.connectorImageUrl })
+        map.set(acc.id, { name: acc.displayName ?? acc.name, institutionName: conn.connectorName, logoUrl: conn.connectorImageUrl })
       }
     }
     return map

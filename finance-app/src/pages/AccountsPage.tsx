@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { Pencil, Check, X } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import {
   getLocalConnections,
   fetchPluggyTransactions,
   mapPluggyToTransactions,
   updateConnectionSyncMeta,
+  updateAccountDisplayName,
   getPeriodDates,
   type ConnInfo,
 } from '../services/pluggy.service'
@@ -25,10 +27,25 @@ export function AccountsPage({ onNavigate }: Props) {
   const { transactions, appendTransactions } = useData()
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
   const [sync, setSync] = useState<SyncSession | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setConnections(getLocalConnections())
   }, [])
+
+  function startEdit(acc: PluggyLocalAccount & { itemId: string }) {
+    setEditingId(acc.id)
+    setEditValue(acc.displayName ?? acc.name)
+    setTimeout(() => editRef.current?.select(), 0)
+  }
+
+  function saveEdit(acc: PluggyLocalAccount & { itemId: string }) {
+    updateAccountDisplayName(acc.itemId, acc.id, editValue)
+    setConnections(getLocalConnections())
+    setEditingId(null)
+  }
 
   const bankAccounts: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null; itemId: string })[] =
     connections.flatMap(c =>
@@ -169,9 +186,32 @@ export function AccountsPage({ onNavigate }: Props) {
                   {bankAccounts.map(acc => (
                     <tr key={acc.id} className="table-row">
                       <td className="table-td">
-                        <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{acc.name}</span>
-                        {acc.subtype && (
-                          <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--faint)' }}>{acc.subtype}</span>
+                        {editingId === acc.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              ref={editRef}
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') saveEdit(acc); if (e.key === 'Escape') setEditingId(null) }}
+                              style={{ fontSize: 12.5, fontWeight: 600, border: '1px solid var(--accent)', borderRadius: 5, padding: '2px 6px', outline: 'none', background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)', width: 180 }}
+                              autoFocus
+                            />
+                            <button onClick={() => saveEdit(acc)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pos)', padding: 2 }}><Check size={13} /></button>
+                            <button onClick={() => setEditingId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 2 }}><X size={13} /></button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <div>
+                              <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{acc.displayName ?? acc.name}</span>
+                              {acc.displayName && (
+                                <span style={{ display: 'block', fontSize: 10, color: 'var(--faint)' }}>{acc.name}</span>
+                              )}
+                              {acc.subtype && (
+                                <span style={{ display: 'block', fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{acc.subtype}</span>
+                              )}
+                            </div>
+                            <button onClick={() => startEdit(acc)} title="Renomear" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 2, flexShrink: 0 }}><Pencil size={11} /></button>
+                          </div>
                         )}
                       </td>
                       <td className="table-td">

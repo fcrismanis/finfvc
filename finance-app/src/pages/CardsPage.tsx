@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { getLocalConnections } from '../services/pluggy.service'
+import { useState, useEffect, useRef } from 'react'
+import { Pencil, Check, X } from 'lucide-react'
+import { getLocalConnections, updateAccountDisplayName } from '../services/pluggy.service'
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
 
 interface Props {
@@ -11,6 +12,21 @@ const fmtBRL = (v: number) =>
 
 export function CardsPage({ onNavigate }: Props) {
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
+
+  function startEdit(card: PluggyLocalAccount & { itemId: string }) {
+    setEditingId(card.id)
+    setEditValue(card.displayName ?? card.name)
+    setTimeout(() => editRef.current?.select(), 0)
+  }
+
+  function saveEdit(card: PluggyLocalAccount & { itemId: string }) {
+    updateAccountDisplayName(card.itemId, card.id, editValue)
+    setConnections(getLocalConnections())
+    setEditingId(null)
+  }
 
   useEffect(() => {
     setConnections(getLocalConnections())
@@ -103,11 +119,34 @@ export function CardsPage({ onNavigate }: Props) {
                   {creditCards.map(card => (
                     <tr key={card.id} className="table-row">
                       <td className="table-td">
-                        <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{card.name}</span>
-                        {card.dueDate && (
-                          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
-                            Venc. {new Date(card.dueDate).toLocaleDateString('pt-BR')}
-                          </span>
+                        {editingId === card.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              ref={editRef}
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') saveEdit(card); if (e.key === 'Escape') setEditingId(null) }}
+                              style={{ fontSize: 12.5, fontWeight: 600, border: '1px solid var(--accent)', borderRadius: 5, padding: '2px 6px', outline: 'none', background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)', width: 160 }}
+                              autoFocus
+                            />
+                            <button onClick={() => saveEdit(card)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pos)', padding: 2 }}><Check size={13} /></button>
+                            <button onClick={() => setEditingId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 2 }}><X size={13} /></button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <div>
+                              <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{card.displayName ?? card.name}</span>
+                              {card.displayName && (
+                                <span style={{ display: 'block', fontSize: 10, color: 'var(--faint)' }}>{card.name}</span>
+                              )}
+                              {card.dueDate && (
+                                <span style={{ display: 'block', fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
+                                  Venc. {new Date(card.dueDate).toLocaleDateString('pt-BR')}
+                                </span>
+                              )}
+                            </div>
+                            <button onClick={() => startEdit(card)} title="Renomear" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 2, flexShrink: 0 }}><Pencil size={11} /></button>
+                          </div>
                         )}
                       </td>
                       <td className="table-td">

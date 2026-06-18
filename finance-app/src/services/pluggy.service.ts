@@ -189,6 +189,7 @@ export interface PluggyLocalAccount {
   id: string
   itemId: string
   name: string
+  displayName?: string
   type: 'BANK' | 'CREDIT'
   subtype: string | null
   balance: number | null
@@ -606,6 +607,18 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
   if (!acc) return
   acc.lastSyncAt = new Date().toISOString()
   acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
+  backupPluggyConnectionsSafe(all)
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+  backupConnectionsToServer(all)
+}
+
+export function updateAccountDisplayName(itemId: string, accountId: string, displayName: string): void {
+  const all = getLocalConnections()
+  const conn = all.find(c => c.itemId === itemId)
+  if (!conn) return
+  const acc = conn.accounts.find(a => a.id === accountId)
+  if (!acc) return
+  acc.displayName = displayName.trim() || undefined
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
   backupConnectionsToServer(all)
