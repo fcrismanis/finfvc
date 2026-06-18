@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles, CheckSquare, Square, Brain } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
@@ -81,8 +81,10 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[] | null>(null)
   const [dismissedAI, setDismissedAI] = useState<Set<string>>(new Set())
+  const [panelSearch, setPanelSearch] = useState('')
+  const [applyToSimilar, setApplyToSimilar] = useState(false)
 
-  useEffect(() => { setSelected(new Set()) }, [activePanel])
+  useEffect(() => { setSelected(new Set()); setPanelSearch('') }, [activePanel])
 
   const tagCtx = useMemo(() => buildTagContext(transactions), [transactions])
 
@@ -132,6 +134,15 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     if (activePanel === 'import_api') return []  // handled separately
     return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason))
   }, [reviewItems, activePanel])
+
+  const filteredPanelItems = useMemo(() => {
+    const q = panelSearch.trim().toLowerCase()
+    if (!q) return panelItems
+    return panelItems.filter(i =>
+      i.tx.description.toLowerCase().includes(q) ||
+      (MACRO_CATEGORIES.find(m => m.id === i.tx.macroCategoryId)?.name ?? '').toLowerCase().includes(q)
+    )
+  }, [panelItems, panelSearch])
 
   function applySuggestion(tx: Transaction) {
     const s = suggestions.get(tx.id)
@@ -277,6 +288,11 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     }), { markManual: true })
   }
 
+  function bulkApplyClassification(cls: ClassificationType) {
+    if (!cls) return
+    void applyToSelected(() => ({ classificationType: cls, needsReview: false }), { markManual: true })
+  }
+
   function bulkApplySuggestedTags() {
     void applyToSelected(tx => {
       const sugg = suggestTags(tx, tagCtx)
@@ -378,11 +394,13 @@ export function Review({ onNavigate: _onNavigate }: Props) {
 
   function openModal(tx: Transaction) {
     setModalTx(tx)
+    setApplyToSimilar(false)
     setModalPatch({
       description: tx.description,
       status: tx.status,
       classificationType: tx.classificationType,
       macroCategoryId: tx.macroCategoryId,
+      subCategoryId: tx.subCategoryId,
       notes: tx.notes ?? '',
       competenceDate: tx.competenceDate,
     })
@@ -391,6 +409,16 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   function saveModal() {
     if (!modalTx) return
     updateTransaction(modalTx.id, modalPatch)
+    if (applyToSimilar && modalPatch.macroCategoryId) {
+      const norm = modalTx.description.trim().toLowerCase()
+      const similar = transactions.filter(t => t.id !== modalTx.id && t.description.trim().toLowerCase() === norm)
+      if (similar.length) {
+        void updateTransactions(
+          similar.map(t => ({ id: t.id, patch: { macroCategoryId: modalPatch.macroCategoryId, subCategoryId: modalPatch.subCategoryId, classificationType: modalPatch.classificationType, needsReview: false } })),
+          { markManual: true },
+        )
+      }
+    }
     setModalTx(null)
   }
 
@@ -764,6 +792,28 @@ export function Review({ onNavigate: _onNavigate }: Props) {
 
             {/* ── Standard review panel ── */}
             {activePanel !== 'import_api' && (
+            <React.Fragment>
+              {/* Search bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    value={panelSearch}
+                    onChange={e => setPanelSearch(e.target.value)}
+                    placeholder="Buscar por descrição ou categoria…"
+                    className="login-field"
+                    style={{ width: '100%', fontSize: 12.5, paddingLeft: 32 }}
+                  />
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--faint)', pointerEvents: 'none', fontSize: 13 }}>🔍</span>
+                </div>
+                {panelSearch && (
+                  <button onClick={() => setPanelSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', display: 'flex', padding: 4 }}>
+                    <X size={14} />
+                  </button>
+                )}
+                <span style={{ fontSize: 11.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                  {filteredPanelItems.length} de {panelItems.length} · marque para editar em lote
+                </span>
+              </div>
             <div className="card" style={{ overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
@@ -771,11 +821,11 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                     <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
                       <th className="table-th" style={{ width: 32 }}>
                         <button
-                          onClick={() => toggleSelectAll(panelItems.map(i => i.tx.id))}
+                          onClick={() => toggleSelectAll(filteredPanelItems.map(i => i.tx.id))}
                           aria-label="Selecionar todos"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
                         >
-                          {panelItems.length > 0 && panelItems.every(i => selected.has(i.tx.id))
+                          {filteredPanelItems.length > 0 && filteredPanelItems.every(i => selected.has(i.tx.id))
                             ? <CheckSquare size={15} /> : <Square size={15} />}
                         </button>
                       </th>
@@ -788,7 +838,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {panelItems.map(item => {
+                    {filteredPanelItems.map(item => {
                       const macro = MACRO_CATEGORIES.find(m => m.id === item.tx.macroCategoryId)
                       const isSel = selected.has(item.tx.id)
                       return (
@@ -806,7 +856,11 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                             {formatFinancialDateBR(item.tx.competenceDate)}
                           </td>
                           <td className="table-td" style={{ maxWidth: 240 }}>
-                            <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
+                            <p
+                              onClick={() => setPanelSearch(item.tx.description)}
+                              title="Filtrar por esta descrição"
+                              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', cursor: 'pointer' }}
+                            >
                               {item.tx.description}
                             </p>
                             <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>
@@ -821,12 +875,16 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           </td>
                           <td className="table-td">
                             {macro ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 10, padding: '2px 7px', borderRadius: 4,
-                                border: `1px solid ${macro.color}50`, color: macro.color,
-                                fontWeight: 600, background: `${macro.color}12`,
-                              }}>
+                              <span
+                                onClick={() => setPanelSearch(macro.name)}
+                                title="Filtrar por esta categoria"
+                                style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                                  border: `1px solid ${macro.color}50`, color: macro.color,
+                                  fontWeight: 600, background: `${macro.color}12`, cursor: 'pointer',
+                                }}
+                              >
                                 {macro.name}
                               </span>
                             ) : (
@@ -851,11 +909,13 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                         </tr>
                       )
                     })}
-                    {panelItems.length === 0 && (
+                    {filteredPanelItems.length === 0 && (
                       <tr>
                         <td colSpan={7}>
                           <div className="empty-state">
-                            <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhum item nesta categoria</h4>
+                            <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                              {panelSearch ? 'Nenhum resultado para esta busca' : 'Nenhum item nesta categoria'}
+                            </h4>
                           </div>
                         </td>
                       </tr>
@@ -864,6 +924,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                 </table>
               </div>
             </div>
+            </React.Fragment>
             )}
 
             <div style={{ paddingBottom: 8 }}>
@@ -893,6 +954,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
           subCategories={subCategories}
           onApplyCategory={bulkApplyCategory}
           onApplySubcategory={bulkApplySubcategory}
+          onApplyClassification={bulkApplyClassification}
           onAddTag={bulkAddTag}
           onRemoveTag={bulkRemoveTag}
           onMarkReviewed={bulkMarkReviewed}
@@ -1070,7 +1132,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
               <ModalField label="Categoria">
                 <select
                   value={modalPatch.macroCategoryId ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined }))}
+                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined, subCategoryId: undefined }))}
                   className="ledger-select"
                   style={{ width: '100%', fontSize: 12 }}
                 >
@@ -1078,6 +1140,27 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                   {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </ModalField>
+
+              {modalPatch.macroCategoryId && (() => {
+                const staticSubs = CATEGORIES.filter(c => c.macroCategoryId === modalPatch.macroCategoryId && c.active)
+                const userSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
+                const staticIds = new Set(staticSubs.map(s => s.id))
+                const allSubs = [...staticSubs, ...userSubs.filter(s => !staticIds.has(s.id))].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+                if (allSubs.length === 0) return null
+                return (
+                  <ModalField label="Subcategoria">
+                    <select
+                      value={(modalPatch.subCategoryId as string | undefined) ?? ''}
+                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
+                      className="ledger-select"
+                      style={{ width: '100%', fontSize: 12 }}
+                    >
+                      <option value="">— nenhuma —</option>
+                      {allSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </ModalField>
+                )
+              })()}
 
               <ModalField label="Observações">
                 <textarea
@@ -1094,6 +1177,30 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                 />
               </ModalField>
             </div>
+
+            {/* Similar transactions */}
+            {modalTx && (() => {
+              const norm = modalTx.description.trim().toLowerCase()
+              const similar = transactions.filter(t => t.id !== modalTx.id && t.description.trim().toLowerCase() === norm)
+              if (similar.length === 0) return null
+              const cats = Array.from(new Set(similar.map(t => MACRO_CATEGORIES.find(m => m.id === t.macroCategoryId)?.name).filter(Boolean)))
+              return (
+                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink-2)' }}>
+                    {similar.length} outro{similar.length !== 1 ? 's' : ''} com mesma descrição
+                    {cats.length > 0 && <span style={{ fontWeight: 400, color: 'var(--faint)' }}> · atualmente: {cats.join(', ')}</span>}
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={applyToSimilar}
+                      onChange={e => setApplyToSimilar(e.target.checked)}
+                    />
+                    Aplicar categoria/classificação a todos os similares ao salvar
+                  </label>
+                </div>
+              )
+            })()}
 
             <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
               <button className="btn btn-primary" onClick={saveModal}>Salvar</button>
@@ -1247,13 +1354,14 @@ function IntelligentReviewPanel({
 }
 
 function BulkActionBar({
-  count, subCategories, onApplyCategory, onApplySubcategory, onAddTag, onRemoveTag,
+  count, subCategories, onApplyCategory, onApplySubcategory, onApplyClassification, onAddTag, onRemoveTag,
   onMarkReviewed, onMarkNeutral, onApplySuggestedTags, onClear,
 }: {
   count: number
   subCategories: import('../types').SubCategory[]
   onApplyCategory: (macroId: string) => void
   onApplySubcategory: (subId: string) => void
+  onApplyClassification: (cls: ClassificationType) => void
   onAddTag: (tag: string) => void
   onRemoveTag: (tag: string) => void
   onMarkReviewed: () => void
@@ -1286,6 +1394,11 @@ function BulkActionBar({
           {activeSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
+
+      <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplyClassification(e.target.value as ClassificationType); e.target.value = '' }}>
+        <option value="" disabled>Aplicar classificação…</option>
+        {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <input

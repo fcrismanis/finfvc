@@ -249,10 +249,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   const summary = useMemo(() => {
     const income = filtered
-      .filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType))
+      .filter(t => t.type === 'income' && !NEUTRAL_TYPES.has(t.classificationType))
       .reduce((s, t) => s + t.amount, 0)
     const expense = filtered
-      .filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType))
+      .filter(t => t.type === 'expense' && !NEUTRAL_TYPES.has(t.classificationType))
       .reduce((s, t) => s + t.amount, 0)
     return {
       total: filtered.length,
@@ -1086,6 +1086,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   onChange={(macroId, subId) => setModalPatch(p => ({ ...p, macroCategoryId: macroId, subCategoryId: subId }))}
                 />
               </ModalField>
+
+              {modalPatch.macroCategoryId && (() => {
+                const staticSubs = CATEGORIES.filter(c => c.macroCategoryId === modalPatch.macroCategoryId && c.active)
+                const userSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
+                const staticIds = new Set(staticSubs.map(s => s.id))
+                const allSubs = [...staticSubs, ...userSubs.filter(s => !staticIds.has(s.id))].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+                if (allSubs.length === 0) return null
+                return (
+                  <ModalField label="Subcategoria">
+                    <select
+                      value={modalPatch.subCategoryId ?? ''}
+                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
+                      className="ledger-select"
+                      style={{ width: '100%', fontSize: 12 }}
+                    >
+                      <option value="">— nenhuma —</option>
+                      {allSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </ModalField>
+                )
+              })()}
 
               <ModalField label="Classificação">
                 <select

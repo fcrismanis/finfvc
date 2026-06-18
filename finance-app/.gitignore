@@ -8,6 +8,9 @@ server/.data/
 tmp/
 *.sanitized.json
 
+# Audit/analysis scripts and reports — may contain real transaction data
+scripts/
+
 # Logs
 logs
 *.log
