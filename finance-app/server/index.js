@@ -442,6 +442,66 @@ function buildFieldMap(transactions) {
   }
 }
 
+// ── Pluggy: investments (assets) ─────────────────────────────────────────────
+app.post('/api/pluggy/investments', async (req, res) => {
+  const { itemId } = req.body ?? {}
+  if (!itemId) return res.status(400).json({ ok: false, error: 'itemId obrigatório' })
+  try {
+    const { apiKey, apiBase } = await pluggyGetApiKey()
+    let page = 1
+    const pageSize = 500
+    const allInvestments = []
+    while (true) {
+      const url = new URL(`${apiBase}/investments`)
+      url.searchParams.set('itemId', itemId)
+      url.searchParams.set('pageSize', String(pageSize))
+      url.searchParams.set('page', String(page))
+      const r = await fetch(url.toString(), { headers: { 'X-API-KEY': apiKey } })
+      if (!r.ok) {
+        const text = await r.text()
+        console.error('[pluggy] investments failed:', r.status, text.slice(0, 120))
+        return res.status(502).json({ ok: false, error: `Pluggy investments falhou (${r.status})` })
+      }
+      const data = await r.json()
+      const results = Array.isArray(data.results) ? data.results : []
+      for (const inv of results) {
+        allInvestments.push({
+          id:               inv.id,
+          itemId,
+          name:             inv.name ?? inv.code ?? 'Investimento',
+          code:             inv.code ?? null,
+          type:             inv.type ?? null,
+          subtype:          inv.subtype ?? null,
+          currencyCode:     inv.currencyCode ?? 'BRL',
+          balance:          inv.balance ?? inv.value ?? 0,
+          quantity:         inv.quantity ?? null,
+          lastMonthRate:    inv.lastMonthRate ?? null,
+          lastTwelveMonthsRate: inv.lastTwelveMonthsRate ?? null,
+          annualRate:       inv.annualRate ?? null,
+          date:             inv.date ?? null,
+          dueDate:          inv.dueDate ?? null,
+          issuer:           inv.issuer ?? null,
+          institutionName:  inv.institutionName ?? null,
+          status:           inv.status ?? null,
+          amount:           inv.amount ?? inv.initialAmount ?? null,
+          amountProfit:     inv.amountProfit ?? null,
+          amountOriginalCurrency: inv.amountOriginalCurrency ?? null,
+          taxes:            inv.taxes ?? null,
+          taxes2:           inv.taxes2 ?? null,
+          fixedAnnualRate:  inv.fixedAnnualRate ?? null,
+          isinCode:         inv.isinCode ?? null,
+        })
+      }
+      if (results.length < pageSize) break
+      page++
+    }
+    return res.json({ ok: true, investments: allInvestments })
+  } catch (err) {
+    console.error('[pluggy] investments error:', err)
+    return res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
 app.post('/api/pluggy/debug-transactions', async (req, res) => {
   if (process.env.NODE_ENV === 'production' && process.env.DEBUG_PLUGGY !== 'true') {
     return res.status(403).json({ ok: false, error: 'Endpoint de debug indisponível em produção.' })

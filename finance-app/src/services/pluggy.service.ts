@@ -139,6 +139,41 @@ export async function fetchPluggyTransactions(
   return data.transactions ?? []
 }
 
+export interface PluggyInvestment {
+  id: string
+  itemId: string
+  name: string
+  code: string | null
+  type: string | null
+  subtype: string | null
+  currencyCode: string
+  balance: number
+  quantity: number | null
+  lastMonthRate: number | null
+  lastTwelveMonthsRate: number | null
+  annualRate: number | null
+  date: string | null
+  dueDate: string | null
+  issuer: string | null
+  institutionName: string | null
+  status: string | null
+  amount: number | null
+  amountProfit: number | null
+  isinCode: string | null
+  fixedAnnualRate: number | null
+}
+
+export async function fetchPluggyInvestments(itemId: string): Promise<PluggyInvestment[]> {
+  const res = await fetch('/api/pluggy/investments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId }),
+  })
+  const data = await res.json() as { ok: boolean; investments?: PluggyInvestment[]; error?: string }
+  if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao buscar investimentos Pluggy')
+  return data.investments ?? []
+}
+
 export function makeDeduplicationKey(tx: PluggyTransaction, accountId: string): PluggyDeduplicationKey {
   return {
     providerTransactionId: tx.providerCode,
