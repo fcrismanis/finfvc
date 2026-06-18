@@ -2,7 +2,7 @@ import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
   Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
   Tag, Upload, Link2, Bot, Settings,
-  Archive, AlertTriangle, LogOut, X, Wand2,
+  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { DATA_PROVIDER } from '../../config/env'
@@ -28,13 +28,14 @@ const PRINCIPAL: NavEntry[] = [
 const GESTAO: NavEntry[] = [
   { route: '/lancamentos', label: 'Lançamentos', icon: List },
   { route: '/orcamento', label: 'Orçamento', icon: Target },
+  { route: '/relatorios', label: 'Relatórios', icon: FileBarChart },
   { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
   { route: '/fechamento', label: 'Fechamento', icon: Lock },
+  { route: '/investimentos', label: 'Investimentos', icon: TrendingUp },
+  { route: '/patrimonio', label: 'Patrimônio', icon: Home },
+  { route: '/dividas', label: 'Dívidas', icon: CreditCard },
+  { route: '/lembretes', label: 'Lembretes', icon: Bell },
   { route: '/futuro', label: 'Futuro', icon: Calendar, phase2: true },
-  { route: '/investimentos', label: 'Investimentos', icon: TrendingUp, phase2: true },
-  { route: '/patrimonio', label: 'Patrimônio', icon: Home, phase2: true },
-  { route: '/dividas', label: 'Dívidas', icon: CreditCard, phase2: true },
-  { route: '/lembretes', label: 'Lembretes', icon: Bell, phase2: true },
 ]
 
 const CADASTROS: NavEntry[] = [

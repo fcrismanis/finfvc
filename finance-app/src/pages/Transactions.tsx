@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
-import { Search, ChevronLeft, ChevronRight, ChevronDown, FlaskConical, X, ArrowLeft, Pencil, Tag, Download, MoreHorizontal } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ChevronDown, FlaskConical, X, ArrowLeft, Pencil, Tag, Download, Trash2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { CATEGORIES } from '../config/categories'
 import { ICON_MAP } from '../utils/categoryIcons'
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth, normalizeFinancialDate } from '../utils/date'
@@ -80,7 +81,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
-  const [openActionMenu, setOpenActionMenu] = useState<string | null>(null)
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineSubEdit, setInlineSubEdit] = useState<{ id: string; subId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
@@ -1067,45 +1067,31 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                               )}
                             </td>
 
-                            {/* Actions menu */}
-                            <td className="table-td" style={{ whiteSpace: 'nowrap', position: 'relative' }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); setOpenActionMenu(openActionMenu === tx.id ? null : tx.id) }}
-                                aria-label="Ações"
-                                title="Ações"
-                                style={{ display: 'flex', alignItems: 'center', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 5px', borderRadius: 5 }}
-                              >
-                                <MoreHorizontal size={14} />
-                              </button>
-                              {openActionMenu === tx.id && (
-                                <div
-                                  style={{
-                                    position: 'absolute', right: 0, top: '100%', zIndex: 50,
-                                    background: 'var(--card-bg)', border: '1px solid var(--line)',
-                                    borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.13)',
-                                    minWidth: 120, overflow: 'hidden',
-                                  }}
-                                  onMouseLeave={() => setOpenActionMenu(null)}
+                            {/* Actions — direct icons */}
+                            <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <button
+                                  onClick={e => { e.stopPropagation(); openModal(tx) }}
+                                  aria-label="Editar"
+                                  title="Editar"
+                                  style={{ display: 'flex', alignItems: 'center', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 5px', borderRadius: 5 }}
                                 >
-                                  <button
-                                    onClick={() => { openModal(tx); setOpenActionMenu(null) }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', padding: '8px 14px', textAlign: 'left', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)', fontFamily: 'var(--ui)' }}
-                                  >
-                                    <Pencil size={11} /> Editar
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm('Marcar lançamento como cancelado?')) {
-                                        updateTransaction(tx.id, { status: 'cancelled' })
-                                      }
-                                      setOpenActionMenu(null)
-                                    }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', padding: '8px 14px', textAlign: 'left', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--crit)', fontFamily: 'var(--ui)' }}
-                                  >
-                                    <X size={11} /> Excluir
-                                  </button>
-                                </div>
-                              )}
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    if (window.confirm('Excluir este lançamento?')) {
+                                      updateTransaction(tx.id, { status: 'cancelled' })
+                                    }
+                                  }}
+                                  aria-label="Excluir"
+                                  title="Excluir"
+                                  style={{ display: 'flex', alignItems: 'center', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 5px', borderRadius: 5 }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -1429,10 +1415,25 @@ function CategorySelector({
       : selectedMacro.name
     : 'Sem categoria'
 
+  // Unified subs: static CATEGORIES + user SubCategories, deduped by id, active only
+  function getEffectiveSubs(macroId: string): import('../types').SubCategory[] {
+    const staticSubs: import('../types').SubCategory[] = CATEGORIES
+      .filter(c => c.macroCategoryId === macroId && c.active)
+      .map(c => ({
+        id: c.id, name: c.name, macroCategoryId: c.macroCategoryId,
+        essentiality: 'inherit' as const, active: true,
+        createdAt: '', keywords: c.keywords, icon: c.icon,
+      }))
+    const userSubs = subCategories.filter(s => s.macroCategoryId === macroId && s.active)
+    // userSubs override static by same id; then append new user-only ones
+    const staticIds = new Set(staticSubs.map(s => s.id))
+    const merged = [...staticSubs, ...userSubs.filter(s => !staticIds.has(s.id))]
+    return merged.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }
+
   // Build a group entry for one macro, applying the search filter
   function buildGroup(m: import('../types').MacroCategory, q: string) {
-    const allSubs = subCategories.filter(s => s.macroCategoryId === m.id && s.active)
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+    const allSubs = getEffectiveSubs(m.id)
     if (!q) return { macro: m, subs: allSubs }
     const macroHit = m.name.toLowerCase().includes(q) ||
       (m.keywords ?? []).some(k => k.toLowerCase().includes(q))

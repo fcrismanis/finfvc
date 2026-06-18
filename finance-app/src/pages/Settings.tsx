@@ -9,6 +9,35 @@ const PAGE_SIZE_OPTIONS = [
   { value: '1000', label: '1000 por página' },
 ]
 
+const ALERT_SETTINGS_KEY = 'fin_alert_settings'
+
+interface AlertSettings {
+  categoryAlert50: boolean
+  categoryAlert75: boolean
+  categoryAlert100: boolean
+  globalAlert90: boolean
+  globalAlert100: boolean
+}
+
+function loadAlertSettings(): AlertSettings {
+  try {
+    const raw = localStorage.getItem(ALERT_SETTINGS_KEY)
+    return raw ? JSON.parse(raw) : {
+      categoryAlert50: false,
+      categoryAlert75: true,
+      categoryAlert100: true,
+      globalAlert90: true,
+      globalAlert100: true,
+    }
+  } catch {
+    return { categoryAlert50: false, categoryAlert75: true, categoryAlert100: true, globalAlert90: true, globalAlert100: true }
+  }
+}
+
+function saveAlertSettings(s: AlertSettings) {
+  localStorage.setItem(ALERT_SETTINGS_KEY, JSON.stringify(s))
+}
+
 interface Props {
   onNavigate: (route: string) => void
 }
@@ -18,6 +47,15 @@ export function Settings({ onNavigate }: Props) {
   const [pageSize, setPageSize] = useState(
     () => localStorage.getItem('fin_transactions_page_size') ?? '500'
   )
+  const [alerts, setAlerts] = useState<AlertSettings>(loadAlertSettings)
+
+  function toggleAlert(key: keyof AlertSettings) {
+    setAlerts(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      saveAlertSettings(next)
+      return next
+    })
+  }
 
   function handlePageSizeChange(value: string) {
     setPageSize(value)
@@ -72,6 +110,69 @@ export function Settings({ onNavigate }: Props) {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Alert preferences */}
+        <div className="card" style={{ padding: '18px 22px' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Alertas de orçamento</h3>
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 16 }}>
+            Controla quando o sistema gera alertas no Dashboard ao cruzar percentuais do orçamento.
+          </p>
+
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)', marginBottom: 10 }}>Por categoria</p>
+            <p style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 10 }}>
+              Alertar quando o gasto cruza 50%, 75% ou 100% da meta de cada categoria.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                { key: 'categoryAlert50' as const, label: '50%' },
+                { key: 'categoryAlert75' as const, label: '75%' },
+                { key: 'categoryAlert100' as const, label: '100%' },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleAlert(key)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'var(--ui)', transition: 'all .15s',
+                    background: alerts[key] ? 'var(--ink)' : 'var(--well)',
+                    color: alerts[key] ? 'white' : 'var(--faint)',
+                    border: `1px solid ${alerts[key] ? 'var(--ink)' : 'var(--line)'}`,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)', marginBottom: 10 }}>Orçamento geral</p>
+            <p style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 10 }}>
+              Alertar quando o total gasto no mês cruza 90% ou 100% da soma de todas as metas.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                { key: 'globalAlert90' as const, label: '90%' },
+                { key: 'globalAlert100' as const, label: '100%' },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleAlert(key)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'var(--ui)', transition: 'all .15s',
+                    background: alerts[key] ? 'var(--ink)' : 'var(--well)',
+                    color: alerts[key] ? 'white' : 'var(--faint)',
+                    border: `1px solid ${alerts[key] ? 'var(--ink)' : 'var(--line)'}`,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

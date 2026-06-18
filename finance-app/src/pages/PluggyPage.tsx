@@ -760,8 +760,8 @@ export function PluggyPage() {
                               {acc.selectedForDailySync ? '● Auto' : '○ Auto'}
                             </button>
                             <div style={{ textAlign: 'right' }}>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: acc.balance !== null ? 'var(--ink)' : 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
-                                {acc.balance !== null ? fmtBRL(acc.balance) : 'Saldo indisponível'}
+                              <p style={{ fontSize: 13, fontWeight: 700, color: acc.balance != null ? 'var(--ink)' : 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
+                                {acc.balance != null ? fmtBRL(acc.balance) : 'Saldo indisponível'}
                               </p>
                               {acc.type === 'CREDIT' && acc.limit != null && (
                                 <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
@@ -769,7 +769,7 @@ export function PluggyPage() {
                                   {acc.availableLimit != null && ` · Disponível: ${fmtBRL(acc.availableLimit)}`}
                                 </p>
                               )}
-                              {acc.type === 'BANK' && acc.availableBalance !== null && acc.availableBalance !== acc.balance && (
+                              {acc.type === 'BANK' && acc.availableBalance != null && acc.availableBalance !== acc.balance && (
                                 <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Disponível: {fmtBRL(acc.availableBalance)}</p>
                               )}
                             </div>

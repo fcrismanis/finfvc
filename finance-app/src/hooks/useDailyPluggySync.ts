@@ -24,7 +24,11 @@ export interface DailySyncStatus {
 export function loadDailySyncStatus(): DailySyncStatus | null {
   try {
     const raw = localStorage.getItem(DAILY_SYNC_STATUS_KEY)
-    return raw ? (JSON.parse(raw) as DailySyncStatus) : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as DailySyncStatus
+    // Normalize fields that may be missing from old saved values
+    if (!Array.isArray(parsed.errors)) parsed.errors = []
+    return parsed
   } catch { return null }
 }
 

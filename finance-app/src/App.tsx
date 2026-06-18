@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, Component, type ReactNode } from 'react'
 
 export interface NavFilter {
   macroCategoryIds?: string[]
@@ -41,6 +41,11 @@ const CardsPage        = lazy(() => import('./pages/CardsPage').then(m => ({ def
 const PluggyPage       = lazy(() => import('./pages/PluggyPage').then(m => ({ default: m.PluggyPage })))
 const BackupPage       = lazy(() => import('./pages/BackupPage').then(m => ({ default: m.BackupPage })))
 const DangerZonePage   = lazy(() => import('./pages/DangerZonePage').then(m => ({ default: m.DangerZonePage })))
+const RelatoriosPage   = lazy(() => import('./pages/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })))
+const InvestimentosPage = lazy(() => import('./pages/InvestimentosPage').then(m => ({ default: m.InvestimentosPage })))
+const PatrimonioPage   = lazy(() => import('./pages/PatrimonioPage').then(m => ({ default: m.PatrimonioPage })))
+const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
+const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
 
 const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
 
@@ -105,7 +110,8 @@ function AppShell() {
     const known = ['/', '/conectar', '/lancamentos', '/orcamento', '/revisao', '/fechamento',
       '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/regras',
       '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
-      '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes']
+      '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes',
+      '/relatorios']
     return known.includes(r) ? r : '/'
   })
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
@@ -149,16 +155,17 @@ function AppShell() {
       case '/regras':        return <CategoryRulesPage />
       case '/contas':        return <AccountsPage onNavigate={navigate} />
       case '/cartoes':       return <CardsPage onNavigate={navigate} />
-      case '/pluggy':        return <PluggyPage />
+      case '/pluggy':        return <PluggyErrorBoundary><PluggyPage /></PluggyErrorBoundary>
       case '/backup':        return <BackupPage />
       case '/zona-perigo':   return <DangerZonePage />
       // Phase 2 placeholders
       case '/clareza':       return <Placeholder title="Clareza Financeira" description="Visualização avançada do fluxo financeiro da família." />
       case '/futuro':        return <Placeholder title="Futuro" description="Projeção de fluxo de caixa e planejamento de metas." />
-      case '/investimentos': return <Placeholder title="Investimentos" description="Carteira de investimentos e acompanhamento de rentabilidade." />
-      case '/patrimonio':    return <Placeholder title="Patrimônio" description="Visão consolidada do patrimônio líquido da família." />
-      case '/dividas':       return <Placeholder title="Dívidas" description="Gestão de dívidas, parcelas e calendário de pagamento." />
-      case '/lembretes':     return <Placeholder title="Lembretes" description="Alertas de vencimento, metas e eventos financeiros." />
+      case '/investimentos': return <InvestimentosPage />
+      case '/patrimonio':    return <PatrimonioPage />
+      case '/dividas':       return <DividasPage />
+      case '/lembretes':     return <LembretesPage />
+      case '/relatorios':    return <RelatoriosPage selectedMonth={selectedMonth} />
       default:               return null
     }
   }
@@ -214,6 +221,22 @@ function AuthGate({ children }: { children: ReactNode }) {
   if (loading) return <LoadingState fullPage message="Verificando autenticação…" />
   if (!user) return <Login />
   return <>{children}</>
+}
+
+class PluggyErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(e: Error) { return { error: e.message + '\n' + e.stack } }
+  render() {
+    if (this.state.error) return (
+      <main className="page-shell">
+        <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px', background: 'var(--crit-soft)', borderRadius: 12, border: '1px solid var(--crit)' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--crit)', marginBottom: 12 }}>Erro ao carregar Pluggy</h2>
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--ink)', background: 'var(--well)', padding: 12, borderRadius: 8 }}>{this.state.error}</pre>
+        </div>
+      </main>
+    )
+    return this.props.children
+  }
 }
 
 export default function App() {
