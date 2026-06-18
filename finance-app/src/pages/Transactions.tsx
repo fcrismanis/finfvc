@@ -222,8 +222,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
     if (filterInstitution) result = result.filter(t => {
       const pInfo = pluggyAccountMap.get(t.accountId)
-      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName ?? ''
-      return inst === filterInstitution
+      const acc = pInfo?.name ?? t.pluggyAccountName ?? ''
+      return acc === filterInstitution
     })
     if (navFilter?.macroCategoryIds?.length) {
       const ids = new Set(navFilter.macroCategoryIds)
@@ -425,8 +425,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     for (const t of transactions) {
       if (t.source !== 'pluggy') continue
       const pInfo = pluggyAccountMap.get(t.accountId)
-      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName
-      if (inst) set.add(inst)
+      const acc = pInfo?.name ?? t.pluggyAccountName
+      if (acc) set.add(acc)
     }
     return Array.from(set).sort()
   }, [transactions, pluggyAccountMap])
@@ -779,11 +779,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
                                     const account = pInfo?.name ?? tx.pluggyAccountName
-                                    const logo = tx.pluggyInstitutionLogoUrl ?? pInfo?.logoUrl
                                     if (!account) return null
                                     return (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                        {logo && <img src={logo} alt="" style={{ width: 11, height: 11, borderRadius: 2, objectFit: 'contain', flexShrink: 0, opacity: 0.7 }} />}
+                                      <div style={{ marginTop: 2 }}>
                                         <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
                                           {account}
                                         </span>
