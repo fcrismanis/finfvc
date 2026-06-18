@@ -1113,23 +1113,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                     </Fragment>
                   ))}
                 </tbody>
+                {filtered.length > 0 && (() => {
+                  // Brutal sum: every visible item, sign matches display (expense = negative)
+                  const filteredTotal = filtered.reduce((s, t) => s + (t.type === 'expense' ? -t.amount : t.amount), 0)
+                  const totalColor = filteredTotal > 0 ? 'var(--pos)' : filteredTotal < 0 ? 'var(--crit)' : 'var(--faint)'
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--line)' }}>
+                        <td className="table-td" style={{ fontWeight: 700, fontSize: 12, color: 'var(--faint)', paddingTop: 10 }}>
+                          Total filtrado ({filtered.length})
+                        </td>
+                        <td className="table-td table-th-right" style={{ fontWeight: 800, fontSize: 13, color: totalColor, paddingTop: 10, whiteSpace: 'nowrap' }}>
+                          {filteredTotal >= 0 ? '+' : ''}{formatBRL(filteredTotal)}
+                        </td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
               </table>
             </div>
           )}
-
-          {/* ── Final Summary (Totalizador) ── */}
-          {pageItems.length > 0 && (() => {
-            const pageIncome = pageItems.filter(t => t.type === 'income' && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)
-            const pageExpense = pageItems.filter(t => t.type === 'expense' && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)
-            const pageResult = pageIncome - pageExpense
-            return (
-              <div style={{ marginTop: 20, marginBottom: 12, paddingTop: 12, borderTop: '2px solid var(--line)', fontSize: 12.5, fontFamily: 'var(--ui)', display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Receitas:</span> <span style={{ fontWeight: 800, color: 'var(--pos)', marginLeft: 8 }}>+{formatBRL(pageIncome)}</span></div>
-                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Despesas:</span> <span style={{ fontWeight: 800, color: 'var(--crit)', marginLeft: 8 }}>−{formatBRL(pageExpense)}</span></div>
-                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Resultado:</span> <span style={{ fontWeight: 800, color: pageResult >= 0 ? 'var(--pos)' : 'var(--crit)', marginLeft: 8 }}>{formatBRL(pageResult)}</span></div>
-              </div>
-            )
-          })()}
         </div>
 
         {/* ── Pagination ── */}
