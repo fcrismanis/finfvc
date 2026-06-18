@@ -287,13 +287,23 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     setModal(MODAL_BLANK)
   }
 
+  function clearSubFromTransactions(subId: string) {
+    const affected = transactions.filter(t => t.subCategoryId === subId)
+    if (affected.length > 0) {
+      updateTransactions(affected.map(t => ({ id: t.id, patch: { subCategoryId: undefined } })))
+    }
+  }
+
   async function removeSubCat(id: string) {
-    if (!confirm('Remover subcategoria? Lançamentos existentes não serão afetados.')) return
+    if (!confirm('Remover subcategoria?')) return
     await deleteSubCategory(id)
+    if (confirm('Limpar esta subcategoria dos lançamentos existentes?')) {
+      clearSubFromTransactions(id)
+    }
   }
 
   function deactivateDefaultCat(id: string) {
-    if (!confirm('Desativar subcategoria padrão? Ela ficará oculta. Lançamentos existentes não serão afetados.')) return
+    if (!confirm('Remover subcategoria padrão?')) return
     const cat = CATEGORIES.find(c => c.id === id)
     if (!cat) return
     const saved = overrideDefaultCategory(id, {
@@ -303,6 +313,9 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
       icon: cat.icon ?? 'circle',
     })
     setCustomCats(prev => [...prev.filter(c => c.id !== saved.id), saved])
+    if (confirm('Limpar esta subcategoria dos lançamentos existentes?')) {
+      clearSubFromTransactions(id)
+    }
   }
 
   // ── apply keywords ──────────────────────────────────────────────────────────
