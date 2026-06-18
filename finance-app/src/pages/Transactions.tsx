@@ -72,6 +72,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterInstitution, setFilterInstitution] = useState(savedFilters.filterInstitution ?? '')
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [showStatusBadges, setShowStatusBadges] = useState<boolean>(() => localStorage.getItem('fin_show_status_badges') !== 'false')
   const [page, setPage] = useState(0)
   const [pageSize] = useState<number>(() => {
     const v = localStorage.getItem('fin_transactions_page_size')
@@ -628,6 +629,17 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             )}
 
             <button
+              onClick={() => {
+                const next = !showStatusBadges
+                setShowStatusBadges(next)
+                localStorage.setItem('fin_show_status_badges', String(next))
+              }}
+              title={showStatusBadges ? 'Ocultar status das linhas' : 'Mostrar status das linhas'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: showStatusBadges ? 'var(--accent)' : 'var(--ink-2)', background: showStatusBadges ? 'var(--accent-soft)' : 'var(--well)', border: `1px solid ${showStatusBadges ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'var(--ui)' }}
+            >
+              status
+            </button>
+            <button
               onClick={exportCsv}
               disabled={filtered.length === 0}
               title="Exportar lançamentos do filtro atual em CSV"
@@ -773,32 +785,32 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                     >
                                       {tx.description}
                                     </p>
-                                    {(tx.manualCategoryOverride || tx.manualTextOverride) && (
+                                    {showStatusBadges && (tx.manualCategoryOverride || tx.manualTextOverride) && (
                                       <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--pos-soft)', color: 'var(--pos)', border: '1px solid var(--pos)30', flexShrink: 0 }}>
                                         editado
                                       </span>
                                     )}
-                                    {tx.status === 'pending' && (
+                                    {showStatusBadges && tx.status === 'pending' && (
                                       <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
                                         pendente
                                       </span>
                                     )}
-                                    {tx.categorySuggestionSource === 'rule' && (
+                                    {showStatusBadges && tx.categorySuggestionSource === 'rule' && (
                                       <span title="Classificado por regra aprendida" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', flexShrink: 0 }}>
                                         regra
                                       </span>
                                     )}
-                                    {tx.classificationType === 'neutral' && (
+                                    {showStatusBadges && tx.classificationType === 'neutral' && (
                                       <span title="Movimento neutro — fora do resultado/orçamento" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--well)', color: 'var(--faint)', border: '1px solid var(--line)', flexShrink: 0 }}>
                                         neutro
                                       </span>
                                     )}
-                                    {tx.needsReview && (
+                                    {showStatusBadges && tx.needsReview && (
                                       <span title="Precisa revisar" style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--warn-soft, #fef3c7)', color: 'var(--warn)', flexShrink: 0 }}>
                                         revisar
                                       </span>
                                     )}
-                                    {tx.installmentCurrent && tx.installmentTotal && (
+                                    {showStatusBadges && tx.installmentCurrent && tx.installmentTotal && (
                                       <span title={`Parcela ${tx.installmentCurrent} de ${tx.installmentTotal}`} style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', flexShrink: 0 }}>
                                         {tx.installmentCurrent}/{tx.installmentTotal}
                                       </span>
