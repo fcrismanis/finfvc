@@ -292,6 +292,19 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     await deleteSubCategory(id)
   }
 
+  function deactivateDefaultCat(id: string) {
+    if (!confirm('Desativar subcategoria padrão? Ela ficará oculta. Lançamentos existentes não serão afetados.')) return
+    const cat = CATEGORIES.find(c => c.id === id)
+    if (!cat) return
+    const saved = overrideDefaultCategory(id, {
+      keywords: cat.keywords ?? [],
+      budgetClassification: cat.budgetClassification ?? 'none',
+      active: false,
+      icon: cat.icon ?? 'circle',
+    })
+    setCustomCats(prev => [...prev.filter(c => c.id !== saved.id), saved])
+  }
+
   // ── apply keywords ──────────────────────────────────────────────────────────
 
   function buildKwPreview() {
@@ -465,7 +478,6 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                   <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{cat.name}</span>
-                                  <Chip label="Padrão" color="#94a3b8" small />
                                   {!cat.active && <span style={{ fontSize: 10, color: 'var(--faint)' }}>desativada</span>}
                                 </div>
                                 {cat.keywords?.length ? (
@@ -482,6 +494,11 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
                                   }}>{BUDGET_CLASSIFICATION_LABELS[bc]}</span>
                                 )}
                                 <PencilBtn onClick={() => startEditCat(cat)} />
+                                <button
+                                  onClick={() => deactivateDefaultCat(cat.id)}
+                                  style={{ fontSize: 12, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', lineHeight: 1, fontFamily: 'var(--ui)' }}
+                                  title="Remover"
+                                >×</button>
                               </div>
                             </div>
                           )}
