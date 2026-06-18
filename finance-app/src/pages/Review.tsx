@@ -14,6 +14,8 @@ import { currentYearMonth, formatFinancialDateBR } from '../utils/date'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
+import { CategorySelector } from '../components/CategorySelector'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
 
 interface AISuggestion {
   id: string
@@ -1370,13 +1372,10 @@ function BulkActionBar({
   onClear: () => void
 }) {
   const [tagInput, setTagInput] = useState('')
-  const [pendingMacro, setPendingMacro] = useState('')
-  const [pendingSub, setPendingSub] = useState('')
+  const [pendingMacro, setPendingMacro] = useState<string | undefined>(undefined)
+  const [pendingSub, setPendingSub] = useState<string | undefined>(undefined)
   const [pendingCls, setPendingCls] = useState('')
-
-  const availableSubs = pendingMacro
-    ? subCategories.filter(s => s.active && s.macroCategoryId === pendingMacro)
-    : subCategories.filter(s => s.active)
+  const allMacros = useMemo(() => getAllMacroCategories(), [])
 
   const hasPending = !!(pendingMacro || pendingSub || pendingCls)
 
@@ -1384,8 +1383,8 @@ function BulkActionBar({
     if (pendingMacro) onApplyCategory(pendingMacro)
     if (pendingSub) onApplySubcategory(pendingSub)
     if (pendingCls) onApplyClassification(pendingCls as ClassificationType)
-    setPendingMacro('')
-    setPendingSub('')
+    setPendingMacro(undefined)
+    setPendingSub(undefined)
     setPendingCls('')
   }
 
@@ -1401,17 +1400,15 @@ function BulkActionBar({
       </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: hasPending ? 'var(--accent-soft)' : 'var(--well)', border: '1px solid var(--line)', flexWrap: 'wrap' }}>
-        <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingMacro} onChange={e => { setPendingMacro(e.target.value); setPendingSub('') }}>
-          <option value="">Categoria…</option>
-          {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-
-        {availableSubs.length > 0 && (
-          <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingSub} onChange={e => setPendingSub(e.target.value)}>
-            <option value="">Subcategoria…</option>
-            {availableSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        )}
+        <div style={{ minWidth: 200 }}>
+          <CategorySelector
+            macroCategoryId={pendingMacro}
+            subCategoryId={pendingSub}
+            allMacros={allMacros}
+            subCategories={subCategories}
+            onChange={(macroId, subId) => { setPendingMacro(macroId); setPendingSub(subId) }}
+          />
+        </div>
 
         <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingCls} onChange={e => setPendingCls(e.target.value)}>
           <option value="">Classificação…</option>
