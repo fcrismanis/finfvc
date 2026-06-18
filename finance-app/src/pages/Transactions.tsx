@@ -245,37 +245,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     })
   }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir])
 
-  const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
-
-  // Summary ignores filterMacro so income/expense always sums entire month, not filtered category
-  const summaryBase = useMemo(() => {
-    let result = transactions
-    if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
-    if (filterType) result = result.filter(t => t.type === filterType)
-    // intentionally excludes filterMacro — summary is always for entire month/type
-    if (filterStatus) result = result.filter(t => t.status === filterStatus)
-    if (filterInstitution) result = result.filter(t => {
-      const pInfo = pluggyAccountMap.get(t.accountId)
-      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName ?? ''
-      return inst === filterInstitution
-    })
-    if (filterTag) result = result.filter(t => t.tags?.includes(filterTag))
-    if (quickFilter) result = result.filter(t => matchesQuickFilter(t, quickFilter, dqCtx))
-    if (search.trim()) {
-      const q = search.trim().toUpperCase()
-      result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
-    }
-    return result
-  }, [transactions, filterMonth, filterType, filterStatus, filterInstitution, filterTag, quickFilter, search, pluggyAccountMap, dqCtx])
-
   const summary = useMemo(() => ({
     total: filtered.length,
-    // Golden rule: positive amount + not neutral = income; negative amount + not neutral = expense; neutrals never count
-    income: summaryBase.filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0),
-    expense: summaryBase.filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0),
-    neutral: filtered.filter(t => NEUTRAL_TYPES.has(t.classificationType)).length,
     pending: filtered.filter(t => t.status === 'pending').length,
-  }), [filtered, summaryBase, NEUTRAL_TYPES])
+  }), [filtered])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -447,7 +420,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort()
   }, [transactions])
 
-  const resultColor = summary.income - summary.expense >= 0 ? 'var(--pos)' : 'var(--crit)'
   const allInstitutions = useMemo(() => {
     const set = new Set<string>()
     for (const t of transactions) {
@@ -553,18 +525,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             ))}
           </div>
         )}
-
-        <div className="stats-grid-4">
-          <TxStatCard label="Receitas" value={`+${formatBRL(summary.income)}`} color="var(--pos)" />
-          <TxStatCard label="Despesas" value={`−${formatBRL(summary.expense)}`} color="var(--crit)" />
-          <TxStatCard label="Resultado" value={formatBRL(summary.income - summary.expense)} color={resultColor} soft />
-          <TxStatCard
-            label="Pendentes"
-            value={`${summary.pending}`}
-            sub={`${summary.neutral} neutros`}
-            color={summary.pending > 0 ? 'var(--warn)' : 'var(--faint)'}
-          />
-        </div>
 
         {!isReviewMode && (
           <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -1564,14 +1524,3 @@ function ModalTagsField({ tags, onChange }: { tags: string[]; onChange: (tags: s
   )
 }
 
-function TxStatCard({ label, value, color, sub, soft }: {
-  label: string; value: string; color: string; sub?: string; soft?: boolean
-}) {
-  return (
-    <div className="card" style={{ padding: '14px 18px', ...(soft ? { background: 'var(--accent-soft)' } : {}) }}>
-      <span className="eyebrow" style={{ display: 'block', marginBottom: 7 }}>{label}</span>
-      <p className="num" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', color }}>{value}</p>
-      {sub && <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{sub}</p>}
-    </div>
-  )
-}
