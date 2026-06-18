@@ -44,6 +44,7 @@ export function newCustomCategoryId(name: string): string {
 }
 
 export function overrideDefaultCategory(baseId: string, patch: {
+  name?: string
   keywords?: string[]
   budgetClassification?: import('../types').BudgetClassification
   active?: boolean
@@ -55,6 +56,7 @@ export function overrideDefaultCategory(baseId: string, patch: {
   const existing = customs.find(c => c.id === baseId)
   const next: Category = {
     ...(existing ?? base),
+    name: patch.name ?? existing?.name ?? base.name,
     keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
     budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
     active: patch.active ?? existing?.active ?? base.active ?? true,

@@ -177,7 +177,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     setInlineEdit({
       id: cat.id,
       kind: 'defaultCat',
-      nameReadOnly: true,
+      nameReadOnly: false,
       name: cat.name,
       icon: cat.icon ?? 'circle',
       kwText: (cat.keywords ?? []).join(', '),
@@ -226,6 +226,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
       }
       case 'defaultCat': {
         const saved = overrideDefaultCategory(e.id, {
+          name: e.name.trim() || undefined,
           keywords: kws, budgetClassification: e.budgetClassification,
           active: e.active, icon: e.icon,
         })
