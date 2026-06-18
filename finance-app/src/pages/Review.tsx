@@ -1370,7 +1370,24 @@ function BulkActionBar({
   onClear: () => void
 }) {
   const [tagInput, setTagInput] = useState('')
-  const activeSubs = subCategories.filter(s => s.active)
+  const [pendingMacro, setPendingMacro] = useState('')
+  const [pendingSub, setPendingSub] = useState('')
+  const [pendingCls, setPendingCls] = useState('')
+
+  const availableSubs = pendingMacro
+    ? subCategories.filter(s => s.active && s.macroCategoryId === pendingMacro)
+    : subCategories.filter(s => s.active)
+
+  const hasPending = !!(pendingMacro || pendingSub || pendingCls)
+
+  function applyPending() {
+    if (pendingMacro) onApplyCategory(pendingMacro)
+    if (pendingSub) onApplySubcategory(pendingSub)
+    if (pendingCls) onApplyClassification(pendingCls as ClassificationType)
+    setPendingMacro('')
+    setPendingSub('')
+    setPendingCls('')
+  }
 
   return (
     <div style={{
@@ -1383,22 +1400,33 @@ function BulkActionBar({
         {count} selecionado{count !== 1 ? 's' : ''}
       </span>
 
-      <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplyCategory(e.target.value); e.target.value = '' }}>
-        <option value="" disabled>Aplicar categoria…</option>
-        {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-      </select>
-
-      {activeSubs.length > 0 && (
-        <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplySubcategory(e.target.value); e.target.value = '' }}>
-          <option value="" disabled>Aplicar subcategoria…</option>
-          {activeSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: hasPending ? 'var(--accent-soft)' : 'var(--well)', border: '1px solid var(--line)', flexWrap: 'wrap' }}>
+        <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingMacro} onChange={e => { setPendingMacro(e.target.value); setPendingSub('') }}>
+          <option value="">Categoria…</option>
+          {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
-      )}
 
-      <select className="ledger-select" style={{ fontSize: 11.5 }} defaultValue="" onChange={e => { onApplyClassification(e.target.value as ClassificationType); e.target.value = '' }}>
-        <option value="" disabled>Aplicar classificação…</option>
-        {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
+        {availableSubs.length > 0 && (
+          <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingSub} onChange={e => setPendingSub(e.target.value)}>
+            <option value="">Subcategoria…</option>
+            {availableSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+
+        <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingCls} onChange={e => setPendingCls(e.target.value)}>
+          <option value="">Classificação…</option>
+          {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={!hasPending}
+          onClick={applyPending}
+          style={{ fontSize: 11.5, opacity: hasPending ? 1 : 0.4 }}
+        >
+          Aplicar
+        </button>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <input
