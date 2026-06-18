@@ -1118,24 +1118,18 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           )}
 
           {/* ── Final Summary (Totalizador) ── */}
-          {pageItems.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 24, marginBottom: 12 }}>
-              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card-bg)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Receitas (subtotal)</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pos)' }}>+{formatBRL(pageItems.filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0))}</div>
+          {pageItems.length > 0 && (() => {
+            const pageIncome = pageItems.filter(t => t.type === 'income' && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)
+            const pageExpense = pageItems.filter(t => t.type === 'expense' && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)
+            const pageResult = pageIncome - pageExpense
+            return (
+              <div style={{ marginTop: 20, marginBottom: 12, paddingTop: 12, borderTop: '2px solid var(--line)', fontSize: 12.5, fontFamily: 'var(--ui)', display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Receitas:</span> <span style={{ fontWeight: 800, color: 'var(--pos)', marginLeft: 8 }}>+{formatBRL(pageIncome)}</span></div>
+                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Despesas:</span> <span style={{ fontWeight: 800, color: 'var(--crit)', marginLeft: 8 }}>−{formatBRL(pageExpense)}</span></div>
+                <div><span style={{ fontWeight: 400, color: 'var(--faint)' }}>Resultado:</span> <span style={{ fontWeight: 800, color: pageResult >= 0 ? 'var(--pos)' : 'var(--crit)', marginLeft: 8 }}>{formatBRL(pageResult)}</span></div>
               </div>
-              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card-bg)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Despesas (subtotal)</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--crit)' }}>−{formatBRL(Math.abs(pageItems.filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)))}</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0) >= 0 ? 'var(--pos-soft)' : 'var(--crit-soft)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Resultado (página)</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0) >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
-                  {formatBRL(pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0))}
-                </div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* ── Pagination ── */}
