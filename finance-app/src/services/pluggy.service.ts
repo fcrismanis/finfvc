@@ -412,8 +412,18 @@ export function mapPluggyToTransactions(
       : `${financialDate}|${Math.abs(ptx.amount)}|${(ptx.description ?? '').slice(0, 40).toUpperCase()}|${accountId}`
 
     const type: import('../types').TransactionType = ptx.type === 'CREDIT' ? 'income' : 'expense'
+
+    const desc = (ptx.description ?? '').toUpperCase()
+    const isCardPayment = type === 'expense' && (
+      /PAG(AMENTO)?\s*(DE\s*)?(FATURA|CARTAO|CART[AÃ]O|CREDITO|CR[EÉ]DITO)/i.test(desc) ||
+      /PGTO\s*(FATURA|CART[AÃ]O|CRED)/i.test(desc) ||
+      /PAGTO\s*(FATURA|CART[AÃ]O)/i.test(desc) ||
+      (ptx.operationType === 'CREDIT_CARD_PAYMENT') ||
+      (ptx.category?.toUpperCase().includes('CARTAO') && ptx.category?.toUpperCase().includes('PAG'))
+    )
+
     const defaultClassification: import('../types').ClassificationType =
-      type === 'income' ? 'operational_income' : 'operational_expense'
+      isCardPayment ? 'transfer' : type === 'income' ? 'operational_income' : 'operational_expense'
 
     const baseTx: import('../types').Transaction = {
       id: `pluggy_${ptx.id}`,
@@ -429,9 +439,9 @@ export function mapPluggyToTransactions(
       accountId,
       paymentMethod: 'account' as import('../types').PaymentMethod,
       isRecurring: false,
-      includeInOperationalResult: true,
+      includeInOperationalResult: !isCardPayment,
       includeInCashflow: true,
-      includeInBudget: true,
+      includeInBudget: !isCardPayment,
       isInternalTransfer: false,
       isAdjustment: false,
       origin: 'import_api' as const,
