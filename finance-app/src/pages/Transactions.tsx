@@ -16,7 +16,7 @@ import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { learnRuleFromTransaction, incrementRuleUseCount } from '../services/categoryRules.service'
 import { findSimilarUncategorized } from '../utils/similarTransactions'
 import type { ReviewReason } from '../utils/reviewItems'
-import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
+import type { Transaction, SortField, SortDir, ClassificationType, SubCategory } from '../types'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -60,7 +60,7 @@ function fmtGroupDate(isoDate: string): string {
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
-  const { transactions, isDemo, updateTransaction, subCategories } = useData()
+  const { transactions, isDemo, updateTransaction, subCategories, saveSubCategory } = useData()
 
   const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
@@ -263,13 +263,35 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir])
 
   const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
+
+  // Summary ignores filterMacro so income/expense always sums entire month, not filtered category
+  const summaryBase = useMemo(() => {
+    let result = transactions
+    if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
+    if (filterType) result = result.filter(t => t.type === filterType)
+    // intentionally excludes filterMacro — summary is always for entire month/type
+    if (filterStatus) result = result.filter(t => t.status === filterStatus)
+    if (filterInstitution) result = result.filter(t => {
+      const pInfo = pluggyAccountMap.get(t.accountId)
+      const inst = t.pluggyInstitutionName ?? pInfo?.institutionName ?? ''
+      return inst === filterInstitution
+    })
+    if (filterTag) result = result.filter(t => t.tags?.includes(filterTag))
+    if (quickFilter) result = result.filter(t => matchesQuickFilter(t, quickFilter, dqCtx))
+    if (search.trim()) {
+      const q = search.trim().toUpperCase()
+      result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
+    }
+    return result
+  }, [transactions, filterMonth, filterType, filterStatus, filterInstitution, filterTag, quickFilter, search, pluggyAccountMap, dqCtx])
+
   const summary = useMemo(() => ({
     total: filtered.length,
-    income: filtered.filter(t => t.type === 'income' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
-    expense: filtered.filter(t => t.type === 'expense' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
+    income: summaryBase.filter(t => t.type === 'income' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
+    expense: summaryBase.filter(t => t.type === 'expense' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
     neutral: filtered.filter(t => NEUTRAL_TYPES.has(t.classificationType)).length,
     pending: filtered.filter(t => t.status === 'pending').length,
-  }), [filtered])
+  }), [filtered, summaryBase])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -421,11 +443,44 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setInlineDescEdit(null)
   }
 
-  function saveInlineSub(subId: string, txId: string) {
+  async function saveInlineSub(subNameOrId: string, txId: string) {
     const tx = transactions.find(t => t.id === txId)
-    if (tx && subId !== (tx.subCategoryId ?? '')) {
+    if (!tx || !tx.macroCategoryId) {
+      setInlineSubEdit(null)
+      return
+    }
+
+    let finalSubId = ''
+
+    if (subNameOrId.trim()) {
+      // Try to find by ID first (legacy)
+      let existing = subCategories.find(s => s.id === subNameOrId && s.macroCategoryId === tx.macroCategoryId)
+      if (existing) {
+        finalSubId = existing.id
+      } else {
+        // Try to find by name
+        existing = subCategories.find(s => s.name === subNameOrId && s.macroCategoryId === tx.macroCategoryId)
+        if (existing) {
+          finalSubId = existing.id
+        } else {
+          // Create new subcategory with this name
+          const newSub: SubCategory = {
+            id: crypto.randomUUID(),
+            name: subNameOrId,
+            macroCategoryId: tx.macroCategoryId,
+            essentiality: 'inherit',
+            active: true,
+            createdAt: new Date().toISOString(),
+          }
+          await saveSubCategory(newSub)
+          finalSubId = newSub.id
+        }
+      }
+    }
+
+    if (finalSubId !== (tx.subCategoryId ?? '')) {
       captureScrollAnchor(txId)
-      updateTransaction(txId, { subCategoryId: subId || undefined })
+      updateTransaction(txId, { subCategoryId: finalSubId || undefined })
     }
     setInlineSubEdit(null)
   }
@@ -828,6 +883,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                         revisar
                                       </span>
                                     )}
+                                    {tx.installmentCurrent && tx.installmentTotal && (
+                                      <span title={`Parcela ${tx.installmentCurrent} de ${tx.installmentTotal}`} style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--accent-soft)', color: 'var(--accent)', flexShrink: 0 }}>
+                                        {tx.installmentCurrent}/{tx.installmentTotal}
+                                      </span>
+                                    )}
                                   </div>
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
@@ -968,33 +1028,39 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                       A classificar
                                     </span>
                                   )}
-                                  {macro && isInlineSub && (
-                                    <select
-                                      autoFocus
-                                      value={inlineSubEdit.subId}
-                                      onClick={e => e.stopPropagation()}
-                                      onChange={e => setInlineSubEdit(prev => prev ? { ...prev, subId: e.target.value } : null)}
-                                      onBlur={() => { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }}
-                                      onKeyDown={e => {
-                                        if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }
-                                        if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineSubEdit(null) }
-                                      }}
-                                      className="ledger-select"
-                                      style={{ fontSize: 10, minWidth: 110 }}
-                                    >
-                                      <option value="">sem subcat.</option>
-                                      {subOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
+                                  {macro && (
+                                    isInlineSub ? (
+                                      <input
+                                        autoFocus
+                                        list={`subs-${macro.id}`}
+                                        placeholder="Digite ou selecione..."
+                                        value={inlineSubEdit.subId}
+                                        onClick={e => e.stopPropagation()}
+                                        onChange={e => setInlineSubEdit(prev => prev ? { ...prev, subId: e.target.value } : null)}
+                                        onBlur={() => { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }
+                                          if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineSubEdit(null) }
+                                        }}
+                                        className="ledger-select"
+                                        style={{ fontSize: 10, minWidth: 110, padding: '2px 6px' }}
+                                      />
+                                    ) : (
+                                      <span
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={e => { e.stopPropagation(); setInlineSubEdit({ id: tx.id, subId: sub?.name ?? '' }) }}
+                                        style={{ fontSize: 9.5, color: 'var(--faint)', fontStyle: 'italic', cursor: 'pointer' }}
+                                      >
+                                        {sub ? `›› ${sub.name}` : '+ subcat'}
+                                      </span>
+                                    )
                                   )}
-                                  {macro && !isInlineSub && !sub && subOptions.length > 0 && (
-                                    <span
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={e => { e.stopPropagation(); setInlineSubEdit({ id: tx.id, subId: '' }) }}
-                                      style={{ fontSize: 9.5, color: 'var(--faint)', fontStyle: 'italic', cursor: 'pointer' }}
-                                    >
-                                      + sub
-                                    </span>
+                                  {macro && !isInlineSub && (
+                                    <datalist id={`subs-${macro.id}`}>
+                                      <option value="">sem subcat.</option>
+                                      {subOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                    </datalist>
                                   )}
                                 </div>
                               )}
@@ -1113,10 +1179,41 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             display: 'flex', flexDirection: 'column', gap: 16,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>Editar lançamento</h2>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>
+                  Editar lançamento
+                  {modalTx.installmentCurrent && modalTx.installmentTotal && (
+                    <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 8, padding: '2px 7px', borderRadius: 4, background: 'var(--accent-soft)', color: 'var(--accent)', verticalAlign: 'middle' }}>
+                      Parcela {modalTx.installmentCurrent}/{modalTx.installmentTotal}
+                    </span>
+                  )}
+                </h2>
+              </div>
               <button onClick={() => setModalTx(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 4 }}>
                 <X size={16} />
               </button>
+            </div>
+
+            {/* Type toggle */}
+            <div style={{ display: 'flex', gap: 6, padding: '4px', background: 'var(--well)', borderRadius: 9, border: '1px solid var(--line)' }}>
+              {(['income', 'expense'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setModalPatch(p => ({ ...p, type: t }))}
+                  style={{
+                    flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 700, fontFamily: 'var(--ui)',
+                    background: (modalPatch.type ?? modalTx.type) === t ? 'var(--card-bg)' : 'transparent',
+                    color: (modalPatch.type ?? modalTx.type) === t
+                      ? (t === 'income' ? 'var(--pos)' : 'var(--crit)')
+                      : 'var(--faint)',
+                    boxShadow: (modalPatch.type ?? modalTx.type) === t ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {t === 'income' ? 'Receita' : 'Despesa'}
+                </button>
+              ))}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
