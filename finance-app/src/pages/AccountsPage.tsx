@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react'
-import { getLocalConnections } from '../services/pluggy.service'
+import { useData } from '../context/DataContext'
+import {
+  getLocalConnections,
+  fetchPluggyTransactions,
+  mapPluggyToTransactions,
+  updateConnectionSyncMeta,
+  getPeriodDates,
+  type ConnInfo,
+} from '../services/pluggy.service'
+import { updateAccountDiagnostics } from '../services/pluggyStorage.service'
+import { currentFinancialDate } from '../utils/date'
+import { SyncModal, type SyncSession, type PeriodPreset } from '../components/pluggy/PluggySyncModal'
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
+import type { Transaction } from '../types'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -10,19 +22,79 @@ const fmtBRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export function AccountsPage({ onNavigate }: Props) {
+  const { transactions, appendTransactions } = useData()
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
+  const [sync, setSync] = useState<SyncSession | null>(null)
 
   useEffect(() => {
     setConnections(getLocalConnections())
   }, [])
 
-  const bankAccounts: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null })[] = connections.flatMap(c =>
-    c.accounts
-      .filter(a => a.type === 'BANK')
-      .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl }))
-  )
+  const bankAccounts: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null; itemId: string })[] =
+    connections.flatMap(c =>
+      c.accounts
+        .filter(a => a.type === 'BANK')
+        .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl, itemId: c.itemId }))
+    )
 
   const totalBalance = bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
+
+  function startSync(itemId: string, accountId: string, accountName: string) {
+    const today = currentFinancialDate()
+    setSync({ itemId, accountId, accountName, period: 'last_7d', customFrom: '2024-01-01', customTo: today, phase: 'period_select' })
+  }
+
+  async function doFetch(period: PeriodPreset, customFrom: string, customTo: string) {
+    if (!sync) return
+    let from: string; let to: string
+    if (period === 'custom') {
+      if (!customFrom || !customTo) return
+      from = customFrom; to = customTo
+    } else {
+      const dates = getPeriodDates(period)
+      from = dates.from; to = dates.to
+    }
+    const conn = connections.find(c => c.itemId === sync.itemId)
+    const connInfo: ConnInfo | undefined = conn
+      ? { accountName: sync.accountName, institutionName: conn.connectorName, institutionLogoUrl: conn.connectorImageUrl }
+      : undefined
+    setSync(s => s ? { ...s, period, customFrom, customTo, phase: 'fetching', result: undefined } : s)
+    try {
+      const raw = await fetchPluggyTransactions({ accountId: sync.accountId, from, to })
+      const result = mapPluggyToTransactions(raw, sync.accountId, transactions, connInfo)
+      setSync(s => s ? { ...s, phase: 'preview', result } : s)
+    } catch (err) {
+      setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
+    }
+  }
+
+  function resetPeriod() {
+    setSync(s => s ? { ...s, phase: 'period_select', result: undefined } : s)
+  }
+
+  async function runImport() {
+    if (!sync?.result) return
+    const { itemId, accountId, result } = sync
+    setSync(s => s ? { ...s, phase: 'importing' } : s)
+    try {
+      await appendTransactions(result.newTxs as Transaction[])
+      updateConnectionSyncMeta(itemId, accountId, result.newTxs.length)
+      updateAccountDiagnostics({
+        accountId,
+        accountName: sync.accountName,
+        lastSyncAt: new Date().toISOString(),
+        rawReturnedCount: result.rawReturnedCount,
+        newTxsCount: result.newTxs.length,
+        duplicateCount: result.duplicateCount,
+        missingFinancialDateCount: result.missingFinancialDateCount,
+        dateConfidenceCounts: result.dateConfidenceCounts,
+      })
+      setConnections(getLocalConnections())
+      setSync(s => s ? { ...s, phase: 'done' } : s)
+    } catch (err) {
+      setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao importar' } : s)
+    }
+  }
 
   return (
     <main className="page-shell">
@@ -131,7 +203,7 @@ export function AccountsPage({ onNavigate }: Props) {
                       </td>
                       <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
                         <button
-                          onClick={() => onNavigate('/pluggy')}
+                          onClick={() => startSync(acc.itemId, acc.id, acc.name)}
                           style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
                         >
                           Sincronizar
@@ -150,6 +222,16 @@ export function AccountsPage({ onNavigate }: Props) {
         </div>
 
       </div>
+
+      {sync && (
+        <SyncModal
+          sync={sync}
+          onFetch={doFetch}
+          onResetPeriod={resetPeriod}
+          onImport={runImport}
+          onClose={() => setSync(null)}
+        />
+      )}
     </main>
   )
 }
