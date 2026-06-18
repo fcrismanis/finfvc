@@ -287,11 +287,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   const summary = useMemo(() => ({
     total: filtered.length,
-    income: summaryBase.filter(t => t.type === 'income' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
-    expense: summaryBase.filter(t => t.type === 'expense' && t.includeInOperationalResult).reduce((s, t) => s + t.amount, 0),
+    // Golden rule: positive amount + not neutral = income; negative amount + not neutral = expense; neutrals never count
+    income: summaryBase.filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0),
+    expense: summaryBase.filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0),
     neutral: filtered.filter(t => NEUTRAL_TYPES.has(t.classificationType)).length,
     pending: filtered.filter(t => t.status === 'pending').length,
-  }), [filtered, summaryBase])
+  }), [filtered, summaryBase, NEUTRAL_TYPES])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -1113,6 +1114,26 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* ── Final Summary (Totalizador) ── */}
+          {pageItems.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 24, marginBottom: 12 }}>
+              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card-bg)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Receitas (subtotal)</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pos)' }}>+{formatBRL(pageItems.filter(t => t.amount > 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0))}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card-bg)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Despesas (subtotal)</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--crit)' }}>−{formatBRL(Math.abs(pageItems.filter(t => t.amount < 0 && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0)))}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--line)', background: pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0) >= 0 ? 'var(--pos-soft)' : 'var(--crit-soft)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>Resultado (página)</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0) >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                  {formatBRL(pageItems.filter(t => (t.amount > 0 || t.amount < 0) && !NEUTRAL_TYPES.has(t.classificationType)).reduce((s, t) => s + t.amount, 0))}
+                </div>
+              </div>
             </div>
           )}
         </div>
