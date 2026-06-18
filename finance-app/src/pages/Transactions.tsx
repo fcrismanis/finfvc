@@ -998,7 +998,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   style={{ fontSize: 11, minWidth: 130 }}
                                 >
                                   <option value="">Sem categoria</option>
-                                  {allMacros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                  {(() => {
+                                    const visible = allMacros
+                                      .filter(m => m.tabType !== 'none')
+                                      .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99) || a.name.localeCompare(b.name, 'pt-BR'))
+                                    const income = visible.filter(m => m.tabType === 'income' || m.tabType === 'both')
+                                    const expense = visible.filter(m => m.tabType === 'expense' || m.tabType === 'both')
+                                    return (
+                                      <>
+                                        {income.length > 0 && (
+                                          <optgroup label="Receitas">
+                                            {income.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                          </optgroup>
+                                        )}
+                                        {expense.length > 0 && (
+                                          <optgroup label="Despesas">
+                                            {expense.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                          </optgroup>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
                                 </select>
                               ) : (
                                 <div
@@ -1404,6 +1424,7 @@ function CategorySelector({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const containerRef = useRef<HTMLDivElement>(null)
 
   const selectedMacro = allMacros.find(m => m.id === macroCategoryId)
@@ -1478,23 +1499,53 @@ function CategorySelector({
   }, [open])
 
   function renderGroup(macro: import('../types').MacroCategory, subs: import('../types').SubCategory[]) {
+    // Accordion: subs visible when searching, when this macro is selected, or when manually expanded
+    const isOpen = !!search.trim() || expanded.has(macro.id) || macroCategoryId === macro.id
+    const hasSubs = subs.length > 0
     return (
       <div key={macro.id}>
-        <button
-          type="button"
-          onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
+        <div
           style={{
-            display: 'flex', alignItems: 'center', gap: 7, width: '100%',
-            padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
+            display: 'flex', alignItems: 'center', width: '100%',
             background: macroCategoryId === macro.id && !subCategoryId ? 'var(--accent-soft)' : 'transparent',
-            border: 'none', cursor: 'pointer', color: macro.color ?? 'var(--ink)',
-            fontFamily: 'var(--ui)',
           }}
         >
-          <TxCatIcon iconName={macro.icon} size={13} color={macro.color} />
-          {macro.name}
-        </button>
-        {subs.map(s => (
+          <button
+            type="button"
+            onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, flex: 1,
+              padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: macro.color ?? 'var(--ink)', fontFamily: 'var(--ui)',
+            }}
+          >
+            <TxCatIcon iconName={macro.icon} size={13} color={macro.color} />
+            {macro.name}
+          </button>
+          {hasSubs && (
+            <button
+              type="button"
+              aria-label={isOpen ? 'Recolher' : 'Expandir'}
+              onClick={() => setExpanded(prev => {
+                const next = new Set(prev)
+                if (next.has(macro.id)) next.delete(macro.id); else next.add(macro.id)
+                return next
+              })}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '7px 12px', color: 'var(--faint)', flexShrink: 0,
+              }}
+            >
+              <ChevronDown
+                size={12}
+                style={{ transition: 'transform 160ms ease', transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+              />
+            </button>
+          )}
+        </div>
+        {isOpen && subs.map(s => (
           <button
             key={s.id}
             type="button"
