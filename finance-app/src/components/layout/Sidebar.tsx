@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
   Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
   Tag, Upload, Link2, Bot, Settings,
-  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart,
+  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { DATA_PROVIDER } from '../../config/env'
@@ -42,7 +43,6 @@ const CADASTROS: NavEntry[] = [
   { route: '/contas', label: 'Contas', icon: Landmark },
   { route: '/cartoes', label: 'Cartões', icon: CreditCard },
   { route: '/categorias', label: 'Categorias', icon: Tag },
-  { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
 ]
 
 const INTEGRACOES: NavEntry[] = [
@@ -54,16 +54,17 @@ const INTEGRACOES: NavEntry[] = [
 
 const SISTEMA: NavEntry[] = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
+  { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
   { route: '/backup', label: 'Backup', icon: Archive },
   { route: '/zona-perigo', label: 'Zona de Perigo', icon: AlertTriangle },
 ]
 
 const GROUPS = [
-  { label: 'Principal', items: PRINCIPAL },
-  { label: 'Gestão', items: GESTAO },
-  { label: 'Cadastros', items: CADASTROS },
-  { label: 'Integrações', items: INTEGRACOES },
-  { label: 'Sistema', items: SISTEMA },
+  { label: 'Principal', items: PRINCIPAL, defaultOpen: true },
+  { label: 'Gestão', items: GESTAO, defaultOpen: true },
+  { label: 'Cadastros', items: CADASTROS, defaultOpen: false },
+  { label: 'Integrações', items: INTEGRACOES, defaultOpen: false },
+  { label: 'Sistema', items: SISTEMA, defaultOpen: false },
 ]
 
 const DARK = '#211F1B'
@@ -71,6 +72,28 @@ const DARK_BORDER = 'rgba(255,255,255,.08)'
 
 export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
   const { signOut } = useAuth()
+
+  const initialOpen = () => {
+    const state: Record<string, boolean> = {}
+    for (const g of GROUPS) {
+      const hasActive = g.items.some(i => i.route === activeRoute)
+      state[g.label] = g.defaultOpen || hasActive
+    }
+    return state
+  }
+
+  const [open, setOpen] = useState<Record<string, boolean>>(initialOpen)
+
+  function toggle(label: string) {
+    setOpen(s => ({ ...s, [label]: !s[label] }))
+  }
+
+  // Auto-open group when active route changes
+  for (const g of GROUPS) {
+    if (g.items.some(i => i.route === activeRoute) && !open[g.label]) {
+      setOpen(s => ({ ...s, [g.label]: true }))
+    }
+  }
 
   return (
     <aside
@@ -109,25 +132,53 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 py-2 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-        {GROUPS.map(group => (
-          <div key={group.label} style={{ marginBottom: 4 }}>
-            <div style={{
-              fontFamily: "'Geist Mono', ui-monospace, monospace",
-              fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase',
-              color: 'rgba(255,255,255,.32)', padding: '8px 20px 3px',
-            }}>
-              {group.label}
+        {GROUPS.map(group => {
+          const isOpen = open[group.label] ?? false
+          return (
+            <div key={group.label} style={{ marginBottom: 2 }}>
+              <button
+                onClick={() => toggle(group.label)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '6px 20px 3px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                }}
+              >
+                <span style={{
+                  fontFamily: "'Geist Mono', ui-monospace, monospace",
+                  fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,.32)',
+                }}>
+                  {group.label}
+                </span>
+                <ChevronDown
+                  size={11}
+                  color="rgba(255,255,255,.28)"
+                  style={{
+                    transition: 'transform 180ms ease',
+                    transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    flexShrink: 0,
+                  }}
+                />
+              </button>
+
+              <div style={{
+                overflow: 'hidden',
+                maxHeight: isOpen ? `${group.items.length * 36}px` : '0px',
+                transition: 'max-height 200ms ease',
+              }}>
+                {group.items.map(item => (
+                  <NavItem
+                    key={item.route}
+                    {...item}
+                    active={activeRoute === item.route}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </div>
             </div>
-            {group.items.map(item => (
-              <NavItem
-                key={item.route}
-                {...item}
-                active={activeRoute === item.route}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
-        ))}
+          )
+        })}
 
         {DATA_PROVIDER === 'supabase' && (
           <div style={{ marginTop: 4 }}>
