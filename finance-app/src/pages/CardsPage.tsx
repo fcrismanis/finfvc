@@ -1,7 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { Pencil, Check, X } from 'lucide-react'
-import { getLocalConnections, updateAccountDisplayName } from '../services/pluggy.service'
+import { useData } from '../context/DataContext'
+import {
+  getLocalConnections,
+  fetchPluggyTransactions,
+  mapPluggyToTransactions,
+  updateConnectionSyncMeta,
+  updateAccountDisplayName,
+  getPeriodDates,
+  type ConnInfo,
+} from '../services/pluggy.service'
+import { updateAccountDiagnostics } from '../services/pluggyStorage.service'
+import { currentFinancialDate } from '../utils/date'
+import { SyncModal, type SyncSession, type PeriodPreset } from '../components/pluggy/PluggySyncModal'
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
+import type { Transaction } from '../types'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -11,10 +24,16 @@ const fmtBRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export function CardsPage({ onNavigate }: Props) {
+  const { transactions, appendTransactions } = useData()
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
+  const [sync, setSync] = useState<SyncSession | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const editRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setConnections(getLocalConnections())
+  }, [])
 
   function startEdit(card: PluggyLocalAccount & { itemId: string }) {
     setEditingId(card.id)
@@ -28,18 +47,72 @@ export function CardsPage({ onNavigate }: Props) {
     setEditingId(null)
   }
 
-  useEffect(() => {
-    setConnections(getLocalConnections())
-  }, [])
-
-  const creditCards: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null })[] = connections.flatMap(c =>
-    c.accounts
-      .filter(a => a.type === 'CREDIT')
-      .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl }))
-  )
+  const creditCards: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null; itemId: string })[] =
+    connections.flatMap(c =>
+      c.accounts
+        .filter(a => a.type === 'CREDIT')
+        .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl, itemId: c.itemId }))
+    )
 
   const totalBill  = creditCards.reduce((s, a) => s + (a.balance ?? 0), 0)
   const totalLimit = creditCards.reduce((s, a) => s + (a.limit ?? 0), 0)
+
+  function startSync(itemId: string, accountId: string, accountName: string) {
+    const today = currentFinancialDate()
+    setSync({ itemId, accountId, accountName, period: 'last_7d', customFrom: '2024-01-01', customTo: today, phase: 'period_select' })
+  }
+
+  async function doFetch(period: PeriodPreset, customFrom: string, customTo: string) {
+    if (!sync) return
+    let from: string; let to: string
+    if (period === 'custom') {
+      if (!customFrom || !customTo) return
+      from = customFrom; to = customTo
+    } else {
+      const dates = getPeriodDates(period)
+      from = dates.from; to = dates.to
+    }
+    const conn = connections.find(c => c.itemId === sync.itemId)
+    const connInfo: ConnInfo | undefined = conn
+      ? { accountName: sync.accountName, institutionName: conn.connectorName, institutionLogoUrl: conn.connectorImageUrl }
+      : undefined
+    setSync(s => s ? { ...s, period, customFrom, customTo, phase: 'fetching', result: undefined } : s)
+    try {
+      const raw = await fetchPluggyTransactions({ accountId: sync.accountId, from, to })
+      const result = mapPluggyToTransactions(raw, sync.accountId, transactions, connInfo)
+      setSync(s => s ? { ...s, phase: 'preview', result } : s)
+    } catch (err) {
+      setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao buscar transações' } : s)
+    }
+  }
+
+  function resetPeriod() {
+    setSync(s => s ? { ...s, phase: 'period_select', result: undefined } : s)
+  }
+
+  async function runImport() {
+    if (!sync?.result) return
+    const { itemId, accountId, result } = sync
+    setSync(s => s ? { ...s, phase: 'importing' } : s)
+    try {
+      await appendTransactions(result.newTxs as Transaction[])
+      updateConnectionSyncMeta(itemId, accountId, result.newTxs.length)
+      updateAccountDiagnostics({
+        accountId,
+        accountName: sync.accountName,
+        lastSyncAt: new Date().toISOString(),
+        rawReturnedCount: result.rawReturnedCount,
+        newTxsCount: result.newTxs.length,
+        duplicateCount: result.duplicateCount,
+        missingFinancialDateCount: result.missingFinancialDateCount,
+        dateConfidenceCounts: result.dateConfidenceCounts,
+      })
+      setConnections(getLocalConnections())
+      setSync(s => s ? { ...s, phase: 'done' } : s)
+    } catch (err) {
+      setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao importar' } : s)
+    }
+  }
 
   return (
     <main className="page-shell">
@@ -75,7 +148,7 @@ export function CardsPage({ onNavigate }: Props) {
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Cartões Ativos</p>
             <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em' }}>{creditCards.length}</p>
             <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>
-              {connections.length > 0 ? 'via Pluggy' : 'Nenhum conectado'}
+              {connections.length > 0 ? `${connections.length} banco${connections.length > 1 ? 's' : ''} conectado${connections.length > 1 ? 's' : ''}` : 'Nenhum conectado'}
             </p>
           </div>
         </div>
@@ -181,7 +254,7 @@ export function CardsPage({ onNavigate }: Props) {
                       </td>
                       <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
                         <button
-                          onClick={() => onNavigate('/pluggy')}
+                          onClick={() => startSync(card.itemId, card.id, card.displayName ?? card.name)}
                           style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
                         >
                           Sincronizar
@@ -200,6 +273,16 @@ export function CardsPage({ onNavigate }: Props) {
         </div>
 
       </div>
+
+      {sync && (
+        <SyncModal
+          sync={sync}
+          onFetch={doFetch}
+          onResetPeriod={resetPeriod}
+          onImport={runImport}
+          onClose={() => setSync(null)}
+        />
+      )}
     </main>
   )
 }
