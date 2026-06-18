@@ -17,7 +17,7 @@ import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { learnRuleFromTransaction, incrementRuleUseCount } from '../services/categoryRules.service'
 import { findSimilarUncategorized } from '../utils/similarTransactions'
 import type { ReviewReason } from '../utils/reviewItems'
-import type { Transaction, SortField, SortDir, ClassificationType, SubCategory } from '../types'
+import type { Transaction, SortField, SortDir, ClassificationType } from '../types'
 import type { NavFilter } from '../App'
 
 interface Props {
@@ -61,7 +61,7 @@ function fmtGroupDate(isoDate: string): string {
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
-  const { transactions, isDemo, updateTransaction, subCategories, saveSubCategory } = useData()
+  const { transactions, isDemo, updateTransaction, subCategories } = useData()
 
   const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
@@ -82,10 +82,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
-  const [inlineSubEdit, setInlineSubEdit] = useState<{ id: string; subId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
   const [inlineTagAdd, setInlineTagAdd] = useState<{ id: string; value: string } | null>(null)
-  const inlineSelectRef = useRef<HTMLSelectElement>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
   const mainRef = useRouteScroll('/lancamentos')
 
@@ -127,7 +125,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       // Item left the filter: restore previous scroll (browser clamps to valid range)
       container.scrollTop = anchor.scrollTop
     }
-  }, [transactions, inlineCatEdit, inlineSubEdit, inlineDescEdit, inlineTagAdd])
+  }, [transactions, inlineCatEdit, inlineDescEdit, inlineTagAdd])
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
@@ -182,10 +180,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     captureScrollAnchor(tx.id)
     updateTransaction(tx.id, { tags })
   }
-
-  useEffect(() => {
-    if (inlineCatEdit && inlineSelectRef.current) inlineSelectRef.current.focus()
-  }, [inlineCatEdit])
 
   useEffect(() => {
     if (inlineDescEdit && inlineDescRef.current) inlineDescRef.current.focus()
@@ -357,80 +351,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setInlineCatEdit({ id: tx.id, catId: tx.macroCategoryId ?? '' })
   }
 
-  function saveInlineCat(newCatId: string, txId: string) {
-    const tx = transactions.find(t => t.id === txId)
-    if (tx && newCatId !== (tx.macroCategoryId ?? '')) {
-      captureScrollAnchor(txId)
-      const macro = allMacros.find(m => m.id === newCatId)
-      const inclResult = macro ? macro.displayInResult : tx.includeInOperationalResult
-      const inclCashflow = macro ? macro.displayInCashflow : tx.includeInCashflow
-      const inclBudget = macro ? macro.displayInBudget : tx.includeInBudget
-      updateTransaction(txId, {
-        macroCategoryId: newCatId || undefined,
-        subCategoryId: undefined,
-        manualCategoryOverride: true,
-        categorySuggestionSource: 'manual',
-        categoryConfidence: 'high',
-        needsReview: false,
-        classificationType: macro?.classificationType ?? tx.classificationType,
-        includeInOperationalResult: inclResult,
-        includeInCashflow: inclCashflow,
-        includeInBudget: inclBudget,
-      })
-
-      const updatedTx: Transaction = {
-        ...tx,
-        macroCategoryId: newCatId,
-        subCategoryId: undefined,
-        classificationType: macro?.classificationType ?? tx.classificationType,
-        includeInOperationalResult: inclResult,
-        includeInCashflow: inclCashflow,
-        includeInBudget: inclBudget,
-        categorySuggestionSource: 'manual',
-      }
-      const learnedRule = learnRuleFromTransaction(updatedTx, 'manual')
-      const propagateSub = learnedRule?.subCategoryId ?? undefined
-
-      const similar = findSimilarUncategorized(updatedTx, transactions)
-
-      if (similar.highConfidence.length > 0) {
-        for (const candidate of similar.highConfidence) {
-          const candidateMacro = allMacros.find(m => m.id === newCatId)
-          updateTransaction(candidate.id, {
-            macroCategoryId: newCatId,
-            subCategoryId: propagateSub,
-            classificationType: macro?.classificationType ?? candidate.classificationType,
-            includeInOperationalResult: candidateMacro ? candidateMacro.displayInResult : candidate.includeInOperationalResult,
-            includeInCashflow: candidateMacro ? candidateMacro.displayInCashflow : candidate.includeInCashflow,
-            includeInBudget: candidateMacro ? candidateMacro.displayInBudget : candidate.includeInBudget,
-            categorySuggestionSource: 'rule',
-            categoryConfidence: 'high',
-            needsReview: false,
-          })
-        }
-        if (learnedRule) {
-          incrementRuleUseCount(learnedRule.id)
-        } else if (import.meta.env.DEV) {
-          console.log('[similar] no rule created — useCount not incremented')
-        }
-        setSimilarToast({ count: similar.highConfidence.length, category: macro?.name ?? newCatId })
-        setTimeout(() => setSimilarToast(null), 5000)
-      }
-
-      if (similar.mediumConfidence.length > 0) {
-        setSimilarModal({
-          candidates: similar.mediumConfidence,
-          macroCategoryId: newCatId,
-          subCategoryId: propagateSub,
-          classificationType: macro?.classificationType ?? tx.classificationType,
-          ruleId: learnedRule?.id,
-        })
-        setSelectedSimilar(new Set(similar.mediumConfidence.map(t => t.id)))
-      }
-    }
-    setInlineCatEdit(null)
-  }
-
   function openInlineDesc(tx: Transaction) {
     setInlineDescEdit({ id: tx.id, value: tx.description })
   }
@@ -444,46 +364,60 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setInlineDescEdit(null)
   }
 
-  async function saveInlineSub(subNameOrId: string, txId: string) {
+  function saveInlineCatWithSub(macroId: string | undefined, subId: string | undefined, txId: string) {
     const tx = transactions.find(t => t.id === txId)
-    if (!tx || !tx.macroCategoryId) {
-      setInlineSubEdit(null)
-      return
-    }
-
-    let finalSubId = ''
-
-    if (subNameOrId.trim()) {
-      // Try to find by ID first (legacy)
-      let existing = subCategories.find(s => s.id === subNameOrId && s.macroCategoryId === tx.macroCategoryId)
-      if (existing) {
-        finalSubId = existing.id
-      } else {
-        // Try to find by name
-        existing = subCategories.find(s => s.name === subNameOrId && s.macroCategoryId === tx.macroCategoryId)
-        if (existing) {
-          finalSubId = existing.id
-        } else {
-          // Create new subcategory with this name
-          const newSub: SubCategory = {
-            id: crypto.randomUUID(),
-            name: subNameOrId,
-            macroCategoryId: tx.macroCategoryId,
-            essentiality: 'inherit',
-            active: true,
-            createdAt: new Date().toISOString(),
-          }
-          await saveSubCategory(newSub)
-          finalSubId = newSub.id
+    setInlineCatEdit(null)
+    if (!tx) return
+    const macro = macroId ? allMacros.find(m => m.id === macroId) : undefined
+    updateTransaction(txId, {
+      macroCategoryId: macroId,
+      subCategoryId: subId,
+      manualCategoryOverride: true,
+      manualSubCategoryOverride: subId ? true : undefined,
+      manualEditedAt: new Date().toISOString(),
+      categorySuggestionSource: 'manual',
+      categoryConfidence: 'high',
+      needsReview: false,
+      classificationType: macro?.classificationType ?? tx.classificationType,
+      includeInOperationalResult: macro ? macro.displayInResult : tx.includeInOperationalResult,
+      includeInCashflow: macro ? macro.displayInCashflow : tx.includeInCashflow,
+      includeInBudget: macro ? macro.displayInBudget : tx.includeInBudget,
+    })
+    if (macroId && macroId !== (tx.macroCategoryId ?? '')) {
+      const updatedTx: Transaction = {
+        ...tx, macroCategoryId: macroId, subCategoryId: subId,
+        classificationType: macro?.classificationType ?? tx.classificationType,
+        categorySuggestionSource: 'manual',
+      }
+      const learnedRule = learnRuleFromTransaction(updatedTx, 'manual')
+      const similar = findSimilarUncategorized(updatedTx, transactions)
+      if (similar.highConfidence.length > 0) {
+        for (const candidate of similar.highConfidence) {
+          updateTransaction(candidate.id, {
+            macroCategoryId: macroId,
+            subCategoryId: learnedRule?.subCategoryId ?? subId,
+            classificationType: macro?.classificationType ?? candidate.classificationType,
+            includeInOperationalResult: macro ? macro.displayInResult : candidate.includeInOperationalResult,
+            includeInCashflow: macro ? macro.displayInCashflow : candidate.includeInCashflow,
+            includeInBudget: macro ? macro.displayInBudget : candidate.includeInBudget,
+            categorySuggestionSource: 'rule', categoryConfidence: 'high', needsReview: false,
+          })
         }
+        if (learnedRule) incrementRuleUseCount(learnedRule.id)
+        setSimilarToast({ count: similar.highConfidence.length, category: macro?.name ?? macroId })
+        setTimeout(() => setSimilarToast(null), 5000)
+      }
+      if (similar.mediumConfidence.length > 0) {
+        setSimilarModal({
+          candidates: similar.mediumConfidence,
+          macroCategoryId: macroId,
+          subCategoryId: learnedRule?.subCategoryId ?? subId,
+          classificationType: macro?.classificationType ?? tx.classificationType,
+          ruleId: learnedRule?.id,
+        })
+        setSelectedSimilar(new Set(similar.mediumConfidence.map(t => t.id)))
       }
     }
-
-    if (finalSubId !== (tx.subCategoryId ?? '')) {
-      captureScrollAnchor(txId)
-      updateTransaction(txId, { subCategoryId: finalSubId || undefined })
-    }
-    setInlineSubEdit(null)
   }
 
   function addInlineTag(value: string, txId: string) {
@@ -818,12 +752,13 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                       </tr>
                       {items.map(tx => {
                         const macro = allMacros.find(m => m.id === tx.macroCategoryId)
-                        const sub = tx.subCategoryId ? subCategories.find(s => s.id === tx.subCategoryId) : null
+                        const sub = tx.subCategoryId
+                          ? subCategories.find(s => s.id === tx.subCategoryId) ??
+                            (CATEGORIES.find(c => c.id === tx.subCategoryId) ? { id: tx.subCategoryId, name: CATEGORIES.find(c => c.id === tx.subCategoryId)!.name, macroCategoryId: tx.macroCategoryId ?? '', essentiality: 'inherit' as const, active: true, createdAt: '' } : null)
+                          : null
                         const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                         const isInlineCat = inlineCatEdit?.id === tx.id
-                        const isInlineSub = inlineSubEdit?.id === tx.id
                         const isInlineDesc = inlineDescEdit?.id === tx.id
-                        const subOptions = macro ? subCategories.filter(s => s.macroCategoryId === macro.id && s.active) : []
 
                         return (
                           <tr
@@ -985,41 +920,18 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                             {/* Category (inline editable) */}
                             <td className="table-td">
                               {isInlineCat ? (
-                                <select
-                                  ref={inlineSelectRef}
-                                  value={inlineCatEdit.catId}
-                                  onChange={e => setInlineCatEdit(prev => prev ? { ...prev, catId: e.target.value } : null)}
-                                  onBlur={() => { captureScrollAnchor(tx.id); saveInlineCat(inlineCatEdit.catId, tx.id) }}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineCat(inlineCatEdit.catId, tx.id) }
-                                    if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineCatEdit(null) }
+                                <CategorySelector
+                                  macroCategoryId={tx.macroCategoryId}
+                                  subCategoryId={tx.subCategoryId}
+                                  allMacros={allMacros}
+                                  subCategories={subCategories}
+                                  defaultOpen
+                                  onClose={() => setInlineCatEdit(null)}
+                                  onChange={(macroId, subId) => {
+                                    captureScrollAnchor(tx.id)
+                                    saveInlineCatWithSub(macroId, subId, tx.id)
                                   }}
-                                  className="ledger-select"
-                                  style={{ fontSize: 11, minWidth: 130 }}
-                                >
-                                  <option value="">Sem categoria</option>
-                                  {(() => {
-                                    const visible = allMacros
-                                      .filter(m => m.tabType !== 'none')
-                                      .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99) || a.name.localeCompare(b.name, 'pt-BR'))
-                                    const income = visible.filter(m => m.tabType === 'income' || m.tabType === 'both')
-                                    const expense = visible.filter(m => m.tabType === 'expense' || m.tabType === 'both')
-                                    return (
-                                      <>
-                                        {income.length > 0 && (
-                                          <optgroup label="Receitas">
-                                            {income.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                          </optgroup>
-                                        )}
-                                        {expense.length > 0 && (
-                                          <optgroup label="Despesas">
-                                            {expense.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                          </optgroup>
-                                        )}
-                                      </>
-                                    )
-                                  })()}
-                                </select>
+                                />
                               ) : (
                                 <div
                                   role="button"
@@ -1048,40 +960,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                     <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 600, padding: '2px 4px', borderRadius: 4, border: '1px dashed var(--line)', whiteSpace: 'nowrap' }}>
                                       A classificar
                                     </span>
-                                  )}
-                                  {macro && (
-                                    isInlineSub ? (
-                                      <input
-                                        autoFocus
-                                        list={`subs-${macro.id}`}
-                                        placeholder="Digite ou selecione..."
-                                        value={inlineSubEdit.subId}
-                                        onClick={e => e.stopPropagation()}
-                                        onChange={e => setInlineSubEdit(prev => prev ? { ...prev, subId: e.target.value } : null)}
-                                        onBlur={() => { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }}
-                                        onKeyDown={e => {
-                                          if (e.key === 'Enter') { captureScrollAnchor(tx.id); saveInlineSub(inlineSubEdit.subId, tx.id) }
-                                          if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineSubEdit(null) }
-                                        }}
-                                        className="ledger-select"
-                                        style={{ fontSize: 10, minWidth: 110, padding: '2px 6px' }}
-                                      />
-                                    ) : (
-                                      <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={e => { e.stopPropagation(); setInlineSubEdit({ id: tx.id, subId: sub?.name ?? '' }) }}
-                                        style={{ fontSize: 9.5, color: 'var(--faint)', fontStyle: 'italic', cursor: 'pointer' }}
-                                      >
-                                        {sub ? `›› ${sub.name}` : '+ subcat'}
-                                      </span>
-                                    )
-                                  )}
-                                  {macro && !isInlineSub && (
-                                    <datalist id={`subs-${macro.id}`}>
-                                      <option value="">sem subcat.</option>
-                                      {subOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                                    </datalist>
                                   )}
                                 </div>
                               )}
@@ -1289,6 +1167,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 />
               </ModalField>
 
+              <ModalField label="Classificação">
+                <select
+                  value={modalPatch.classificationType ?? modalTx?.classificationType ?? ''}
+                  onChange={e => setModalPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
+                  className="ledger-select"
+                  style={{ width: '100%', fontSize: 12 }}
+                >
+                  <option value="">— automático —</option>
+                  <option value="operational_income">Receita operacional</option>
+                  <option value="extraordinary_income">Receita eventual</option>
+                  <option value="operational_expense">Despesa operacional</option>
+                  <option value="debt_cost">Custo de dívida</option>
+                  <option value="investment">Investimento</option>
+                  <option value="redemption">Resgate</option>
+                  <option value="transfer">Transferência</option>
+                  <option value="reimbursement">Reembolso</option>
+                  <option value="neutral">Neutra</option>
+                  <option value="adjustment">Ajuste</option>
+                </select>
+              </ModalField>
+
               <ModalTagsField
                 tags={(modalPatch.tags as string[] | undefined) ?? []}
                 onChange={tags => setModalPatch(p => ({ ...p, tags }))}
@@ -1415,20 +1314,35 @@ function CategorySelector({
   allMacros,
   subCategories,
   onChange,
+  defaultOpen = false,
+  onClose,
 }: {
   macroCategoryId?: string
   subCategoryId?: string
   allMacros: import('../types').MacroCategory[]
   subCategories: import('../types').SubCategory[]
   onChange: (macroId: string | undefined, subId: string | undefined) => void
+  defaultOpen?: boolean
+  onClose?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const containerRef = useRef<HTMLDivElement>(null)
 
+  function closeDropdown() {
+    setOpen(false)
+    onClose?.()
+  }
+
   const selectedMacro = allMacros.find(m => m.id === macroCategoryId)
-  const selectedSub = subCategoryId ? subCategories.find(s => s.id === subCategoryId) : null
+  // Check both user subs and static CATEGORIES for the selected sub
+  const selectedSub = subCategoryId
+    ? subCategories.find(s => s.id === subCategoryId) ??
+      (CATEGORIES.find(c => c.id === subCategoryId)
+        ? { id: subCategoryId, name: CATEGORIES.find(c => c.id === subCategoryId)!.name, macroCategoryId: CATEGORIES.find(c => c.id === subCategoryId)!.macroCategoryId, essentiality: 'inherit' as const, active: true, createdAt: '' }
+        : null)
+    : null
 
   const label = selectedMacro
     ? selectedSub
@@ -1491,7 +1405,7 @@ function CategorySelector({
     if (!open) return
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
+        closeDropdown()
       }
     }
     document.addEventListener('mousedown', handler)
@@ -1512,7 +1426,7 @@ function CategorySelector({
         >
           <button
             type="button"
-            onClick={() => { onChange(macro.id, undefined); setOpen(false); setSearch('') }}
+            onClick={() => { onChange(macro.id, undefined); closeDropdown(); setSearch('') }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7, flex: 1,
               padding: '7px 14px', textAlign: 'left', fontSize: 12.5, fontWeight: 600,
@@ -1549,7 +1463,7 @@ function CategorySelector({
           <button
             key={s.id}
             type="button"
-            onClick={() => { onChange(macro.id, s.id); setOpen(false); setSearch('') }}
+            onClick={() => { onChange(macro.id, s.id); closeDropdown(); setSearch('') }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7, width: '100%',
               padding: '5px 14px 5px 34px', textAlign: 'left', fontSize: 11.5,
@@ -1572,7 +1486,7 @@ function CategorySelector({
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (open) closeDropdown(); else setOpen(true) }}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)',
@@ -1615,7 +1529,7 @@ function CategorySelector({
             {/* Sem categoria */}
             <button
               type="button"
-              onClick={() => { onChange(undefined, undefined); setOpen(false); setSearch('') }}
+              onClick={() => { onChange(undefined, undefined); closeDropdown(); setSearch('') }}
               style={{
                 display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
                 fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer',
