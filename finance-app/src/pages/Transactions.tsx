@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
-import { Search, ChevronLeft, ChevronRight, ChevronDown, FlaskConical, X, ArrowLeft, Pencil, Tag, Download, Trash2 } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ChevronDown, FlaskConical, X, ArrowLeft, Pencil, Download, Trash2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { CATEGORIES } from '../config/categories'
@@ -13,7 +13,6 @@ import {
   highValueThreshold, findDuplicateCandidateIds, matchesQuickFilter,
   QUICK_FILTER_LABELS, type QuickFilterKey,
 } from '../utils/dataQuality'
-import { suggestTags, buildTagContext } from '../services/tagSuggester'
 import { learnRuleFromTransaction, incrementRuleUseCount } from '../services/categoryRules.service'
 import { findSimilarUncategorized } from '../utils/similarTransactions'
 import type { ReviewReason } from '../utils/reviewItems'
@@ -83,7 +82,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
-  const [inlineTagAdd, setInlineTagAdd] = useState<{ id: string; value: string } | null>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
   const mainRef = useRouteScroll('/lancamentos')
 
@@ -125,7 +123,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       // Item left the filter: restore previous scroll (browser clamps to valid range)
       container.scrollTop = anchor.scrollTop
     }
-  }, [transactions, inlineCatEdit, inlineDescEdit, inlineTagAdd])
+  }, [transactions, inlineCatEdit, inlineDescEdit])
 
   // Similar-category propagation state
   interface SimilarApplied { count: number; category: string }
@@ -170,16 +168,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     threshold: highValueThreshold(transactions),
     duplicateIds: findDuplicateCandidateIds(transactions),
   }), [transactions])
-
-  const tagCtx = useMemo(() => buildTagContext(transactions), [transactions])
-
-  function applySuggestedTag(tx: Transaction, tag: string) {
-    const tags = [...(tx.tags ?? [])]
-    if (tags.includes(tag)) return
-    tags.push(tag)
-    captureScrollAnchor(tx.id)
-    updateTransaction(tx.id, { tags })
-  }
 
   useEffect(() => {
     if (inlineDescEdit && inlineDescRef.current) inlineDescRef.current.focus()
@@ -420,23 +408,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     }
   }
 
-  function addInlineTag(value: string, txId: string) {
-    const t = value.trim().toLowerCase().replace(/\s+/g, '_')
-    const tx = transactions.find(x => x.id === txId)
-    if (tx && t && !(tx.tags ?? []).includes(t)) {
-      captureScrollAnchor(txId)
-      updateTransaction(txId, { tags: [...(tx.tags ?? []), t] })
-    }
-    setInlineTagAdd(null)
-  }
-
-  function removeTagFromTx(tag: string, txId: string) {
-    const tx = transactions.find(x => x.id === txId)
-    if (tx?.tags?.includes(tag)) {
-      captureScrollAnchor(txId)
-      updateTransaction(txId, { tags: tx.tags.filter(t => t !== tag) })
-    }
-  }
 
   function csvCell(v: string): string {
     const s = String(v ?? '')
@@ -784,6 +755,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                               ) : (
                                 <>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    {(tx.tags ?? []).map(tag => (
+                                      <span
+                                        key={tag}
+                                        title={`Filtrar por #${tag}`}
+                                        onClick={() => setFilterTag(tag)}
+                                        style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', cursor: 'pointer', flexShrink: 0 }}
+                                      >#{tag}</span>
+                                    ))}
                                     <p
                                       role="button"
                                       tabIndex={0}
@@ -827,82 +806,20 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                                   </div>
                                   {tx.source === 'pluggy' && (() => {
                                     const pInfo = pluggyAccountMap.get(tx.accountId)
-                                    const institution = tx.pluggyInstitutionName ?? pInfo?.institutionName
                                     const account = tx.pluggyAccountName ?? pInfo?.name
                                     const logo = tx.pluggyInstitutionLogoUrl ?? pInfo?.logoUrl
-                                    if (!institution && !account) return null
+                                    if (!account) return null
                                     return (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                                         {logo && <img src={logo} alt="" style={{ width: 11, height: 11, borderRadius: 2, objectFit: 'contain', flexShrink: 0, opacity: 0.7 }} />}
                                         <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
-                                          {institution}{account && institution ? ` · ${account}` : account}
+                                          {account}
                                         </span>
                                       </div>
                                     )
                                   })()}
                                 </>
                               )}
-                              {/* Tags chips — click filters, × removes inline */}
-                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3, alignItems: 'center' }}>
-                                {(tx.tags ?? []).map(tag => (
-                                  <span
-                                    key={tag}
-                                    title={`Filtrar por #${tag}`}
-                                    style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px 1px 5px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)', display: 'inline-flex', alignItems: 'center', gap: 2 }}
-                                  >
-                                    <Tag size={7} style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)} />
-                                    <span style={{ cursor: 'pointer' }} onClick={() => setFilterTag(tag)}>{tag}</span>
-                                    <button
-                                      onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
-                                      onClick={e => { e.stopPropagation(); removeTagFromTx(tag, tx.id) }}
-                                      title={`Remover tag #${tag}`}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 0, lineHeight: 1, fontSize: 10, fontFamily: 'var(--ui)', display: 'flex', alignItems: 'center' }}
-                                      aria-label={`Remover tag ${tag}`}
-                                    >×</button>
-                                  </span>
-                                ))}
-                                {inlineTagAdd?.id === tx.id ? (
-                                  <input
-                                    autoFocus
-                                    value={inlineTagAdd.value}
-                                    onChange={e => setInlineTagAdd(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                    onBlur={() => { captureScrollAnchor(tx.id); addInlineTag(inlineTagAdd.value, tx.id) }}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter') { captureScrollAnchor(tx.id); addInlineTag(inlineTagAdd.value, tx.id) }
-                                      if (e.key === 'Escape') { captureScrollAnchor(tx.id); setInlineTagAdd(null) }
-                                    }}
-                                    placeholder="nova tag…"
-                                    style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, border: '1px solid var(--accent)', outline: 'none', background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)', width: 70 }}
-                                  />
-                                ) : (
-                                  <button
-                                    onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
-                                    onClick={e => { e.stopPropagation(); setInlineTagAdd({ id: tx.id, value: '' }) }}
-                                    title="Adicionar tag"
-                                    style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', fontFamily: 'var(--ui)', display: 'inline-flex', alignItems: 'center' }}
-                                  >+ tag</button>
-                                )}
-                              </div>
-                              {/* Suggested tags — click to apply (append, never overwrites) */}
-                              {(() => {
-                                const suggested = suggestTags(tx, tagCtx).slice(0, 3)
-                                if (suggested.length === 0) return null
-                                return (
-                                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
-                                    {suggested.map(tag => (
-                                      <button
-                                        key={tag}
-                                        onMouseDown={e => { e.preventDefault(); captureScrollAnchor(tx.id) }}
-                                        onClick={() => applySuggestedTag(tx, tag)}
-                                        title={`Adicionar tag sugerida #${tag}`}
-                                        style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 10, background: 'none', border: '1px dashed var(--line)', color: 'var(--faint)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--ui)' }}
-                                      >
-                                        + {tag}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )
-                              })()}
                               {reviewItem && reviewItem.reasons.map((r, i) => (
                                 <span key={i} className="review-note" style={{ marginTop: 3, display: 'block' }}>{r}</span>
                               ))}
