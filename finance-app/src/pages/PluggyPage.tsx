@@ -691,7 +691,7 @@ export function PluggyPage() {
                         <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)', gap: 8, flexWrap: 'wrap' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.name}</span>
+                              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.displayName ?? acc.name}</span>
                               <span style={{
                                 fontSize: 9, fontWeight: 700, letterSpacing: '.06em', padding: '1px 5px', borderRadius: 3,
                                 background: acc.type === 'CREDIT' ? 'var(--accent-soft)' : 'var(--pos-soft)',
@@ -754,7 +754,7 @@ export function PluggyPage() {
                               )}
                             </div>
                             <button
-                              onClick={() => startSync(conn.itemId, acc.id, acc.name)}
+                              onClick={() => startSync(conn.itemId, acc.id, acc.displayName ?? acc.name)}
                               className="btn btn-primary btn-sm"
                               style={{ fontSize: 11, whiteSpace: 'nowrap' }}
                             >
@@ -1015,6 +1015,7 @@ interface SyncAllAccountInfo {
   id: string
   itemId: string
   name: string
+  displayName?: string
   type: 'BANK' | 'CREDIT'
   institutionName: string
   institutionLogoUrl: string | null
@@ -1045,7 +1046,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
     c.accounts.map(a => ({
       id: a.id,
       itemId: c.itemId,
-      name: a.name,
+      name: a.displayName ?? a.name,
       type: a.type,
       institutionName: c.connectorName,
       institutionLogoUrl: c.connectorImageUrl,
@@ -1084,7 +1085,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
       : getPeriodDates(period)
 
     const initial: SyncAllAccountResult[] = selectedAccounts.map(a => ({
-      accountId: a.id, accountName: a.name, itemId: a.itemId, status: 'pending',
+      accountId: a.id, accountName: a.displayName ?? a.name, itemId: a.itemId, status: 'pending',
     }))
     setAccountResults(initial)
     setPhase('fetching')
@@ -1101,7 +1102,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
         const raw = await fetchPluggyTransactions({ accountId: acc.id, from, to })
         const allExisting = [...existingTxs, ...batchAccepted]
         const connInfo: ConnInfo = {
-          accountName: acc.name,
+          accountName: acc.displayName ?? acc.name,
           institutionName: acc.institutionName,
           institutionLogoUrl: acc.institutionLogoUrl,
         }
@@ -1188,7 +1189,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
                   />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.name}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.displayName ?? acc.name}</span>
                       <span style={{
                         fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
                         background: acc.type === 'CREDIT' ? 'var(--accent-soft)' : 'var(--pos-soft)',
