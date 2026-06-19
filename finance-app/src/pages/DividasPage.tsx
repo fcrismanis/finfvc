@@ -2,12 +2,7 @@ import { useMemo } from 'react'
 import { CreditCard } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth } from '../utils/date'
-import { currentYearMonth } from '../utils/date'
-
-function fmtDate(d: string) {
-  try { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') } catch { return d }
-}
+import { getCompetenceMonth, currentYearMonth, formatFinancialDateBR } from '../utils/date'
 
 export function DividasPage() {
   const { transactions } = useData()
@@ -127,7 +122,7 @@ export function DividasPage() {
                     <div key={tx.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{tx.description}</span>
-                        <span style={{ fontSize: 11, color: 'var(--faint)', marginLeft: 8 }}>{fmtDate(tx.competenceDate)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--faint)', marginLeft: 8 }}>{formatFinancialDateBR(tx.competenceDate)}</span>
                       </div>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>
                         {formatBRL(tx.amount)}
@@ -163,7 +158,7 @@ export function DividasPage() {
                           </span>
                         )}
                       </td>
-                      <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmtDate(tx.competenceDate)}</td>
+                      <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{formatFinancialDateBR(tx.competenceDate)}</td>
                       <td className="table-td" style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>
                         {formatBRL(tx.amount)}
                       </td>

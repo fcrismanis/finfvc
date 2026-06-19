@@ -15,13 +15,11 @@ import { currentFinancialDate } from '../utils/date'
 import { SyncModal, type SyncSession, type PeriodPreset } from '../components/pluggy/PluggySyncModal'
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
 import type { Transaction } from '../types'
+import { formatBRL } from '../utils/currency'
 
 interface Props {
   onNavigate: (route: string) => void
 }
-
-const fmtBRL = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export function CardsPage({ onNavigate }: Props) {
   const { transactions, appendTransactions } = useData()
@@ -133,14 +131,14 @@ export function CardsPage({ onNavigate }: Props) {
           <div className="card" style={{ padding: '16px 18px' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Limite Total</p>
             <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
-              {creditCards.length > 0 && totalLimit > 0 ? fmtBRL(totalLimit) : '—'}
+              {creditCards.length > 0 && totalLimit > 0 ? formatBRL(totalLimit) : '—'}
             </p>
             <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>Soma dos limites</p>
           </div>
           <div className="card" style={{ padding: '16px 18px' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Fatura Atual</p>
             <p style={{ fontSize: 22, fontWeight: 800, color: creditCards.length > 0 ? 'var(--crit)' : 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
-              {creditCards.length > 0 ? fmtBRL(totalBill) : '—'}
+              {creditCards.length > 0 ? formatBRL(totalBill) : '—'}
             </p>
             <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>Total em aberto</p>
           </div>
@@ -231,10 +229,10 @@ export function CardsPage({ onNavigate }: Props) {
                         </div>
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: 'var(--crit)' }}>
-                        {card.balance !== null ? fmtBRL(card.balance) : '—'}
+                        {card.balance !== null ? formatBRL(card.balance) : '—'}
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--ink-2)' }}>
-                        {card.limit != null ? fmtBRL(card.limit) : '—'}
+                        {card.limit != null ? formatBRL(card.limit) : '—'}
                       </td>
                       <td className="table-td">
                         {card.lastSyncAt ? (

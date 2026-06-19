@@ -5,12 +5,8 @@ import { getAllMacroCategories } from '../services/financeParentCategories.servi
 import { getLocalConnections } from '../services/pluggy.service'
 import { fetchPluggyInvestments, type PluggyInvestment } from '../services/pluggy.service'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth } from '../utils/date'
+import { getCompetenceMonth, formatFinancialDateBR } from '../utils/date'
 import { ICON_MAP } from '../utils/categoryIcons'
-
-function fmtDate(d: string) {
-  try { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') } catch { return d }
-}
 
 function fmtPct(v: number | null) {
   if (v == null) return '—'
@@ -246,7 +242,7 @@ export function InvestimentosPage() {
                             {fmtPct(inv.lastTwelveMonthsRate)}
                           </td>
                           <td className="table-td" style={{ fontSize: 11, color: 'var(--faint)' }}>
-                            {inv.dueDate ? fmtDate(inv.dueDate) : '—'}
+                            {inv.dueDate ? formatFinancialDateBR(inv.dueDate) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -333,7 +329,7 @@ export function InvestimentosPage() {
                     {investTxs.slice(0, 50).map(tx => (
                       <tr key={tx.id} className="table-row">
                         <td className="table-td" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{tx.description}</td>
-                        <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmtDate(tx.competenceDate)}</td>
+                        <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{formatFinancialDateBR(tx.competenceDate)}</td>
                         <td className="table-td" style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>
                           {formatBRL(tx.amount)}
                         </td>
@@ -347,7 +343,7 @@ export function InvestimentosPage() {
                     {redemptionTxs.slice(0, 20).map(tx => (
                       <tr key={tx.id} className="table-row">
                         <td className="table-td" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{tx.description}</td>
-                        <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmtDate(tx.competenceDate)}</td>
+                        <td className="table-td" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{formatFinancialDateBR(tx.competenceDate)}</td>
                         <td className="table-td" style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 700, color: 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>
                           {formatBRL(tx.amount)}
                         </td>

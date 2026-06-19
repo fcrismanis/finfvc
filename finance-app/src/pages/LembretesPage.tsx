@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Check, X, Bell, CreditCard, FileText, Zap, Refres
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { getLocalConnections } from '../services/pluggy.service'
-import { currentYearMonth, getCompetenceMonth } from '../utils/date'
+import { currentYearMonth, getCompetenceMonth, formatFinancialDateBR } from '../utils/date'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,9 +47,6 @@ const BLANK_CARD: Omit<Lembrete, 'id' | 'createdAt'> = {
   type: 'cartao', name: '', amount: undefined, dueDay: undefined, active: true, notes: '',
 }
 
-function fmtDate(d: string) {
-  try { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') } catch { return d }
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -240,7 +237,7 @@ export function LembretesPage() {
                       background: overdue ? 'var(--crit-soft,#fef2f2)' : soon ? 'var(--warn-soft,#fef3c7)' : 'var(--well)',
                       color: overdue ? 'var(--crit)' : soon ? 'var(--warn)' : 'var(--faint)',
                     }}>
-                      Venc. {fmtDate(dueDateStr)}{overdue ? ' · VENCIDO' : daysLeft !== null && daysLeft <= 30 ? ` · ${daysLeft}d` : ''}
+                      Venc. {formatFinancialDateBR(dueDateStr)}{overdue ? ' · VENCIDO' : daysLeft !== null && daysLeft <= 30 ? ` · ${daysLeft}d` : ''}
                     </span>
                   ) : null
                 }
@@ -392,7 +389,7 @@ export function LembretesPage() {
             {pendingTxs.map(tx => (
               <Row key={tx.id}
                 left={<p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{tx.description}</p>}
-                center={<span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{fmtDate(tx.competenceDate)}</span>}
+                center={<span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{formatFinancialDateBR(tx.competenceDate)}</span>}
                 right={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(tx.amount)}</span>

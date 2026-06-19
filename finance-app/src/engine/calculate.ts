@@ -4,6 +4,7 @@ import type {
 } from '../types'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { getCompetenceMonth, formatMonthLabel, getLast6Months } from '../utils/date'
+import { formatBRL } from '../utils/currency'
 
 function getMacroById(id: string): MacroCategory | undefined {
   return getAllMacroCategories().find(m => m.id === id)
@@ -248,10 +249,6 @@ export function generateAlerts(
   }
 
   return alerts
-}
-
-function formatBRL(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
 export function getMonthlyTrend(txns: Transaction[], refMonth: string): MonthlyTrend[] {

@@ -15,13 +15,11 @@ import { currentFinancialDate } from '../utils/date'
 import { SyncModal, type SyncSession, type PeriodPreset } from '../components/pluggy/PluggySyncModal'
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
 import type { Transaction } from '../types'
+import { formatBRL } from '../utils/currency'
 
 interface Props {
   onNavigate: (route: string) => void
 }
-
-const fmtBRL = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export function AccountsPage({ onNavigate }: Props) {
   const { transactions, appendTransactions } = useData()
@@ -132,7 +130,7 @@ export function AccountsPage({ onNavigate }: Props) {
           <div className="card" style={{ padding: '16px 18px' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Saldo Total</p>
             <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
-              {bankAccounts.length > 0 ? fmtBRL(totalBalance) : '—'}
+              {bankAccounts.length > 0 ? formatBRL(totalBalance) : '—'}
             </p>
             <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>
               {bankAccounts.length > 0 ? `${bankAccounts.length} conta${bankAccounts.length > 1 ? 's' : ''} via Pluggy` : 'Aguardando conexão'}
@@ -223,7 +221,7 @@ export function AccountsPage({ onNavigate }: Props) {
                         </div>
                       </td>
                       <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: (acc.balance ?? 0) >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
-                        {acc.balance !== null ? fmtBRL(acc.balance) : '—'}
+                        {acc.balance !== null ? formatBRL(acc.balance) : '—'}
                       </td>
                       <td className="table-td">
                         {acc.lastSyncAt ? (

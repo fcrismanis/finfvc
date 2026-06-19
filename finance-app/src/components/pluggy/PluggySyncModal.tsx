@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MACRO_CATEGORIES } from '../../config/categories'
 import type { MapResult } from '../../services/pluggy.service'
 import type { Transaction } from '../../types'
+import { formatBRL } from '../../utils/currency'
 
 export type SyncPhase = 'period_select' | 'fetching' | 'preview' | 'importing' | 'done' | 'error'
 export type PeriodPreset = 'last_7d' | 'current_month' | 'last_30d' | 'last_90d' | 'custom'
@@ -39,7 +40,6 @@ export function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: S
   const [localPeriod, setLocalPeriod] = useState<PeriodPreset>(sync.period)
   const [customFrom, setCustomFrom] = useState(sync.customFrom)
   const [customTo, setCustomTo] = useState(sync.customTo)
-  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   const isWorking = phase === 'fetching' || phase === 'importing'
 
@@ -191,11 +191,11 @@ export function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: S
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)30' }}>
                   <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--pos)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Entradas</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(result.newTxs.filter((t: Transaction) => t.type === 'income').reduce((s: number, t: Transaction) => s + t.amount, 0))}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(result.newTxs.filter((t: Transaction) => t.type === 'income').reduce((s: number, t: Transaction) => s + t.amount, 0))}</p>
                 </div>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)30' }}>
                   <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--crit)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Saídas</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(result.newTxs.filter((t: Transaction) => t.type === 'expense').reduce((s: number, t: Transaction) => s + t.amount, 0))}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(result.newTxs.filter((t: Transaction) => t.type === 'expense').reduce((s: number, t: Transaction) => s + t.amount, 0))}</p>
                 </div>
               </div>
             )}
@@ -236,7 +236,7 @@ export function SyncModal({ sync, onFetch, onResetPeriod, onImport, onClose }: S
                         )}
                       </div>
                       <span style={{ fontWeight: 700, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                        {tx.type === 'income' ? '+' : '−'}{fmtBRL(tx.amount)}
+                        {tx.type === 'income' ? '+' : '−'}{formatBRL(tx.amount)}
                       </span>
                     </div>
                   )

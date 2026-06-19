@@ -2,6 +2,7 @@ import type { Transaction, Budget } from '../types'
 import { getLast6Months, getCompetenceMonth } from './date'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { findDuplicateCandidateIds } from './dataQuality'
+import { formatBRL } from './currency'
 
 export interface FinancialAlert {
   id: string
@@ -62,10 +63,6 @@ function avgIncome(txns: Transaction[], refMonth: string, n = 3): number {
     )
     .filter(v => v > 0)
   return totals.length > 0 ? totals.reduce((a, b) => a + b, 0) / totals.length : 0
-}
-
-function formatBRL(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
 export function generateFinancialAlerts(

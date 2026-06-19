@@ -28,6 +28,7 @@ import {
 } from '../services/pluggyStorage.service'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { currentFinancialDate, formatFinancialDateBR, normalizeFinancialDate } from '../utils/date'
+import { formatBRL } from '../utils/currency'
 import { loadDailySyncStatus, type DailySyncStatus } from '../hooks/useDailyPluggySync'
 import { SyncModal, PERIOD_LABELS, type SyncSession, type PeriodPreset } from '../components/pluggy/PluggySyncModal'
 import type { PluggyLocalConnection, MapResult } from '../services/pluggy.service'
@@ -169,11 +170,6 @@ interface PluggyDateRepairPreview {
   candidates: PluggyDateRepairCandidate[]
 }
 
-const fmtBRL = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
-const fmtDate = (iso: string) =>
-  formatFinancialDateBR(iso)
 
 const STATUS_LABEL: Record<string, string> = {
   UPDATED:            'Atualizado',
@@ -709,7 +705,7 @@ export function PluggyPage() {
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                               {acc.lastSyncAt && (
                                 <p style={{ fontSize: 10.5, color: 'var(--faint)' }}>
-                                  Última sync: {fmtDate(acc.lastSyncAt)}
+                                  Última sync: {formatFinancialDateBR(acc.lastSyncAt)}
                                   {acc.lastSyncCount != null && ` · ${acc.lastSyncCount} importados`}
                                 </p>
                               )}
@@ -741,16 +737,16 @@ export function PluggyPage() {
                             </button>
                             <div style={{ textAlign: 'right' }}>
                               <p style={{ fontSize: 13, fontWeight: 700, color: acc.balance != null ? 'var(--ink)' : 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
-                                {acc.balance != null ? fmtBRL(acc.balance) : 'Saldo indisponível'}
+                                {acc.balance != null ? formatBRL(acc.balance) : 'Saldo indisponível'}
                               </p>
                               {acc.type === 'CREDIT' && acc.limit != null && (
                                 <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
-                                  Limite: {fmtBRL(acc.limit)}
-                                  {acc.availableLimit != null && ` · Disponível: ${fmtBRL(acc.availableLimit)}`}
+                                  Limite: {formatBRL(acc.limit)}
+                                  {acc.availableLimit != null && ` · Disponível: ${formatBRL(acc.availableLimit)}`}
                                 </p>
                               )}
                               {acc.type === 'BANK' && acc.availableBalance != null && acc.availableBalance !== acc.balance && (
-                                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Disponível: {fmtBRL(acc.availableBalance)}</p>
+                                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>Disponível: {formatBRL(acc.availableBalance)}</p>
                               )}
                             </div>
                             <button
@@ -774,8 +770,8 @@ export function PluggyPage() {
         {/* Summary chips */}
         {connections.length > 0 && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {bankAccounts.length > 0 && <SummaryChip label="Contas bancárias" value={fmtBRL(bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
-            {creditCards.length > 0 && <SummaryChip label="Cartões — fatura" value={fmtBRL(creditCards.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
+            {bankAccounts.length > 0 && <SummaryChip label="Contas bancárias" value={formatBRL(bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
+            {creditCards.length > 0 && <SummaryChip label="Cartões — fatura" value={formatBRL(creditCards.reduce((s, a) => s + (a.balance ?? 0), 0))} />}
           </div>
         )}
 
@@ -1061,7 +1057,6 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(allAccounts.map(a => a.id)))
   const [accountResults, setAccountResults] = useState<SyncAllAccountResult[]>([])
   const [allNewTxs, setAllNewTxs] = useState<Transaction[]>([])
-  const localFmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   const isWorking = phase === 'fetching' || phase === 'importing'
   const selectedAccounts = allAccounts.filter(a => selectedIds.has(a.id))
@@ -1201,7 +1196,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
                     </div>
                     <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1 }}>
                       {acc.institutionName}
-                      {acc.lastSyncAt && ` · última sync: ${fmtDate(acc.lastSyncAt)}`}
+                      {acc.lastSyncAt && ` · última sync: ${formatFinancialDateBR(acc.lastSyncAt)}`}
                     </p>
                   </div>
                 </label>
@@ -1323,11 +1318,11 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--pos-soft)', border: '1px solid var(--pos)30' }}>
                   <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--pos)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Entradas</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{localFmtBRL(allNewTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0))}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(allNewTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0))}</p>
                 </div>
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--crit-soft)', border: '1px solid var(--crit)30' }}>
                   <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--crit)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Saídas</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{localFmtBRL(allNewTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0))}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(allNewTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0))}</p>
                 </div>
               </div>
             )}

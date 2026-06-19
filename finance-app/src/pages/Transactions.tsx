@@ -1201,7 +1201,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</p>
-                    <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>{tx.transactionDate} · {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>{tx.transactionDate} · {formatBRL(tx.amount)}</p>
                   </div>
                 </label>
               ))}
