@@ -398,50 +398,6 @@ app.post('/api/pluggy/transactions', async (req, res) => {
   }
 })
 
-// ── Pluggy: dev-only sanitized payload inspector ──────────────────────────────
-
-const SENSITIVE_KEY_RE = /token|secret|credential|password/i
-const MASK_KEYS = new Set([
-  'documentNumber','taxNumber','cpf','cnpj','number',
-  'accountNumber','agency','bankAccountNumber','cardNumber',
-])
-const MAX_STR_LEN = 300
-
-function sanitizePluggyPayload(value, depth = 0) {
-  if (depth > 8) return '[deep]'
-  if (value === null || value === undefined) return value
-  if (Array.isArray(value)) return value.map(v => sanitizePluggyPayload(v, depth + 1))
-  if (typeof value === 'object') {
-    const out = {}
-    for (const [k, v] of Object.entries(value)) {
-      if (SENSITIVE_KEY_RE.test(k) || MASK_KEYS.has(k)) {
-        out[k] = v != null ? '[MASKED]' : null
-      } else {
-        out[k] = sanitizePluggyPayload(v, depth + 1)
-      }
-    }
-    return out
-  }
-  if (typeof value === 'string' && value.length > MAX_STR_LEN) {
-    return value.slice(0, MAX_STR_LEN) + `…[+${value.length - MAX_STR_LEN}]`
-  }
-  return value
-}
-
-function buildFieldMap(transactions) {
-  if (!transactions.length) return { topLevelKeys: [], possibleCategoryFields: [], possibleMerchantFields: [], possibleAccountFields: [], possibleStatusFields: [] }
-  const allKeys = new Set()
-  for (const tx of transactions) Object.keys(tx).forEach(k => allKeys.add(k))
-  const keys = [...allKeys]
-  return {
-    topLevelKeys: keys,
-    possibleCategoryFields:  keys.filter(k => /categ|type|operation|subcateg/i.test(k)),
-    possibleMerchantFields:  keys.filter(k => /merchant|mcc|establishment|store|payee|receiver|recipient|counterpart/i.test(k)),
-    possibleAccountFields:   keys.filter(k => /account|card|credit|bank/i.test(k)),
-    possibleStatusFields:    keys.filter(k => /status|state|situation/i.test(k)),
-  }
-}
-
 // ── Pluggy: investments (assets) ─────────────────────────────────────────────
 app.post('/api/pluggy/investments', async (req, res) => {
   const { itemId } = req.body ?? {}
@@ -499,69 +455,6 @@ app.post('/api/pluggy/investments', async (req, res) => {
   } catch (err) {
     console.error('[pluggy] investments error:', err)
     return res.status(500).json({ ok: false, error: err.message })
-  }
-})
-
-app.post('/api/pluggy/debug-transactions', async (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.DEBUG_PLUGGY !== 'true') {
-    return res.status(403).json({ ok: false, error: 'Endpoint de debug indisponível em produção.' })
-  }
-  const { accountId, itemId, from = '2024-01-01', to = new Date().toISOString().slice(0,10), limit = 5 } = req.body ?? {}
-  if (!accountId && !itemId) return res.status(400).json({ ok: false, error: 'accountId ou itemId obrigatório' })
-  const cap = Math.min(Number(limit) || 5, 10)
-  try {
-    const { apiKey, apiBase } = await pluggyGetApiKey()
-    let accountIds = []
-    if (accountId) {
-      accountIds = [accountId]
-    } else {
-      const accsRes = await fetch(`${apiBase}/accounts?itemId=${encodeURIComponent(itemId)}`, { headers: { 'X-API-KEY': apiKey } })
-      if (!accsRes.ok) return res.status(502).json({ ok: false, error: `Falha ao buscar contas (${accsRes.status})` })
-      const accsData = await accsRes.json()
-      const accs = Array.isArray(accsData.results) ? accsData.results : Array.isArray(accsData) ? accsData : []
-      accountIds = accs.map(a => a.id)
-    }
-    const rawSamples = []
-    for (const accId of accountIds) {
-      if (rawSamples.length >= cap) break
-      const url = new URL(`${apiBase}/transactions`)
-      url.searchParams.set('accountId', accId)
-      url.searchParams.set('from', from)
-      url.searchParams.set('to', to)
-      url.searchParams.set('pageSize', String(cap))
-      url.searchParams.set('page', '1')
-      const txRes = await fetch(url.toString(), { headers: { 'X-API-KEY': apiKey } })
-      if (!txRes.ok) { console.error('[pluggy/debug] tx fetch failed:', txRes.status, accId); continue }
-      const txData = await txRes.json()
-      const results = Array.isArray(txData.results) ? txData.results : []
-      for (const tx of results.slice(0, cap - rawSamples.length)) {
-        if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_PLUGGY === 'true') {
-          console.log('[pluggy] tx field candidates', {
-            keys: Object.keys(tx),
-            categoryCandidates: {
-              category: tx.category,
-              categoryId: tx.categoryId,
-              categoryDescription: tx.categoryDescription,
-              merchantCategory: tx.merchant?.category,
-              paymentData: tx.paymentData,
-              operationType: tx.operationType,
-            },
-          })
-        }
-        rawSamples.push({ raw: sanitizePluggyPayload(tx) })
-      }
-    }
-    const rawTxs = rawSamples.map(s => s.raw)
-    return res.json({
-      ok: true,
-      count: rawSamples.length,
-      sample: rawSamples,
-      fieldMap: buildFieldMap(rawTxs),
-      notice: 'Payload sanitizado para análise de campos. Tokens e dados sensíveis mascarados.',
-    })
-  } catch (err) {
-    console.error('[pluggy/debug] error:', err.message)
-    return res.status(err.status ?? 500).json({ ok: false, error: err.message })
   }
 })
 
