@@ -34,7 +34,6 @@ const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ defau
 const FinanceAssistantPage = lazy(() => import('./pages/FinanceAssistantPage').then(m => ({ default: m.FinanceAssistantPage })))
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
-// SubcategoriesPage kept for reference but route redirects to /categorias
 const CategoryRulesPage = lazy(() => import('./pages/CategoryRulesPage').then(m => ({ default: m.CategoryRulesPage })))
 const AccountsPage     = lazy(() => import('./pages/AccountsPage').then(m => ({ default: m.AccountsPage })))
 const CardsPage        = lazy(() => import('./pages/CardsPage').then(m => ({ default: m.CardsPage })))
