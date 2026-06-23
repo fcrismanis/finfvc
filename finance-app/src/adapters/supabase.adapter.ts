@@ -42,6 +42,7 @@ type DbTransaction = {
 }
 
 type TransactionRawData = {
+  // Pluggy raw date fields
   pluggyRawDate?: string
   pluggyRawTransactionDate?: string
   pluggyRawPaymentDate?: string
@@ -49,34 +50,116 @@ type TransactionRawData = {
   pluggyRawOperationDate?: string
   pluggyRawCreatedAt?: string
   pluggyRawUpdatedAt?: string
+  // Provider date resolution metadata
+  providerRawDate?: string
+  providerDateField?: string
+  providerDateConfidence?: string
+  // Origin and review state
+  origin?: string
+  needsReview?: boolean
+  isAdjustment?: boolean
+  // Pluggy categorization metadata
+  pluggyCategory?: string
+  pluggyCategoryId?: string
+  pluggyCategoryMapped?: boolean
+  pluggyOperationType?: string
+  pluggyPaymentMethod?: string
+  pluggyReceiverName?: string
+  pluggyPayerName?: string
+  pluggyAccountName?: string
+  pluggyInstitutionName?: string
+  pluggyInstitutionLogoUrl?: string
+  // Suggestion metadata
+  categorySuggestionSource?: string
+  categoryConfidence?: string
+  // Tags and group
+  tags?: string[]
+  group?: string
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined
+}
+function bool(v: unknown): boolean | undefined {
+  return typeof v === 'boolean' ? v : undefined
+}
+function strArr(v: unknown): string[] | undefined {
+  return Array.isArray(v) ? (v as unknown[]).filter(x => typeof x === 'string') as string[] : undefined
 }
 
 function fromRawData(raw: Record<string, unknown> | null): TransactionRawData {
   if (!raw) return {}
   return {
-    pluggyRawDate: typeof raw.pluggyRawDate === 'string' ? raw.pluggyRawDate : undefined,
-    pluggyRawTransactionDate: typeof raw.pluggyRawTransactionDate === 'string' ? raw.pluggyRawTransactionDate : undefined,
-    pluggyRawPaymentDate: typeof raw.pluggyRawPaymentDate === 'string' ? raw.pluggyRawPaymentDate : undefined,
-    pluggyRawCompetenceDate: typeof raw.pluggyRawCompetenceDate === 'string' ? raw.pluggyRawCompetenceDate : undefined,
-    pluggyRawOperationDate: typeof raw.pluggyRawOperationDate === 'string' ? raw.pluggyRawOperationDate : undefined,
-    pluggyRawCreatedAt: typeof raw.pluggyRawCreatedAt === 'string' ? raw.pluggyRawCreatedAt : undefined,
-    pluggyRawUpdatedAt: typeof raw.pluggyRawUpdatedAt === 'string' ? raw.pluggyRawUpdatedAt : undefined,
+    pluggyRawDate:            str(raw.pluggyRawDate),
+    pluggyRawTransactionDate: str(raw.pluggyRawTransactionDate),
+    pluggyRawPaymentDate:     str(raw.pluggyRawPaymentDate),
+    pluggyRawCompetenceDate:  str(raw.pluggyRawCompetenceDate),
+    pluggyRawOperationDate:   str(raw.pluggyRawOperationDate),
+    pluggyRawCreatedAt:       str(raw.pluggyRawCreatedAt),
+    pluggyRawUpdatedAt:       str(raw.pluggyRawUpdatedAt),
+    providerRawDate:          str(raw.providerRawDate),
+    providerDateField:        str(raw.providerDateField),
+    providerDateConfidence:   str(raw.providerDateConfidence),
+    origin:                   str(raw.origin),
+    needsReview:              bool(raw.needsReview),
+    isAdjustment:             bool(raw.isAdjustment),
+    pluggyCategory:           str(raw.pluggyCategory),
+    pluggyCategoryId:         str(raw.pluggyCategoryId),
+    pluggyCategoryMapped:     bool(raw.pluggyCategoryMapped),
+    pluggyOperationType:      str(raw.pluggyOperationType),
+    pluggyPaymentMethod:      str(raw.pluggyPaymentMethod),
+    pluggyReceiverName:       str(raw.pluggyReceiverName),
+    pluggyPayerName:          str(raw.pluggyPayerName),
+    pluggyAccountName:        str(raw.pluggyAccountName),
+    pluggyInstitutionName:    str(raw.pluggyInstitutionName),
+    pluggyInstitutionLogoUrl: str(raw.pluggyInstitutionLogoUrl),
+    categorySuggestionSource: str(raw.categorySuggestionSource),
+    categoryConfidence:       str(raw.categoryConfidence),
+    tags:                     strArr(raw.tags),
+    group:                    str(raw.group),
   }
 }
 
 function toRawData(tx: Transaction): Record<string, unknown> | null {
   const raw: TransactionRawData = {}
-  if (tx.pluggyRawDate) raw.pluggyRawDate = tx.pluggyRawDate
+  // Pluggy raw date fields
+  if (tx.pluggyRawDate)            raw.pluggyRawDate            = tx.pluggyRawDate
   if (tx.pluggyRawTransactionDate) raw.pluggyRawTransactionDate = tx.pluggyRawTransactionDate
-  if (tx.pluggyRawPaymentDate) raw.pluggyRawPaymentDate = tx.pluggyRawPaymentDate
-  if (tx.pluggyRawCompetenceDate) raw.pluggyRawCompetenceDate = tx.pluggyRawCompetenceDate
-  if (tx.pluggyRawOperationDate) raw.pluggyRawOperationDate = tx.pluggyRawOperationDate
-  if (tx.pluggyRawCreatedAt) raw.pluggyRawCreatedAt = tx.pluggyRawCreatedAt
-  if (tx.pluggyRawUpdatedAt) raw.pluggyRawUpdatedAt = tx.pluggyRawUpdatedAt
+  if (tx.pluggyRawPaymentDate)     raw.pluggyRawPaymentDate     = tx.pluggyRawPaymentDate
+  if (tx.pluggyRawCompetenceDate)  raw.pluggyRawCompetenceDate  = tx.pluggyRawCompetenceDate
+  if (tx.pluggyRawOperationDate)   raw.pluggyRawOperationDate   = tx.pluggyRawOperationDate
+  if (tx.pluggyRawCreatedAt)       raw.pluggyRawCreatedAt       = tx.pluggyRawCreatedAt
+  if (tx.pluggyRawUpdatedAt)       raw.pluggyRawUpdatedAt       = tx.pluggyRawUpdatedAt
+  // Provider date resolution metadata
+  if (tx.providerRawDate)          raw.providerRawDate          = tx.providerRawDate
+  if (tx.providerDateField)        raw.providerDateField        = tx.providerDateField
+  if (tx.providerDateConfidence)   raw.providerDateConfidence   = tx.providerDateConfidence
+  // Origin and review state
+  if (tx.origin)                   raw.origin                   = tx.origin
+  if (tx.needsReview != null)      raw.needsReview              = tx.needsReview
+  if (tx.isAdjustment)             raw.isAdjustment             = tx.isAdjustment
+  // Pluggy categorization metadata
+  if (tx.pluggyCategory)           raw.pluggyCategory           = tx.pluggyCategory
+  if (tx.pluggyCategoryId)         raw.pluggyCategoryId         = tx.pluggyCategoryId
+  if (tx.pluggyCategoryMapped)     raw.pluggyCategoryMapped     = tx.pluggyCategoryMapped
+  if (tx.pluggyOperationType)      raw.pluggyOperationType      = tx.pluggyOperationType
+  if (tx.pluggyPaymentMethod)      raw.pluggyPaymentMethod      = tx.pluggyPaymentMethod
+  if (tx.pluggyReceiverName)       raw.pluggyReceiverName       = tx.pluggyReceiverName
+  if (tx.pluggyPayerName)          raw.pluggyPayerName          = tx.pluggyPayerName
+  if (tx.pluggyAccountName)        raw.pluggyAccountName        = tx.pluggyAccountName
+  if (tx.pluggyInstitutionName)    raw.pluggyInstitutionName    = tx.pluggyInstitutionName
+  if (tx.pluggyInstitutionLogoUrl) raw.pluggyInstitutionLogoUrl = tx.pluggyInstitutionLogoUrl
+  // Suggestion metadata
+  if (tx.categorySuggestionSource) raw.categorySuggestionSource = tx.categorySuggestionSource
+  if (tx.categoryConfidence)       raw.categoryConfidence       = tx.categoryConfidence
+  // Tags and group
+  if (tx.tags?.length)             raw.tags                     = tx.tags
+  if (tx.group)                    raw.group                    = tx.group
   return Object.keys(raw).length > 0 ? raw : null
 }
 
 function toTransaction(row: DbTransaction): Transaction {
+  const raw = fromRawData(row.raw_data)
   return {
     id: row.id,
     description: row.description,
@@ -101,7 +184,7 @@ function toTransaction(row: DbTransaction): Transaction {
     includeInCashflow: row.include_in_cashflow,
     includeInBudget: row.include_in_budget ?? true,
     isInternalTransfer: row.is_internal_transfer,
-    isAdjustment: false,
+    isAdjustment: raw.isAdjustment ?? false,
     importBatchId: row.import_batch_id ?? undefined,
     importHash: row.import_hash ?? undefined,
     sourceFile: row.source_file ?? undefined,
@@ -110,8 +193,32 @@ function toTransaction(row: DbTransaction): Transaction {
     manualSubCategoryOverride: row.manual_sub_category_override ?? undefined,
     manualTextOverride: row.manual_text_override ?? undefined,
     manualEditedAt: row.manual_edited_at ?? undefined,
-    origin: 'import_xlsx',
-    ...fromRawData(row.raw_data),
+    origin: (raw.origin as Transaction['origin']) ?? 'import_xlsx',
+    needsReview: raw.needsReview,
+    pluggyCategory: raw.pluggyCategory,
+    pluggyCategoryId: raw.pluggyCategoryId,
+    pluggyCategoryMapped: raw.pluggyCategoryMapped,
+    pluggyOperationType: raw.pluggyOperationType,
+    pluggyPaymentMethod: raw.pluggyPaymentMethod,
+    pluggyReceiverName: raw.pluggyReceiverName,
+    pluggyPayerName: raw.pluggyPayerName,
+    pluggyAccountName: raw.pluggyAccountName,
+    pluggyInstitutionName: raw.pluggyInstitutionName,
+    pluggyInstitutionLogoUrl: raw.pluggyInstitutionLogoUrl,
+    categorySuggestionSource: raw.categorySuggestionSource as Transaction['categorySuggestionSource'],
+    categoryConfidence: raw.categoryConfidence as Transaction['categoryConfidence'],
+    providerRawDate: raw.providerRawDate,
+    providerDateField: raw.providerDateField as Transaction['providerDateField'],
+    providerDateConfidence: raw.providerDateConfidence as Transaction['providerDateConfidence'],
+    pluggyRawDate: raw.pluggyRawDate,
+    pluggyRawTransactionDate: raw.pluggyRawTransactionDate,
+    pluggyRawPaymentDate: raw.pluggyRawPaymentDate,
+    pluggyRawCompetenceDate: raw.pluggyRawCompetenceDate,
+    pluggyRawOperationDate: raw.pluggyRawOperationDate,
+    pluggyRawCreatedAt: raw.pluggyRawCreatedAt,
+    pluggyRawUpdatedAt: raw.pluggyRawUpdatedAt,
+    tags: raw.tags,
+    group: raw.group,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
