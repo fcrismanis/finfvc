@@ -3,13 +3,11 @@ import { currentFinancialDate, normalizeFinancialDate } from '../utils/date'
 
 export function normalizeAmount(raw: string | number): number {
   if (typeof raw === 'number') return Math.abs(raw)
-  const cleaned = String(raw)
-    .replace(/R\$\s*/g, '')
-    .replace(/\s/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.')
-    .replace(/[^\d.-]/g, '')
-  const value = parseFloat(cleaned)
+  let s = String(raw).replace(/R\$\s*/gi, '').replace(/\s/g, '')
+  // Brazilian text ("1.234,56"): dots are thousands separators, comma is decimal.
+  // Otherwise ("-85.37" from a numeric cell): the dot is already the decimal point.
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
+  const value = parseFloat(s.replace(/[^\d.-]/g, ''))
   return isNaN(value) ? 0 : Math.abs(value)
 }
 
@@ -49,7 +47,7 @@ export function normalizeDescription(raw: string): string {
 
 export function parseInstallment(raw: string | undefined): { current?: number; total?: number } {
   if (!raw) return {}
-  const match = String(raw).match(/(\d+)\s*[\/\-]\s*(\d+)/)
+  const match = String(raw).match(/(\d+)\s*[/-]\s*(\d+)/)
   if (!match) return {}
   return { current: parseInt(match[1]), total: parseInt(match[2]) }
 }

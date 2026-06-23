@@ -12,6 +12,8 @@ const COLUMN_ALIASES: Record<string, string> = {
   memo: 'descricao',
   histórico: 'descricao',
   historico: 'descricao',
+  lancamento: 'descricao', // Itaú: coluna "Lançamento"
+  lancamentos: 'descricao',
   // Amount
   valor: 'valor',
   value: 'valor',
@@ -65,7 +67,32 @@ const COLUMN_ALIASES: Record<string, string> = {
 }
 
 function normalizeColumnName(raw: string): string {
-  return raw.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return raw
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s*\([^)]*\)\s*$/, '') // drop trailing unit, e.g. "valor (r$)" -> "valor"
+    .trim()
+}
+
+/** True if a numeric/string amount carries a negative sign (Itaú signed convention). */
+function isNegativeAmount(value: string): boolean {
+  return /-/.test(value) && /\d/.test(value)
+}
+
+/**
+ * Statement exports (Itaú etc.) prepend metadata rows before the real header.
+ * Find the first row that maps to a date plus a value or description column.
+ */
+function findHeaderRow(rows: (string | number | undefined)[][]): number {
+  const limit = Math.min(rows.length, 25)
+  for (let i = 0; i < limit; i++) {
+    const headers = (rows[i] ?? []).map(h => String(h ?? ''))
+    const map = mapColumns(headers)
+    if ('data' in map && ('valor' in map || 'descricao' in map)) return i
+  }
+  return 0
 }
 
 function mapColumns(headers: string[]): Record<string, number> {
@@ -80,7 +107,7 @@ function mapColumns(headers: string[]): Record<string, number> {
   return map
 }
 
-function rowToRaw(row: (string | number | undefined)[], colMap: Record<string, number>, rowIndex: number, sourceFile: string): RawTransaction | null {
+function rowToRaw(row: (string | number | undefined)[], colMap: Record<string, number>, rowIndex: number, sourceFile: string, signedAmounts: boolean): RawTransaction | null {
   const get = (col: string): string => {
     const idx = colMap[col]
     if (idx === undefined) return ''
@@ -93,13 +120,16 @@ function rowToRaw(row: (string | number | undefined)[], colMap: Record<string, n
 
   if (!descricao && !valor) return null
 
+  // No explicit "tipo" column (e.g. Itaú): derive from the sign of the amount.
+  const rawType = get('tipo') || (signedAmounts ? (isNegativeAmount(valor) ? 'Despesa' : 'Receita') : 'Despesa')
+
   return {
     originalDescription: descricao,
     rawAmount: valor,
     rawDate: get('data'),
     rawCompetenceDate: get('data_competencia') || get('data'),
     rawPaymentDate: get('data_pagamento') || undefined,
-    rawType: get('tipo') || 'Despesa',
+    rawType,
     rawStatus: get('status') || 'Pago',
     rawPaymentMethod: get('forma_pagamento'),
     rawAccount: get('conta'),
@@ -113,64 +143,46 @@ function rowToRaw(row: (string | number | undefined)[], colMap: Record<string, n
   }
 }
 
-async function parseWorkbook(buffer: ArrayBuffer, fileName: string): Promise<RawTransaction[]> {
-  const wb = XLSX.read(buffer, { type: 'array', cellDates: false })
-  const sheet = wb.Sheets[wb.SheetNames[0]]
-
-  const rows: (string | number | undefined)[][] = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: undefined,
-    blankrows: false,
-  })
-
+function rowsToRaw(rows: (string | number | undefined)[][], fileName: string): RawTransaction[] {
   if (rows.length < 2) return []
 
-  const headers = (rows[0] as (string | number | undefined)[]).map(h => String(h ?? ''))
+  const headerIdx = findHeaderRow(rows)
+  const headers = (rows[headerIdx] ?? []).map(h => String(h ?? ''))
   const colMap = mapColumns(headers)
 
+  // Detect signed convention (e.g. Itaú): if any value is negative and there is
+  // no explicit "tipo" column, treat positives as income and negatives as expense.
+  const valorIdx = colMap['valor']
+  const signedAmounts =
+    !('tipo' in colMap) &&
+    valorIdx !== undefined &&
+    rows.slice(headerIdx + 1).some(r => isNegativeAmount(String(r?.[valorIdx] ?? '')))
+
   const result: RawTransaction[] = []
-  for (let i = 1; i < rows.length; i++) {
-    const raw = rowToRaw(rows[i] as (string | number | undefined)[], colMap, i, fileName)
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const raw = rowToRaw(rows[i] as (string | number | undefined)[], colMap, i, fileName, signedAmounts)
     if (raw) result.push(raw)
   }
 
   return result
 }
 
-async function parseCSVText(text: string, fileName: string): Promise<RawTransaction[]> {
-  const wb = XLSX.read(text, { type: 'string' })
+function readRows(data: ArrayBuffer | string): (string | number | undefined)[][] {
+  const wb = typeof data === 'string'
+    ? XLSX.read(data, { type: 'string' })
+    : XLSX.read(data, { type: 'array', cellDates: false })
   const sheet = wb.Sheets[wb.SheetNames[0]]
-
-  const rows: (string | number | undefined)[][] = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: undefined,
-    blankrows: false,
-  })
-
-  if (rows.length < 2) return []
-
-  const headers = (rows[0] as (string | number | undefined)[]).map(h => String(h ?? ''))
-  const colMap = mapColumns(headers)
-
-  const result: RawTransaction[] = []
-  for (let i = 1; i < rows.length; i++) {
-    const raw = rowToRaw(rows[i] as (string | number | undefined)[], colMap, i, fileName)
-    if (raw) result.push(raw)
-  }
-
-  return result
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: undefined, blankrows: false })
 }
 
 export async function parseFile(file: File): Promise<RawTransaction[]> {
   const name = file.name.toLowerCase()
 
   if (name.endsWith('.csv') || name.endsWith('.txt')) {
-    const text = await file.text()
-    return parseCSVText(text, file.name)
+    return rowsToRaw(readRows(await file.text()), file.name)
   }
 
-  const buffer = await file.arrayBuffer()
-  return parseWorkbook(buffer, file.name)
+  return rowsToRaw(readRows(await file.arrayBuffer()), file.name)
 }
 
 export function validateParsedRows(rows: RawTransaction[]): { valid: RawTransaction[]; skipped: number } {

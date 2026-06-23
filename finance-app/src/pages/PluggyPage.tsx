@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { PluggyConnect } from 'react-pluggy-connect'
 import { useData } from '../context/DataContext'
 import {
@@ -12,6 +12,8 @@ import {
   lookupPluggyCategory,
   inferCategoryFromText,
   updateConnectionSyncMeta,
+  updateConnectionDisplayName,
+  updateAccountDisplayName,
   toggleAccountDailySync,
   getPeriodDates,
   restoreConnectionsFromServer,
@@ -198,7 +200,6 @@ function firstRawDate(...values: Array<string | null | undefined>): string | und
 function isLikelyPluggyTransaction(tx: Transaction): boolean {
   return tx.source === 'pluggy'
     || tx.origin === 'import_api'
-    || tx.id.startsWith('pluggy_')
     || Boolean(tx.importHash?.startsWith('pluggy_'))
     || Boolean(
       tx.pluggyCategory
@@ -455,6 +456,20 @@ export function PluggyPage() {
     }
   }
 
+  const handleRenameConnection = useCallback((itemId: string, current: string) => {
+    const name = window.prompt('Nome da conexão:', current)
+    if (name === null) return
+    updateConnectionDisplayName(itemId, name)
+    setConnections(getLocalConnections())
+  }, [])
+
+  const handleRenameAccount = useCallback((itemId: string, accountId: string, current: string) => {
+    const name = window.prompt('Nome da conta:', current)
+    if (name === null) return
+    updateAccountDisplayName(itemId, accountId, name)
+    setConnections(getLocalConnections())
+  }, [])
+
   function buildConnInfo(itemId: string, _accountId: string, accountName: string): ConnInfo | undefined {
     const conn = connections.find(c => c.itemId === itemId)
     if (!conn) return undefined
@@ -663,11 +678,21 @@ export function PluggyPage() {
                         <img src={conn.connectorImageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
                       ) : (
                         <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--well)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--faint)' }}>
-                          {conn.connectorName[0]}
+                          {(conn.displayName ?? conn.connectorName)[0]}
                         </div>
                       )}
                       <div>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{conn.connectorName}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{conn.displayName ?? conn.connectorName}</p>
+                          {conn.displayName && (
+                            <span style={{ fontSize: 10, color: 'var(--faint)' }}>({conn.connectorName})</span>
+                          )}
+                          <button
+                            onClick={() => handleRenameConnection(conn.itemId, conn.displayName ?? conn.connectorName)}
+                            title="Renomear conexão"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: 'var(--faint)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--ui)', opacity: 0.6 }}
+                          >✏</button>
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLOR[conn.status] ?? 'var(--faint)', flexShrink: 0 }} />
                           <span style={{ fontSize: 11, color: 'var(--faint)' }}>{STATUS_LABEL[conn.status] ?? conn.status}</span>
@@ -688,6 +713,11 @@ export function PluggyPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{acc.displayName ?? acc.name}</span>
+                              <button
+                                onClick={() => handleRenameAccount(conn.itemId, acc.id, acc.displayName ?? acc.name)}
+                                title="Renomear conta"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', color: 'var(--faint)', fontSize: 11, lineHeight: 1, fontFamily: 'var(--ui)', opacity: 0.6 }}
+                              >✏</button>
                               <span style={{
                                 fontSize: 9, fontWeight: 700, letterSpacing: '.06em', padding: '1px 5px', borderRadius: 3,
                                 background: acc.type === 'CREDIT' ? 'var(--accent-soft)' : 'var(--pos-soft)',
@@ -1057,6 +1087,7 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(allAccounts.map(a => a.id)))
   const [accountResults, setAccountResults] = useState<SyncAllAccountResult[]>([])
   const [allNewTxs, setAllNewTxs] = useState<Transaction[]>([])
+  const [importError, setImportError] = useState<string | null>(null)
 
   const isWorking = phase === 'fetching' || phase === 'importing'
   const selectedAccounts = allAccounts.filter(a => selectedIds.has(a.id))
@@ -1139,7 +1170,9 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
       }
       onSyncComplete()
       setPhase('done')
-    } catch {
+    } catch (err) {
+      console.error('[handleImport]', err)
+      setImportError(err instanceof Error ? err.message : 'Erro ao salvar transações')
       setPhase('preview')
     }
   }
@@ -1330,6 +1363,12 @@ function SyncAllModal({ connections, existingTxs, appendTransactions, onSyncComp
             {totalNew === 0 && (
               <p style={{ fontSize: 12.5, color: 'var(--faint)', textAlign: 'center' }}>
                 Nenhuma transação nova — todas já importadas ou período sem dados.
+              </p>
+            )}
+
+            {importError && (
+              <p style={{ fontSize: 12, color: 'var(--neg)', background: 'var(--neg-bg, #fee)', borderRadius: 6, padding: '8px 12px' }}>
+                Erro ao importar: {importError}
               </p>
             )}
 

@@ -1,43 +1,158 @@
 import { useMemo, useEffect, useState } from 'react'
-import { Home } from 'lucide-react'
+import { Home, Plus, Trash2, Car, Building2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
-import { getLocalConnections } from '../services/pluggy.service'
-import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
+import { getLocalConnections, fetchPluggyInvestments } from '../services/pluggy.service'
+import type { PluggyLocalConnection, PluggyLocalAccount, PluggyInvestment } from '../services/pluggy.service'
+import {
+  getBens, addBem, deleteBem,
+  FINALIDADE_LABEL, CATEGORIAS_POR_TIPO,
+  type BemPatrimonial, type BemTipo, type BemFinalidade,
+} from '../services/patrimonio.service'
+
+const TYPE_LABEL: Record<string, string> = {
+  MUTUAL_FUND:  'Fundo de Investimento',
+  SECURITY:     'Título',
+  EQUITY:       'Ações',
+  FIXED_INCOME: 'Renda Fixa',
+  ETF:          'ETF',
+  COE:          'COE',
+  REAL_ESTATE:  'FII',
+  TREASURE:     'Tesouro Direto',
+  OTHER:        'Outro',
+}
+
+const TIPO_OPTIONS: { value: BemTipo; label: string }[] = [
+  { value: 'movel',  label: 'Bem Móvel' },
+  { value: 'imovel', label: 'Bem Imóvel' },
+  { value: 'outro',  label: 'Outro' },
+]
+
+const FINALIDADE_OPTIONS: { value: BemFinalidade; label: string }[] = [
+  { value: 'uso_proprio',  label: 'Uso Próprio' },
+  { value: 'aluguel',      label: 'Aluguel' },
+  { value: 'investimento', label: 'Investimento' },
+  { value: 'outro',        label: 'Outro' },
+]
+
+function emptyForm() {
+  return {
+    nome: '',
+    tipo: 'movel' as BemTipo,
+    categoria: '',
+    finalidade: 'uso_proprio' as BemFinalidade,
+    valorMercado: 0,
+    saldoDevedor: 0,
+    descricao: '',
+  }
+}
 
 export function PatrimonioPage() {
   const { transactions } = useData()
   const [connections, setConnections] = useState<PluggyLocalConnection[]>([])
+  const [investments, setInvestments] = useState<PluggyInvestment[]>([])
+  const [loadingInvest, setLoadingInvest] = useState(false)
+  const [investError, setInvestError] = useState<string | null>(null)
+
+  const [bens, setBens] = useState<BemPatrimonial[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState(emptyForm())
 
   useEffect(() => {
-    setConnections(getLocalConnections())
-  }, [])
+    setBens(getBens())
+    const conns = getLocalConnections()
+    setConnections(conns)
+    if (conns.length > 0) loadInvestments(conns)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadInvestments(conns = connections) {
+    if (conns.length === 0) return
+    setLoadingInvest(true)
+    setInvestError(null)
+    try {
+      const results = await Promise.all(conns.map(c => fetchPluggyInvestments(c.itemId)))
+      setInvestments(results.flat())
+    } catch (err) {
+      setInvestError(err instanceof Error ? err.message : 'Erro ao buscar investimentos')
+    } finally {
+      setLoadingInvest(false)
+    }
+  }
 
   const bankAccounts = connections.flatMap(c =>
     c.accounts
       .filter(a => a.type === 'BANK')
-      .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl ?? null }))
+      .map(a => ({ ...a, connectorName: c.displayName ?? c.connectorName, connectorImageUrl: c.connectorImageUrl ?? null }))
   )
 
   const creditCards = connections.flatMap(c =>
     c.accounts
       .filter(a => a.type === 'CREDIT')
-      .map(a => ({ ...a, connectorName: c.connectorName, connectorImageUrl: c.connectorImageUrl ?? null }))
+      .map(a => ({ ...a, connectorName: c.displayName ?? c.connectorName, connectorImageUrl: c.connectorImageUrl ?? null }))
   )
 
-  // Net invested from transactions (aportes - resgates) — Pluggy doesn't expose investment account balances
   const investTxTotal = useMemo(() => {
     const invested = transactions.filter(tx => tx.classificationType === 'investment' && tx.status !== 'cancelled').reduce((s, tx) => s + tx.amount, 0)
     const redeemed = transactions.filter(tx => tx.classificationType === 'redemption' && tx.status !== 'cancelled').reduce((s, tx) => s + tx.amount, 0)
     return invested - redeemed
   }, [transactions])
 
-  const totalBankBalance = bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
-  const totalInvestBalance = investTxTotal
+  const activeInvestments = investments.filter(i => i.status !== 'SOLD' && i.status !== 'CLOSED')
+  const pluggyInvestTotal = activeInvestments.reduce((s, i) => s + (i.balance ?? 0), 0)
+  const hasPluggyInvestments = activeInvestments.length > 0
+
+  const totalBankBalance   = bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
+  const totalInvestBalance = hasPluggyInvestments ? pluggyInvestTotal : investTxTotal
   const totalCreditBalance = creditCards.reduce((s, a) => s + (a.balance ?? 0), 0)
 
-  const netWorth = totalBankBalance + totalInvestBalance - totalCreditBalance
-  const hasData = bankAccounts.length > 0 || totalInvestBalance > 0
+  const bensMoveis  = bens.filter(b => b.tipo === 'movel')
+  const bensImoveis = bens.filter(b => b.tipo === 'imovel')
+  const bensOutros  = bens.filter(b => b.tipo === 'outro')
+
+  const totalBensLiquido  = bens.reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
+  const totalSaldoDevedor = bens.reduce((s, b) => s + b.saldoDevedor, 0)
+
+  const hasPluggyData = bankAccounts.length > 0 || totalInvestBalance > 0
+
+  function openModal() {
+    setForm(emptyForm())
+    setModalOpen(true)
+  }
+
+  function handleAdd() {
+    if (!form.nome.trim() || !form.categoria) return
+    const novo = addBem({
+      nome: form.nome.trim(),
+      tipo: form.tipo,
+      categoria: form.categoria,
+      finalidade: form.finalidade,
+      valorMercado: form.valorMercado,
+      saldoDevedor: form.saldoDevedor,
+      descricao: form.descricao || undefined,
+    })
+    setBens(prev => [...prev, novo])
+    setModalOpen(false)
+  }
+
+  function handleDelete(id: string) {
+    deleteBem(id)
+    setBens(prev => prev.filter(b => b.id !== id))
+  }
+
+  function setField<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
+    setForm(prev => {
+      const next = { ...prev, [key]: val }
+      if (key === 'tipo') next.categoria = ''
+      return next
+    })
+  }
+
+  const categorias = CATEGORIAS_POR_TIPO[form.tipo]
+
+  // suppress unused import warnings
+  void TYPE_LABEL
+  void loadingInvest
+  void investError
 
   return (
     <main className="page-shell">
@@ -45,10 +160,53 @@ export function PatrimonioPage() {
 
         <div>
           <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Patrimônio</h1>
-          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>Visão consolidada de saldos e patrimônio líquido</div>
+          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>Visão consolidada de bens e patrimônio líquido</div>
         </div>
 
-        {!hasData ? (
+        {/* Bens Móveis */}
+        <BensSection
+          title="Bens Móveis"
+          icon={<Car size={16} style={{ color: 'var(--faint)' }} />}
+          bens={bensMoveis}
+          onAdd={openModal}
+          onDelete={handleDelete}
+        />
+
+        {/* Bens Imóveis */}
+        <BensSection
+          title="Bens Imóveis"
+          icon={<Building2 size={16} style={{ color: 'var(--faint)' }} />}
+          bens={bensImoveis}
+          onAdd={openModal}
+          onDelete={handleDelete}
+        />
+
+        {/* Outros bens */}
+        {bensOutros.length > 0 && (
+          <BensSection
+            title="Outros Bens"
+            icon={<Home size={16} style={{ color: 'var(--faint)' }} />}
+            bens={bensOutros}
+            onAdd={openModal}
+            onDelete={handleDelete}
+          />
+        )}
+
+        {/* Patrimônio líquido summary */}
+        {bens.length > 0 && (
+          <div className="card" style={{ padding: '22px 26px', background: 'var(--ink)', color: 'white' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Patrimônio Líquido Total</p>
+            <p style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(totalBensLiquido)}</p>
+            {totalSaldoDevedor > 0 && (
+              <p style={{ fontSize: 11.5, opacity: 0.5, marginTop: 6 }}>
+                Saldo devedor consolidado: {formatBRL(totalSaldoDevedor)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Pluggy financial accounts */}
+        {!hasPluggyData ? (
           <div className="card" style={{ padding: '32px 24px', textAlign: 'center' }}>
             <Home size={32} style={{ margin: '0 auto 12px', color: 'var(--faint)' }} />
             <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Conecte suas contas</p>
@@ -58,16 +216,6 @@ export function PatrimonioPage() {
           </div>
         ) : (
           <>
-            {/* Net worth headline */}
-            <div className="card" style={{ padding: '22px 26px', background: 'var(--ink)', color: 'white' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Patrimônio líquido</p>
-              <p style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(netWorth)}</p>
-              <p style={{ fontSize: 11.5, opacity: 0.5, marginTop: 6 }}>
-                Contas ({formatBRL(totalBankBalance)}) + Invest. ({formatBRL(totalInvestBalance)}) − Cartões ({formatBRL(totalCreditBalance)})
-              </p>
-            </div>
-
-            {/* Breakdown cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div className="card" style={{ padding: '16px 18px' }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Contas bancárias</p>
@@ -87,8 +235,6 @@ export function PatrimonioPage() {
                 </div>
               )}
             </div>
-
-            {/* Account list */}
             {bankAccounts.length > 0 && (
               <AccountList title="Contas bancárias" accounts={bankAccounts} valueColor="var(--pos)" />
             )}
@@ -99,15 +245,227 @@ export function PatrimonioPage() {
         )}
 
       </div>
+
+      {/* Modal */}
+      {modalOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 16,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: 480, padding: '28px 28px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>Novo Bem Patrimonial</h2>
+
+            <Field label="Nome">
+              <input
+                className="input"
+                placeholder="Ex: Corolla 2020, Apartamento Centro"
+                value={form.nome}
+                onChange={e => setField('nome', e.target.value)}
+              />
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Tipo">
+                <select className="input" value={form.tipo} onChange={e => setField('tipo', e.target.value as BemTipo)}>
+                  {TIPO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Categoria">
+                <select className="input" value={form.categoria} onChange={e => setField('categoria', e.target.value)}>
+                  <option value="">Selecione</option>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Finalidade">
+              <select className="input" value={form.finalidade} onChange={e => setField('finalidade', e.target.value as BemFinalidade)}>
+                {FINALIDADE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Valor de Mercado">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={form.valorMercado}
+                  onChange={e => setField('valorMercado', parseFloat(e.target.value) || 0)}
+                />
+              </Field>
+              <Field label="Saldo Devedor">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={form.saldoDevedor}
+                  onChange={e => setField('saldoDevedor', parseFloat(e.target.value) || 0)}
+                />
+              </Field>
+            </div>
+
+            <Field label="Descrição (opcional)">
+              <textarea
+                className="input"
+                placeholder="Detalhes, localização, observações..."
+                value={form.descricao}
+                onChange={e => setField('descricao', e.target.value)}
+                rows={3}
+                style={{ resize: 'vertical' }}
+              />
+            </Field>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button className="btn-ghost" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button
+                className="btn-primary"
+                onClick={handleAdd}
+                disabled={!form.nome.trim() || !form.categoria}
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <label style={{ fontSize: 12, fontWeight: 650, color: 'var(--faint)' }}>{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function BensSection({
+  title, icon, bens, onAdd, onDelete,
+}: {
+  title: string
+  icon: React.ReactNode
+  bens: BemPatrimonial[]
+  onAdd: () => void
+  onDelete: (id: string) => void
+}) {
+  const total = bens.reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
+
+  return (
+    <div className="card" style={{ padding: '18px 22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {icon}
+          <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>
+            {title}
+            {bens.length > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint)', marginLeft: 8 }}>
+                ({formatBRL(total)})
+              </span>
+            )}
+          </h3>
+        </div>
+        <button
+          className="btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, padding: '6px 12px' }}
+          onClick={onAdd}
+        >
+          <Plus size={14} />
+          Adicionar
+        </button>
+      </div>
+
+      {bens.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>
+          Nenhum bem cadastrado
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {bens.map(b => <BemCard key={b.id} bem={b} onDelete={onDelete} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BemCard({ bem, onDelete }: { bem: BemPatrimonial; onDelete: (id: string) => void }) {
+  const patrimonioLiquido = bem.valorMercado - bem.saldoDevedor
+
+  return (
+    <div style={{
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      padding: '14px 16px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{bem.nome}</p>
+          <span style={{ fontSize: 11, color: 'var(--faint)', background: 'var(--subtle)', padding: '1px 7px', borderRadius: 99 }}>
+            {bem.categoria}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginTop: 6 }}>
+          <InfoRow label="Valor de Mercado" value={formatBRL(bem.valorMercado)} />
+          {bem.saldoDevedor > 0 && (
+            <InfoRow label="Saldo Devedor" value={`−${formatBRL(bem.saldoDevedor)}`} valueColor="var(--crit)" />
+          )}
+          <InfoRow
+            label="Patrimônio Líquido"
+            value={formatBRL(patrimonioLiquido)}
+            valueColor={patrimonioLiquido >= 0 ? 'var(--pos)' : 'var(--crit)'}
+            bold
+          />
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <span style={{
+            fontSize: 11, color: 'var(--faint)', background: 'var(--subtle)',
+            padding: '2px 8px', borderRadius: 99, display: 'inline-block',
+          }}>
+            {FINALIDADE_LABEL[bem.finalidade]}
+          </span>
+        </div>
+        {bem.descricao && (
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', margin: '6px 0 0' }}>{bem.descricao}</p>
+        )}
+      </div>
+      <button
+        onClick={() => onDelete(bem.id)}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--faint)', padding: 4, flexShrink: 0,
+          borderRadius: 6,
+        }}
+        title="Remover bem"
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
+  )
+}
+
+function InfoRow({ label, value, valueColor, bold }: { label: string; value: string; valueColor?: string; bold?: boolean }) {
+  return (
+    <div>
+      <p style={{ fontSize: 10.5, color: 'var(--faint)', margin: 0 }}>{label}</p>
+      <p style={{ fontSize: 13, fontWeight: bold ? 700 : 600, color: valueColor ?? 'var(--ink)', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
 function AccountList({
-  title,
-  accounts,
-  valueColor,
-  negated = false,
+  title, accounts, valueColor, negated = false,
 }: {
   title: string
   accounts: (PluggyLocalAccount & { connectorName: string; connectorImageUrl: string | null })[]

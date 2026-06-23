@@ -42,6 +42,7 @@ function getProviderStatus() {
     mock: true,
     gpt: !!(process.env.OPENAI_API_KEY),
     claude: !!(process.env.ANTHROPIC_API_KEY),
+    openrouter: !!(process.env.OPENROUTER_API_KEY),
   }
 }
 
@@ -171,6 +172,48 @@ async function handleClaude(question, month, ctx) {
     ?.join('') ?? ''
 
   return { provider: 'claude', answer }
+}
+
+async function handleOpenRouter(question, month, ctx) {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    return { provider: 'openrouter', answer: '', error: 'OPENROUTER_API_KEY não configurada no backend.' }
+  }
+
+  const model = process.env.ADVISOR_OPENROUTER_MODEL ?? 'anthropic/claude-haiku-4-5'
+  const content = buildContent(question, month, ctx)
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:5173',
+      'X-Title': 'FIN Consultor Financeiro',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    if (res.status === 429) {
+      return { provider: 'openrouter', answer: '', error: 'Cota OpenRouter excedida. Verifique créditos em openrouter.ai.' }
+    }
+    if (res.status === 401) {
+      return { provider: 'openrouter', answer: '', error: 'OPENROUTER_API_KEY inválida.' }
+    }
+    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  const answer = data.choices?.[0]?.message?.content ?? ''
+  return { provider: 'openrouter', answer }
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -650,9 +693,40 @@ async function categorizeOllama(transactions, categories, subCategories, rules) 
   return parsed
 }
 
+async function categorizeOpenRouter(transactions, categories, subCategories, rules) {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) return null
+
+  const model = process.env.CATEGORIZE_OPENROUTER_MODEL ?? 'anthropic/claude-haiku-4-5'
+  const content = buildCategorizationPrompt(transactions, categories, subCategories, rules)
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:5173',
+      'X-Title': 'FIN Categorizador',
+    },
+    body: JSON.stringify({
+      model,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'user', content }],
+    }),
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`OpenRouter ${res.status}: ${txt.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const text = data.choices?.[0]?.message?.content ?? '{}'
+  return JSON.parse(text)
+}
+
 app.post('/api/ai/categorize-transactions', async (req, res) => {
-  const hasClaude = !!(process.env.ANTHROPIC_API_KEY)
-  const hasGPT    = !!(process.env.OPENAI_API_KEY)
+  const hasClaude      = !!(process.env.ANTHROPIC_API_KEY)
+  const hasGPT         = !!(process.env.OPENAI_API_KEY)
+  const hasOpenRouter  = !!(process.env.OPENROUTER_API_KEY)
 
   const { transactions, categories, subCategories, rules } = req.body ?? {}
 
@@ -678,6 +752,9 @@ app.post('/api/ai/categorize-transactions', async (req, res) => {
     } else if (hasGPT) {
       result = await categorizeGPT(batch, cats, subs, rls)
       provider = 'gpt'
+    } else if (hasOpenRouter) {
+      result = await categorizeOpenRouter(batch, cats, subs, rls)
+      provider = 'openrouter'
     } else {
       result = await categorizeOllama(batch, cats, subs, rls)
       provider = 'ollama'
@@ -700,7 +777,7 @@ app.post('/api/ai/categorize-transactions', async (req, res) => {
   }
 })
 
-const VALID_PROVIDERS = ['mock', 'gpt', 'claude']
+const VALID_PROVIDERS = ['mock', 'gpt', 'claude', 'openrouter']
 
 // Provider availability — lets the UI disable unconfigured providers
 app.get('/api/advisor', (_req, res) => {
@@ -727,7 +804,8 @@ app.post('/api/advisor', async (req, res) => {
     let result
     if (provider === 'mock') result = handleMock(question, month)
     else if (provider === 'gpt') result = await handleGPT(question, month, context)
-    else result = await handleClaude(question, month, context)
+    else if (provider === 'claude') result = await handleClaude(question, month, context)
+    else result = await handleOpenRouter(question, month, context)
 
     // Controlled errors (missing key, quota) → 503
     if (result.error) return res.status(503).json(result)

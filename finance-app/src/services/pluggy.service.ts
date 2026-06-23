@@ -210,6 +210,7 @@ export interface PluggyLocalAccount {
 export interface PluggyLocalConnection {
   itemId: string
   connectorName: string
+  displayName?: string
   connectorImageUrl: string | null
   status: string
   createdAt: string
@@ -426,7 +427,7 @@ export function mapPluggyToTransactions(
       isCardPayment ? 'transfer' : type === 'income' ? 'operational_income' : 'operational_expense'
 
     const baseTx: import('../types').Transaction = {
-      id: `pluggy_${ptx.id}`,
+      id: ptx.id,
       description: ptx.description ?? '',
       originalDescription: ptx.description ?? '',
       amount: Math.abs(ptx.amount),
@@ -520,7 +521,20 @@ export function mapPluggyToTransactions(
     }
 
     // Priority 3: Pluggy provider category (by ID first, then by name)
-    const catResult = lookupPluggyCategory(ptx.categoryId, ptx.category)
+    let catResult = lookupPluggyCategory(ptx.categoryId, ptx.category)
+    // Direction guard: never apply an income classification to an outflow (or an
+    // expense classification to an inflow). Pluggy sometimes tags bill/card payments
+    // (expenses) with an income category id (e.g. "03000000" → operational_income),
+    // which would book a boleto payment as receita. Reject the mismatch so it falls
+    // through to text inference (boleto/fatura patterns → neutral).
+    if (catResult) {
+      const cls = catResult.classificationType
+      const incomeCls = cls === 'operational_income' || cls === 'extraordinary_income'
+      const expenseCls = cls === 'operational_expense' || cls === 'debt_cost'
+      if ((type === 'expense' && incomeCls) || (type === 'income' && expenseCls)) {
+        catResult = null
+      }
+    }
     if (catResult) {
       return {
         ...baseTx,
@@ -617,6 +631,16 @@ export function updateConnectionSyncMeta(itemId: string, accountId: string, impo
   if (!acc) return
   acc.lastSyncAt = new Date().toISOString()
   acc.lastSyncCount = (acc.lastSyncCount ?? 0) + importedCount
+  backupPluggyConnectionsSafe(all)
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
+  backupConnectionsToServer(all)
+}
+
+export function updateConnectionDisplayName(itemId: string, displayName: string): void {
+  const all = getLocalConnections()
+  const conn = all.find(c => c.itemId === itemId)
+  if (!conn) return
+  conn.displayName = displayName.trim() || undefined
   backupPluggyConnectionsSafe(all)
   localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(all))
   backupConnectionsToServer(all)

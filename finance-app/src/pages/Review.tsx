@@ -85,6 +85,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   const [dismissedAI, setDismissedAI] = useState<Set<string>>(new Set())
   const [panelSearch, setPanelSearch] = useState('')
   const [applyToSimilar, setApplyToSimilar] = useState(false)
+  const allMacros = useMemo(() => getAllMacroCategories(), [])
 
   useEffect(() => { setSelected(new Set()); setPanelSearch('') }, [activePanel])
 
@@ -109,7 +110,20 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   )
   const intelligentCounts = useMemo(() => countBySeverity(intelligentItems), [intelligentItems])
   const [intelligentFilter, setIntelligentFilter] = useState<'all' | FinancialReviewType | 'severity_high' | 'severity_medium' | 'severity_low'>('all')
-  const [dismissedIntelligent, setDismissedIntelligent] = useState<Set<string>>(new Set())
+  const dismissedKey = `fin_dismissed_intel_${currentYearMonth()}`
+  const [dismissedIntelligent, setDismissedIntelligent] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(dismissedKey)
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set()
+    } catch { return new Set() }
+  })
+  function dismissIntelligentItem(id: string) {
+    setDismissedIntelligent(prev => {
+      const next = new Set([...prev, id])
+      try { localStorage.setItem(dismissedKey, JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
 
   const filteredIntelligent = useMemo(() => {
     const visible = intelligentItems.filter(i => !dismissedIntelligent.has(i.id))
@@ -275,7 +289,8 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   }
 
   function bulkMarkReviewed() {
-    void applyToSelected(() => ({ needsReview: false }))
+    const now = new Date().toISOString()
+    void applyToSelected(() => ({ needsReview: false, manualEditedAt: now }))
   }
 
   function bulkMarkNeutral() {
@@ -503,7 +518,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             filter={intelligentFilter}
             dismissed={dismissedIntelligent}
             onFilterChange={setIntelligentFilter}
-            onDismiss={id => setDismissedIntelligent(prev => new Set([...prev, id]))}
+            onDismiss={dismissIntelligentItem}
             onNavigateToTx={txId => {
               const tx = transactions.find(t => t.id === txId)
               if (tx) openModal(tx)
@@ -1132,37 +1147,14 @@ export function Review({ onNavigate: _onNavigate }: Props) {
               </div>
 
               <ModalField label="Categoria">
-                <select
-                  value={modalPatch.macroCategoryId ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, macroCategoryId: e.target.value || undefined, subCategoryId: undefined }))}
-                  className="ledger-select"
-                  style={{ width: '100%', fontSize: 12 }}
-                >
-                  <option value="">Sem categoria</option>
-                  {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                <CategorySelector
+                  macroCategoryId={modalPatch.macroCategoryId}
+                  subCategoryId={modalPatch.subCategoryId}
+                  allMacros={allMacros}
+                  subCategories={subCategories}
+                  onChange={(macroId, subId) => setModalPatch(p => ({ ...p, macroCategoryId: macroId, subCategoryId: subId }))}
+                />
               </ModalField>
-
-              {modalPatch.macroCategoryId && (() => {
-                const staticSubs = CATEGORIES.filter(c => c.macroCategoryId === modalPatch.macroCategoryId && c.active)
-                const userSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
-                const staticIds = new Set(staticSubs.map(s => s.id))
-                const allSubs = [...staticSubs, ...userSubs.filter(s => !staticIds.has(s.id))].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-                if (allSubs.length === 0) return null
-                return (
-                  <ModalField label="Subcategoria">
-                    <select
-                      value={(modalPatch.subCategoryId as string | undefined) ?? ''}
-                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
-                      className="ledger-select"
-                      style={{ width: '100%', fontSize: 12 }}
-                    >
-                      <option value="">— nenhuma —</option>
-                      {allSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </ModalField>
-                )
-              })()}
 
               <ModalField label="Observações">
                 <textarea
@@ -1390,7 +1382,7 @@ function BulkActionBar({
 
   return (
     <div style={{
-      position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 120,
+      position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 120,
       background: 'var(--card-bg)', border: '1px solid var(--line)', borderRadius: 12,
       boxShadow: '0 8px 30px rgba(0,0,0,.18)', padding: '12px 16px',
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: 'min(960px, 94vw)',

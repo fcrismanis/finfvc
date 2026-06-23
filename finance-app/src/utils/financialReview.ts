@@ -87,6 +87,8 @@ export function generateFinancialReviewItems(
       continue
     }
 
+    const manuallyReviewed = !!(tx.manualCategoryOverride || tx.manualEditedAt)
+
     // 2. Missing subcategory (expenses that count in budget)
     if (!tx.subCategoryId && tx.type === 'expense' && tx.includeInOperationalResult && tx.amount > 50) {
       items.push({
@@ -133,7 +135,7 @@ export function generateFinancialReviewItems(
     }
 
     // 5. Possible wrong neutral
-    if (tx.classificationType === 'neutral' && tx.amount > 500 && !tx.isInternalTransfer) {
+    if (!manuallyReviewed && tx.classificationType === 'neutral' && tx.amount > 500 && !tx.isInternalTransfer) {
       const desc = (tx.description || '').toUpperCase()
       const looksTransfer =
         desc.includes('TRANSF') ||
@@ -160,7 +162,7 @@ export function generateFinancialReviewItems(
     }
 
     // 6. Above average for macro category
-    if (tx.type === 'expense' && tx.includeInOperationalResult && tx.macroCategoryId && tx.amount > 100) {
+    if (!manuallyReviewed && tx.type === 'expense' && tx.includeInOperationalResult && tx.macroCategoryId && tx.amount > 100) {
       const avg = avgAmountByMacro(allTransactions, tx.macroCategoryId, month)
       if (avg > 0 && tx.amount > avg * 2.5) {
         items.push({
@@ -178,7 +180,7 @@ export function generateFinancialReviewItems(
     }
 
     // 7. Card payment check
-    if (tx.type === 'expense' && tx.classificationType !== 'transfer' && tx.classificationType !== 'neutral' && tx.amount > 100) {
+    if (!manuallyReviewed && tx.type === 'expense' && tx.classificationType !== 'transfer' && tx.classificationType !== 'neutral' && tx.amount > 100) {
       const desc = (tx.description || '').toUpperCase()
       if (
         (desc.includes('FATURA') || desc.match(/\bFAT\.?\b/) || desc.includes('PGTO FAT') || desc.includes('PAGTO FAT') || desc.includes('PAG FAT')) &&
@@ -199,7 +201,7 @@ export function generateFinancialReviewItems(
     }
 
     // 8. Financial cost
-    if (tx.classificationType === 'debt_cost') {
+    if (!manuallyReviewed && tx.classificationType === 'debt_cost') {
       items.push({
         id: `rev_debt_${tx.id}`,
         transactionId: tx.id,

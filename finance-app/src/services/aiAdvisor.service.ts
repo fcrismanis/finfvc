@@ -11,7 +11,7 @@
  * See docs/ai-advisor-integration.md for full setup guide.
  */
 
-export type AIProvider = 'simulated' | 'gpt' | 'claude'
+export type AIProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter'
 
 export interface AdvisorContext {
   month: string

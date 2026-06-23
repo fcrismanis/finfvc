@@ -13,7 +13,7 @@ interface Props {
   onNavigate: (route: string) => void
 }
 
-interface ProviderStatus { mock: boolean; gpt: boolean; claude: boolean }
+interface ProviderStatus { mock: boolean; gpt: boolean; claude: boolean; openrouter: boolean }
 
 type UiMode = 'simulated' | 'copy' | 'api'
 
@@ -298,7 +298,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                       <p style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6, maxWidth: 320 }}>
                         {uiMode === 'simulated'
                           ? `Respostas automáticas baseadas nos seus dados de ${month}. Sem API externa.`
-                          : `Usando ${provider === 'gpt' ? 'GPT' : 'Claude'} via backend. Contexto de ${month} carregado.`}
+                          : `Usando ${provider === 'gpt' ? 'GPT' : provider === 'openrouter' ? 'OpenRouter' : 'Claude'} via backend. Contexto de ${month} carregado.`}
                       </p>
                     </div>
                   ) : (
@@ -420,6 +420,9 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                   )}
                   {providerStatus !== null && (
                     <div style={{ display: 'flex', gap: 12, fontSize: 11.5 }}>
+                      <span style={{ color: providerStatus.openrouter ? 'var(--pos)' : 'var(--faint)' }}>
+                        {providerStatus.openrouter ? '✓' : '✗'} OpenRouter
+                      </span>
                       <span style={{ color: providerStatus.gpt ? 'var(--pos)' : 'var(--faint)' }}>
                         {providerStatus.gpt ? '✓' : '✗'} GPT
                       </span>
@@ -428,7 +431,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                       </span>
                     </div>
                   )}
-                  {providerStatus !== null && (providerStatus.gpt || providerStatus.claude) && (
+                  {providerStatus !== null && (providerStatus.openrouter || providerStatus.gpt || providerStatus.claude) && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <select
                         value={provider}
@@ -436,6 +439,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                         className="ledger-select"
                         style={{ fontSize: 12 }}
                       >
+                        <option value="openrouter" disabled={!providerStatus.openrouter}>OpenRouter {providerStatus.openrouter ? '✓' : '(sem chave)'}</option>
                         <option value="gpt" disabled={!providerStatus.gpt}>GPT {providerStatus.gpt ? '✓' : '(sem chave)'}</option>
                         <option value="claude" disabled={!providerStatus.claude}>Claude {providerStatus.claude ? '✓' : '(sem chave)'}</option>
                       </select>

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSmall } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getLast6Months, formatMonthLabel, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { getCompetenceMonth } from '../utils/date'
@@ -15,9 +16,14 @@ function txInMonth(tx: { competenceDate: string; status: string }, m: string) {
   return getCompetenceMonth(tx.competenceDate) === m && tx.status !== 'cancelled'
 }
 
+function getCategoryName(categoryId: string): string {
+  return CATEGORIES.find(c => c.id === categoryId)?.name ?? categoryId
+}
+
 export function RelatoriosPage({ selectedMonth }: Props) {
   const { transactions, budgets } = useData()
   const [refMonth, setRefMonth] = useState(selectedMonth)
+  const [expandedMacros, setExpandedMacros] = useState<Set<string>>(new Set())
 
   const months = useMemo(() => getLast6Months(refMonth).slice(0, 6).reverse(), [refMonth])
 
@@ -31,19 +37,53 @@ export function RelatoriosPage({ selectedMonth }: Props) {
   const tableData = useMemo(() => {
     return expenseMacros.map(macro => {
       const cols = months.map(m => {
-        const realized = transactions
-          .filter(tx => txInMonth(tx, m) && tx.macroCategoryId === macro.id && tx.includeInBudget && tx.type === 'expense')
-          .reduce((s, tx) => s + tx.amount, 0)
+        const txs = transactions.filter(
+          tx => txInMonth(tx, m) && tx.macroCategoryId === macro.id && (tx.includeInBudget !== false) && tx.type === 'expense'
+        )
+        const realized = txs.reduce((s, tx) => s + tx.amount, 0)
         const budget = budgets.find(b => b.referenceMonth.startsWith(m) && b.macroCategoryId === macro.id)
         const planned = budget?.plannedAmount ?? 0
         const pct = planned > 0 ? (realized / planned) * 100 : null
         const over = planned > 0 && realized > planned
-        return { realized, planned, pct, over }
+        return { realized, planned, pct, over, txs }
       })
       const totalRealized = cols.reduce((s, c) => s + c.realized, 0)
       if (totalRealized === 0 && cols.every(c => c.planned === 0)) return null
-      return { macro, cols, totalRealized }
-    }).filter(Boolean) as { macro: (typeof expenseMacros)[0]; cols: { realized: number; planned: number; pct: number | null; over: boolean }[]; totalRealized: number }[]
+
+      // subcategory breakdown
+      const subMap = new Map<string, { name: string; cols: number[] }>()
+      cols.forEach((col, mi) => {
+        col.txs.forEach(tx => {
+          const subId = tx.categoryId ?? tx.subCategoryId ?? '__none__'
+          const name = subId === '__none__'
+            ? 'Outros'
+            : getCategoryName(subId)
+          if (!subMap.has(subId)) {
+            subMap.set(subId, { name, cols: months.map(() => 0) })
+          }
+          subMap.get(subId)!.cols[mi] += tx.amount
+        })
+      })
+      const subRows = Array.from(subMap.entries())
+        .map(([id, data]) => ({ id, name: data.name, cols: data.cols }))
+        .sort((a, b) => {
+          const totalA = a.cols.reduce((s, v) => s + v, 0)
+          const totalB = b.cols.reduce((s, v) => s + v, 0)
+          return totalB - totalA
+        })
+
+      return {
+        macro,
+        cols: cols.map(({ realized, planned, pct, over }) => ({ realized, planned, pct, over })),
+        totalRealized,
+        subRows,
+      }
+    }).filter(Boolean) as {
+      macro: (typeof expenseMacros)[0]
+      cols: { realized: number; planned: number; pct: number | null; over: boolean }[]
+      totalRealized: number
+      subRows: { id: string; name: string; cols: number[] }[]
+    }[]
   }, [expenseMacros, months, transactions, budgets])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => months.map((_m, mi) => {
@@ -53,6 +93,15 @@ export function RelatoriosPage({ selectedMonth }: Props) {
   }), [tableData, months])
 
   const canGoNext = refMonth < currentYearMonth()
+
+  function toggleMacro(macroId: string) {
+    setExpandedMacros(prev => {
+      const next = new Set(prev)
+      if (next.has(macroId)) next.delete(macroId)
+      else next.add(macroId)
+      return next
+    })
+  }
 
   // ── Cartões section ──────────────────────────────────────────────────────────
   const creditCards = useMemo(() => {
@@ -106,7 +155,7 @@ export function RelatoriosPage({ selectedMonth }: Props) {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
               <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
-                <th className="table-th" style={{ minWidth: 160, textAlign: 'left' }}>Categoria</th>
+                <th className="table-th" style={{ minWidth: 180, textAlign: 'left' }}>Categoria</th>
                 {months.map(m => (
                   <th key={m} className="table-th" style={{ textAlign: 'right', minWidth: 120, whiteSpace: 'nowrap' }}>
                     {formatMonthLabel(m)}
@@ -115,52 +164,91 @@ export function RelatoriosPage({ selectedMonth }: Props) {
               </tr>
             </thead>
             <tbody>
-              {tableData.map(({ macro, cols }) => (
-                <tr key={macro.id} className="table-row">
-                  <td className="table-td">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{
-                        width: 8, height: 8, borderRadius: '50%',
-                        background: macro.color, flexShrink: 0,
-                      }} />
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{macro.name}</span>
-                    </span>
-                  </td>
-                  {cols.map((c, mi) => (
-                    <td key={mi} className="table-td" style={{ textAlign: 'right', verticalAlign: 'top' }}>
-                      {c.realized === 0 && c.planned === 0 ? (
-                        <span style={{ color: 'var(--faint)', fontSize: 11 }}>—</span>
-                      ) : (
-                        <div>
-                          <div style={{
-                            fontSize: 12.5, fontWeight: 700,
-                            color: c.over ? 'var(--crit)' : 'var(--ink)',
-                            fontVariantNumeric: 'tabular-nums',
-                          }}>
-                            {formatBRL(c.realized)}
-                          </div>
-                          {c.planned > 0 && (
-                            <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-                              / {formatBRL(c.planned)}
-                              {c.pct !== null && (
-                                <span style={{
-                                  marginLeft: 4, fontWeight: 700,
-                                  color: c.over ? 'var(--crit)' : c.pct > 75 ? 'var(--warn)' : 'var(--pos)',
-                                }}>
-                                  {c.pct.toFixed(0)}%
-                                </span>
+              {tableData.map(({ macro, cols, subRows }) => {
+                const isExpanded = expandedMacros.has(macro.id)
+                const hasSubRows = subRows.length > 1 || (subRows.length === 1 && subRows[0].id !== '__none__')
+                return (
+                  <>
+                    <tr
+                      key={macro.id}
+                      className="table-row"
+                      style={{ cursor: hasSubRows ? 'pointer' : undefined }}
+                      onClick={hasSubRows ? () => toggleMacro(macro.id) : undefined}
+                    >
+                      <td className="table-td">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {hasSubRows ? (
+                            <span style={{ color: 'var(--faint)', display: 'flex', alignItems: 'center' }}>
+                              {isExpanded
+                                ? <ChevronDown size={13} />
+                                : <ChevronRightSmall size={13} />
+                              }
+                            </span>
+                          ) : (
+                            <span style={{ width: 13 }} />
+                          )}
+                          <span style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: macro.color, flexShrink: 0,
+                          }} />
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{macro.name}</span>
+                        </span>
+                      </td>
+                      {cols.map((c, mi) => (
+                        <td key={mi} className="table-td" style={{ textAlign: 'right', verticalAlign: 'top' }}>
+                          {c.realized === 0 && c.planned === 0 ? (
+                            <span style={{ color: 'var(--faint)', fontSize: 11 }}>—</span>
+                          ) : (
+                            <div>
+                              <div style={{
+                                fontSize: 12.5, fontWeight: 700,
+                                color: c.over ? 'var(--crit)' : 'var(--ink)',
+                                fontVariantNumeric: 'tabular-nums',
+                              }}>
+                                {formatBRL(c.realized)}
+                              </div>
+                              {c.planned > 0 && (
+                                <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                  / {formatBRL(c.planned)}
+                                  {c.pct !== null && (
+                                    <span style={{
+                                      marginLeft: 4, fontWeight: 700,
+                                      color: c.over ? 'var(--crit)' : c.pct > 75 ? 'var(--warn)' : 'var(--pos)',
+                                    }}>
+                                      {c.pct.toFixed(0)}%
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {c.planned === 0 && c.realized > 0 && (
+                                <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>sem plano</div>
                               )}
                             </div>
                           )}
-                          {c.planned === 0 && c.realized > 0 && (
-                            <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>sem plano</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {isExpanded && subRows.map(sub => (
+                      <tr key={`${macro.id}_${sub.id}`} style={{ background: 'var(--well-2, color-mix(in srgb, var(--well) 60%, transparent))' }}>
+                        <td className="table-td" style={{ paddingLeft: 36 }}>
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-2)', fontWeight: 500 }}>
+                            {sub.name}
+                          </span>
+                        </td>
+                        {sub.cols.map((v, mi) => (
+                          <td key={mi} className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {v > 0
+                              ? <span style={{ fontSize: 11.5, color: 'var(--ink-2)' }}>{formatBRL(v)}</span>
+                              : <span style={{ fontSize: 11, color: 'var(--faint)' }}>—</span>
+                            }
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                )
+              })}
 
               {/* Totals row */}
               <tr style={{ background: 'var(--well)', borderTop: '2px solid var(--line)' }}>
@@ -183,7 +271,7 @@ export function RelatoriosPage({ selectedMonth }: Props) {
         </div>
 
         <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>
-          Realizado em <strong style={{ color: 'var(--ink-2)' }}>preto</strong> · orçado abaixo em cinza · <span style={{ color: 'var(--crit)', fontWeight: 600 }}>vermelho</span> = estouro · percentual = realizado/orçado
+          Realizado em <strong style={{ color: 'var(--ink-2)' }}>preto</strong> · orçado abaixo em cinza · <span style={{ color: 'var(--crit)', fontWeight: 600 }}>vermelho</span> = estouro · percentual = realizado/orçado · clique na categoria para expandir subcategorias
         </div>
 
         {/* ── Cartões ── */}
