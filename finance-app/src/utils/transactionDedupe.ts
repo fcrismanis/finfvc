@@ -57,9 +57,9 @@ export function normalizeDescriptionForDedupe(raw: string): string {
   // Remove long numeric sequences (NSU / auth codes / CPF-like)
   s = s.replace(/\b\d{5,}\b/g, ' ')
   // Remove date-like patterns
-  s = s.replace(/\b\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?\b/g, ' ')
+  s = s.replace(/\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b/g, ' ')
   // Remove common bank prefixes up to first dash/hyphen
-  s = s.replace(/^(compra|pagamento|pagto|debi?to|cred?ito|pix|ted|doc|boleto)\s*[\-:–]?\s*/i, '')
+  s = s.replace(/^(compra|pagamento|pagto|debi?to|cred?ito|pix|ted|doc|boleto)\s*[-:–]?\s*/i, '')
   // Tokenize and strip stop words
   const tokens = s.split(/\s+/).map(t => t.replace(/[^a-z0-9]/g, '')).filter(t => t.length >= 2 && !STOP_WORDS.has(t))
   return tokens.slice(0, 4).join(' ').trim()

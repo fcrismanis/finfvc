@@ -76,8 +76,8 @@ export function generateBudgetSuggestions(
     suggested = Math.ceil(suggested / 10) * 10
 
     // Confidence
-    let confidence: BudgetSuggestion['confidence'] = 'low'
-    let reason = ''
+    let confidence: BudgetSuggestion['confidence']
+    let reason: string
 
     if (nonZeroTotals.length >= 3) {
       const variance = nonZeroTotals.map(v => Math.abs(v - avg3m))

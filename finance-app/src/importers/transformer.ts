@@ -1,6 +1,6 @@
 import type { Transaction, PaymentMethod } from '../types'
 import type { ParsedImportItem } from './types'
-import { normalizePaymentMethod, parseInstallment } from './normalizer'
+import { normalizePaymentMethod, normalizeStatus, parseInstallment } from './normalizer'
 import { suggestFromRules, canAutoCategorize, incrementRuleUseCount, loadRules } from '../services/categoryRules.service'
 import { matchCategoryByKeywords } from '../services/categoryHelpers'
 
@@ -24,7 +24,7 @@ export function toTransaction(item: ParsedImportItem, batchId: string): Transact
     transactionDate: item.transactionDate,
     competenceDate: item.competenceDate,
     paymentDate: item.paymentDate,
-    status: 'paid',
+    status: normalizeStatus(raw.rawStatus),
     accountId,
     categoryId: classification.categoryId,
     macroCategoryId: classification.macroCategoryId,

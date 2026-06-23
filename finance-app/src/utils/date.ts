@@ -31,9 +31,19 @@ export function normalizeFinancialDate(raw: string | number | Date | undefined |
   if (!s) return fallback
 
   const isoPrefix = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (isoPrefix) return `${isoPrefix[1]}-${isoPrefix[2]}-${isoPrefix[3]}`
+  if (isoPrefix) {
+    // Date-only string (no time component) → keep the literal date, no timezone shift.
+    // Full timestamp (e.g. Pluggy "2026-06-01T01:30:00Z") → convert to the LOCAL calendar
+    // date. Slicing the UTC prefix pushes evening-BRT transactions (late UTC) onto the next
+    // day — and at month/year boundaries onto the wrong month — misattributing competence.
+    const hasTime = /[T ]\d{2}:\d{2}/.test(s)
+    if (!hasTime) return `${isoPrefix[1]}-${isoPrefix[2]}-${isoPrefix[3]}`
+    const parsed = new Date(s)
+    if (!isNaN(parsed.getTime())) return formatLocalDate(parsed)
+    return `${isoPrefix[1]}-${isoPrefix[2]}-${isoPrefix[3]}`
+  }
 
-  const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  const brMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
   if (brMatch) {
     const [, day, month, year] = brMatch
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`

@@ -33,6 +33,10 @@ type DbTransaction = {
   source_file: string | null
   raw_data: Record<string, unknown> | null
   notes: string | null
+  manual_category_override: boolean | null
+  manual_sub_category_override: boolean | null
+  manual_text_override: boolean | null
+  manual_edited_at: string | null
   created_at: string
   updated_at: string
 }
@@ -95,13 +99,17 @@ function toTransaction(row: DbTransaction): Transaction {
     isRecurring: row.is_recurring,
     includeInOperationalResult: row.include_in_operational_result,
     includeInCashflow: row.include_in_cashflow,
-    includeInBudget: row.include_in_budget,
+    includeInBudget: row.include_in_budget ?? true,
     isInternalTransfer: row.is_internal_transfer,
     isAdjustment: false,
     importBatchId: row.import_batch_id ?? undefined,
     importHash: row.import_hash ?? undefined,
     sourceFile: row.source_file ?? undefined,
     notes: row.notes ?? undefined,
+    manualCategoryOverride: row.manual_category_override ?? undefined,
+    manualSubCategoryOverride: row.manual_sub_category_override ?? undefined,
+    manualTextOverride: row.manual_text_override ?? undefined,
+    manualEditedAt: row.manual_edited_at ?? undefined,
     origin: 'import_xlsx',
     ...fromRawData(row.raw_data),
     createdAt: row.created_at,
@@ -140,6 +148,10 @@ function toDbRow(t: Transaction, familyId: string): Omit<DbTransaction, 'created
     source_file: t.sourceFile ?? null,
     raw_data: toRawData(t),
     notes: t.notes ?? null,
+    manual_category_override: t.manualCategoryOverride ?? null,
+    manual_sub_category_override: t.manualSubCategoryOverride ?? null,
+    manual_text_override: t.manualTextOverride ?? null,
+    manual_edited_at: t.manualEditedAt ?? null,
   }
 }
 

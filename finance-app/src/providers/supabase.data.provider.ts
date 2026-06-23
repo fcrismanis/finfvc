@@ -112,7 +112,11 @@ export class SupabaseDataProvider implements IDataProvider {
     if (patch.includeInOperationalResult !== undefined) dbPatch.include_in_operational_result = patch.includeInOperationalResult
     if (patch.includeInCashflow !== undefined)   dbPatch.include_in_cashflow = patch.includeInCashflow
     if (patch.includeInBudget !== undefined)     dbPatch.include_in_budget = patch.includeInBudget
-    if (patch.isInternalTransfer !== undefined)  dbPatch.is_internal_transfer = patch.isInternalTransfer
+    if (patch.isInternalTransfer !== undefined)           dbPatch.is_internal_transfer = patch.isInternalTransfer
+    if (patch.manualCategoryOverride !== undefined)       dbPatch.manual_category_override = patch.manualCategoryOverride ?? null
+    if (patch.manualSubCategoryOverride !== undefined)    dbPatch.manual_sub_category_override = patch.manualSubCategoryOverride ?? null
+    if (patch.manualTextOverride !== undefined)           dbPatch.manual_text_override = patch.manualTextOverride ?? null
+    if (patch.manualEditedAt !== undefined)               dbPatch.manual_edited_at = patch.manualEditedAt ?? null
 
     const { error } = await supabase
       .from('transactions')

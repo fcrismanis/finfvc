@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { TrendingUp, RefreshCw } from 'lucide-react'
+import { TrendingUp, RefreshCw, Briefcase } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { getLocalConnections } from '../services/pluggy.service'
@@ -8,10 +8,6 @@ import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth, formatFinancialDateBR } from '../utils/date'
 import { ICON_MAP } from '../utils/categoryIcons'
 
-function fmtPct(v: number | null) {
-  if (v == null) return '—'
-  return (v * 100).toFixed(2).replace('.', ',') + '%'
-}
 
 const TYPE_LABEL: Record<string, string> = {
   MUTUAL_FUND:      'Fundo de Investimento',
@@ -197,58 +193,8 @@ export function InvestimentosPage() {
                   </div>
                 )}
 
-                {/* Assets table */}
-                <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-                  <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
-                    <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)' }}>Carteira Pluggy</h3>
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-                    <thead>
-                      <tr style={{ background: 'var(--well)' }}>
-                        <th className="table-th">Ativo</th>
-                        <th className="table-th">Tipo</th>
-                        <th className="table-th" style={{ textAlign: 'right' }}>Saldo</th>
-                        <th className="table-th" style={{ textAlign: 'right' }}>Rendimento</th>
-                        <th className="table-th" style={{ textAlign: 'right' }}>12 meses</th>
-                        <th className="table-th">Venc.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pluggyInvestments.map(inv => (
-                        <tr key={inv.id} className="table-row">
-                          <td className="table-td">
-                            <p style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{inv.name}</p>
-                            {inv.code && inv.code !== inv.name && (
-                              <p style={{ fontSize: 10, color: 'var(--faint)', fontFamily: 'var(--mono)' }}>{inv.code}</p>
-                            )}
-                            {inv.issuer && (
-                              <p style={{ fontSize: 10, color: 'var(--faint)' }}>{inv.issuer}</p>
-                            )}
-                          </td>
-                          <td className="table-td">
-                            {inv.type && (
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--well)', border: '1px solid var(--line)', color: 'var(--ink-2)' }}>
-                                {TYPE_LABEL[inv.type] ?? inv.type}
-                              </span>
-                            )}
-                          </td>
-                          <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 13, color: 'var(--pos)' }}>
-                            {formatBRL(inv.balance)}
-                          </td>
-                          <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, color: (inv.amountProfit ?? 0) >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
-                            {inv.amountProfit != null ? formatBRL(inv.amountProfit) : '—'}
-                          </td>
-                          <td className="table-td" style={{ textAlign: 'right', fontSize: 12, color: 'var(--ink-2)' }}>
-                            {fmtPct(inv.lastTwelveMonthsRate)}
-                          </td>
-                          <td className="table-td" style={{ fontSize: 11, color: 'var(--faint)' }}>
-                            {inv.dueDate ? formatFinancialDateBR(inv.dueDate) : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Assets list — Pluggy style */}
+                <AssetsList investments={pluggyInvestments} connections={connections} total={totalPluggyBalance} />
               </>
             )}
           </>
@@ -363,6 +309,120 @@ export function InvestimentosPage() {
 
       </div>
     </main>
+  )
+}
+
+function AssetsList({ investments, connections, total }: {
+  investments: PluggyInvestment[]
+  connections: ReturnType<typeof getLocalConnections>
+  total: number
+}) {
+  const connMap = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof getLocalConnections>[number]>()
+    for (const c of connections) m.set(c.itemId, c)
+    return m
+  }, [connections])
+
+  const groups = useMemo(() => {
+    const map = new Map<string, { label: string; items: PluggyInvestment[]; total: number }>()
+    for (const inv of investments) {
+      const key = inv.type ?? 'OTHER'
+      const label = TYPE_LABEL[key] ?? key
+      if (!map.has(key)) map.set(key, { label, items: [], total: 0 })
+      const g = map.get(key)!
+      g.items.push(inv)
+      g.total += inv.balance ?? 0
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  }, [investments])
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--line)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Briefcase size={16} color="var(--faint)" />
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
+            Carteira ({investments.length} ativos)
+          </span>
+        </div>
+        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>
+          {formatBRL(total)}
+        </span>
+      </div>
+
+      {groups.map((g, gi) => (
+        <div key={g.label}>
+          {/* section label */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 6px', background: 'var(--well)' }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+              {g.label}
+            </span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
+              {formatBRL(g.total)}
+            </span>
+          </div>
+
+          {g.items.map((inv, idx) => {
+            const conn = connMap.get(inv.itemId)
+            const pct = total > 0 ? ((inv.balance ?? 0) / total) * 100 : 0
+            const isLast = gi === groups.length - 1 && idx === g.items.length - 1
+            return (
+              <div
+                key={inv.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px',
+                  borderBottom: isLast ? 'none' : '1px solid var(--line)',
+                }}
+              >
+                {/* icon */}
+                <div style={{
+                  width: 34, height: 34, borderRadius: '50%',
+                  background: 'var(--well)', border: '1px solid var(--line)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <TrendingUp size={15} color="var(--faint)" />
+                </div>
+
+                {/* info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {inv.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+                    {conn?.connectorImageUrl && (
+                      <img
+                        src={conn.connectorImageUrl}
+                        alt={conn.connectorName}
+                        style={{ width: 14, height: 14, borderRadius: 3, objectFit: 'contain', flexShrink: 0 }}
+                      />
+                    )}
+                    {(inv.institutionName ?? conn?.connectorName) && (
+                      <span style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 500 }}>
+                        {inv.institutionName ?? conn?.connectorName}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-2)', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 3, padding: '1px 5px' }}>
+                      {inv.subtype ?? inv.type ?? '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* value + % */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatBRL(inv.balance)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>
+                    {pct.toFixed(1).replace('.', ',')}%
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
   )
 }
 

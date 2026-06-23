@@ -78,7 +78,7 @@ function simulatedResponse(prompt: string, ctx: AdvisorContext): Promise<Advisor
   const margin = (ctx.savingsRate * 100).toFixed(1)
   const topCat = ctx.topCategories[0]
 
-  let answer = ''
+  let answer: string
 
   if (q.includes('resultado') || q.includes('saldo') || q.includes('sobr')) {
     answer = result >= 0

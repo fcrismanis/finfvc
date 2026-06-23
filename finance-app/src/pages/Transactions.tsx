@@ -1087,26 +1087,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 />
               </ModalField>
 
-              {modalPatch.macroCategoryId && (() => {
-                const staticSubs = CATEGORIES.filter(c => c.macroCategoryId === modalPatch.macroCategoryId && c.active)
-                const userSubs = subCategories.filter(s => s.macroCategoryId === modalPatch.macroCategoryId && s.active)
-                const staticIds = new Set(staticSubs.map(s => s.id))
-                const allSubs = [...staticSubs, ...userSubs.filter(s => !staticIds.has(s.id))].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-                if (allSubs.length === 0) return null
-                return (
-                  <ModalField label="Subcategoria">
-                    <select
-                      value={modalPatch.subCategoryId ?? ''}
-                      onChange={e => setModalPatch(p => ({ ...p, subCategoryId: e.target.value || undefined }))}
-                      className="ledger-select"
-                      style={{ width: '100%', fontSize: 12 }}
-                    >
-                      <option value="">— nenhuma —</option>
-                      {allSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </ModalField>
-                )
-              })()}
 
               <ModalField label="Classificação">
                 <select
@@ -1195,7 +1175,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                     checked={selectedSimilar.has(tx.id)}
                     onChange={e => {
                       const s = new Set(selectedSimilar)
-                      e.target.checked ? s.add(tx.id) : s.delete(tx.id)
+                      if (e.target.checked) s.add(tx.id); else s.delete(tx.id)
                       setSelectedSimilar(s)
                     }}
                   />

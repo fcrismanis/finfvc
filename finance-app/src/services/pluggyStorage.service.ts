@@ -222,7 +222,7 @@ export function diagnosePluggyStorage(): DiagnosticResult {
   const hasRecoverableData = connectionReports.some(r => r.key !== CONNECTIONS_KEY && r.recordCount > 0) ||
     (connectionReports.some(r => r.key === CONNECTIONS_KEY && r.recordCount > 0))
 
-  let message = ''
+  let message: string
   if (probableConnections > 0) {
     message = `Encontrado(s) ${probableConnections} conexão(ões) com ${probableAccounts} conta(s).`
   } else {
