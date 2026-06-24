@@ -336,7 +336,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     setAiError(null)
     setAiSuggestions(null)
     try {
-      const res = await fetch('http://localhost:8787/api/ai/categorize-transactions', {
+      const res = await fetch('/api/ai/categorize-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -354,7 +354,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
       setAiSuggestions((data.suggestions as AISuggestion[]) ?? [])
       setDismissedAI(new Set())
     } catch {
-      setAiError('Falha de conexão com o servidor backend (localhost:8787). Verifique se está rodando.')
+      setAiError('Falha de conexão com o servidor backend (/api). Verifique se está rodando.')
     } finally {
       setAiLoading(false)
     }
