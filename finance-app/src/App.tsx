@@ -45,6 +45,7 @@ const InvestimentosPage = lazy(() => import('./pages/InvestimentosPage').then(m 
 const PatrimonioPage   = lazy(() => import('./pages/PatrimonioPage').then(m => ({ default: m.PatrimonioPage })))
 const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
 
 const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
 
@@ -110,7 +111,7 @@ function AppShell() {
       '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/regras',
       '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
       '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes',
-      '/relatorios']
+      '/relatorios', '/reconciliacao']
     return known.includes(r) ? r : '/'
   })
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth())
@@ -165,6 +166,7 @@ function AppShell() {
       case '/dividas':       return <DividasPage />
       case '/lembretes':     return <LembretesPage />
       case '/relatorios':    return <RelatoriosPage selectedMonth={selectedMonth} />
+      case '/reconciliacao': return <ReconciliationPage selectedMonth={selectedMonth} />
       default:               return null
     }
   }

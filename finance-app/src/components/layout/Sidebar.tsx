@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
   Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
   Tag, Upload, Link2, Bot, Settings,
-  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart, ChevronDown,
+  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart, ChevronDown, Scale,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { DATA_PROVIDER } from '../../config/env'
@@ -30,6 +30,7 @@ const GESTAO: NavEntry[] = [
   { route: '/lancamentos', label: 'Lançamentos', icon: List },
   { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/relatorios', label: 'Relatórios', icon: FileBarChart },
+  { route: '/reconciliacao', label: 'Reconciliação', icon: Scale },
   { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
   { route: '/fechamento', label: 'Fechamento', icon: Lock },
   { route: '/investimentos', label: 'Investimentos', icon: TrendingUp },
