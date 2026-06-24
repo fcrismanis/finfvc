@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const app = express()
 const PORT = process.env.PORT ?? 8787
+const HOST = process.env.HOST ?? '0.0.0.0'
 
 app.use(express.json({ limit: '128kb' }))
 
@@ -16,6 +17,8 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
+    'http://localhost',
+    'http://localhost:80',
   ],
   methods: ['POST', 'GET', 'OPTIONS'],
 }))
@@ -861,9 +864,9 @@ app.get('/api/pluggy/backup-connections', (_req, res) => {
   }
 })
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   const s = getProviderStatus()
-  console.log(`[advisor] http://localhost:${PORT}`)
+  console.log(`[advisor] http://${HOST}:${PORT}`)
   console.log(`[advisor] GPT:    ${s.gpt ? '✓ configurado' : '✗ OPENAI_API_KEY ausente'}`)
   console.log(`[advisor] Claude: ${s.claude ? '✓ configurado' : '✗ ANTHROPIC_API_KEY ausente'}`)
   const pluggyOk = !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET)
