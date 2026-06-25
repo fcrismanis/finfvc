@@ -62,6 +62,12 @@ function fmtGroupDate(isoDate: string): string {
   return normalizeFinancialDate(isoDate, isoDate)
 }
 
+// A transaction is neutral if its own classification is neutral OR its macro is a Neutra macro.
+// Neutras are excluded from Receita, Despesa and Resultado even when the amount is positive/negative.
+function txIsNeutral(t: Transaction, neutralMacroIds: Set<string>): boolean {
+  return t.classificationType === 'neutral' || (t.macroCategoryId != null && neutralMacroIds.has(t.macroCategoryId))
+}
+
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
   const { transactions, isDemo, updateTransaction, subCategories } = useData()
 
@@ -172,6 +178,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }, [filterType, filterStatus, filterMacro, filterSub, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual])
 
   const allMacros = useMemo(() => getAllMacroCategories(), [])
+  // Neutra macros never count as Receita/Despesa/Resultado, regardless of sign or type.
+  const neutralMacroIds = useMemo(
+    () => new Set(allMacros.filter(m => m.isNeutral || m.classificationType === 'neutral').map(m => m.id)),
+    [allMacros]
+  )
 
   const dqCtx = useMemo(() => ({
     threshold: highValueThreshold(transactions),
@@ -236,7 +247,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
     let result = transactions
     if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
-    if (filterType) result = result.filter(t => t.type === filterType)
+    if (filterType === 'neutral') result = result.filter(t => txIsNeutral(t, neutralMacroIds))
+    else if (filterType) result = result.filter(t => t.type === filterType && !txIsNeutral(t, neutralMacroIds))
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
     if (filterSub) result = result.filter(t => t.subCategoryId === filterSub)
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
@@ -269,11 +281,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap, neutralMacroIds])
 
   const summary = useMemo(() => {
-    const income = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-    const expense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    // Resultado ignores neutras: they are neither income nor expense.
+    const income = filtered.filter(t => t.type === 'income' && !txIsNeutral(t, neutralMacroIds)).reduce((s, t) => s + t.amount, 0)
+    const expense = filtered.filter(t => t.type === 'expense' && !txIsNeutral(t, neutralMacroIds)).reduce((s, t) => s + t.amount, 0)
     return {
       total: filtered.length,
       pending: filtered.filter(t => t.status === 'pending').length,
@@ -281,7 +294,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       expense,
       result: income - expense,
     }
-  }, [filtered])
+  }, [filtered, neutralMacroIds])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -335,9 +348,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           patch.includeInOperationalResult = macro.displayInResult
           patch.includeInCashflow = macro.displayInCashflow
           patch.includeInBudget = macro.displayInBudget
-          // Sync type with macro so income macros always count as income
-          if (macro.tabType === 'income') patch.type = 'income'
-          else if (macro.tabType === 'expense') patch.type = 'expense'
+          // Sync type with macro so income macros always count as income.
+          // Neutras keep their original type — they never count as Receita/Despesa.
+          if (!macro.isNeutral) {
+            if (macro.tabType === 'income') patch.type = 'income'
+            else if (macro.tabType === 'expense') patch.type = 'expense'
+          }
         }
       }
     }
@@ -370,7 +386,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     // Sync type with macro tabType so income macros (Salário, Outras Receitas, Resgate)
     // correctly count in getOperationalIncome even when bank imported them as 'expense'
     const inferredType: Transaction['type'] | undefined =
-      macro?.tabType === 'income' ? 'income'
+      macro?.isNeutral ? undefined
+      : macro?.tabType === 'income' ? 'income'
       : macro?.tabType === 'expense' ? 'expense'
       : undefined
     updateTransaction(txId, {
@@ -614,6 +631,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <option value="">Todos</option>
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
+              <option value="neutral">Neutros</option>
             </select>
 
             {/* Status filter — icon button + popover */}
