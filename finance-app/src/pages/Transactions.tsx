@@ -332,6 +332,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           patch.includeInOperationalResult = macro.displayInResult
           patch.includeInCashflow = macro.displayInCashflow
           patch.includeInBudget = macro.displayInBudget
+          // Sync type with macro so income macros always count as income
+          if (macro.tabType === 'income') patch.type = 'income'
+          else if (macro.tabType === 'expense') patch.type = 'expense'
         }
       }
     }
@@ -361,6 +364,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     setInlineCatEdit(null)
     if (!tx) return
     const macro = macroId ? allMacros.find(m => m.id === macroId) : undefined
+    // Sync type with macro tabType so income macros (Salário, Outras Receitas, Resgate)
+    // correctly count in getOperationalIncome even when bank imported them as 'expense'
+    const inferredType: Transaction['type'] | undefined =
+      macro?.tabType === 'income' ? 'income'
+      : macro?.tabType === 'expense' ? 'expense'
+      : undefined
     updateTransaction(txId, {
       macroCategoryId: macroId,
       subCategoryId: subId,
@@ -370,6 +379,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       categorySuggestionSource: 'manual',
       categoryConfidence: 'high',
       needsReview: false,
+      ...(inferredType ? { type: inferredType } : {}),
       classificationType: macro?.classificationType ?? tx.classificationType,
       includeInOperationalResult: macro ? macro.displayInResult : tx.includeInOperationalResult,
       includeInCashflow: macro ? macro.displayInCashflow : tx.includeInCashflow,
