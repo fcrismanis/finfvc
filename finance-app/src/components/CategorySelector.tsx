@@ -19,6 +19,7 @@ export function CategorySelector({
   onChange,
   defaultOpen = false,
   onClose,
+  placeholder = 'Sem categoria',
 }: {
   macroCategoryId?: string
   subCategoryId?: string
@@ -27,6 +28,7 @@ export function CategorySelector({
   onChange: (macroId: string | undefined, subId: string | undefined) => void
   defaultOpen?: boolean
   onClose?: () => void
+  placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -65,7 +67,7 @@ export function CategorySelector({
     ? selectedSub
       ? `${selectedMacro.name} › ${selectedSub.name}`
       : selectedMacro.name
-    : 'Sem categoria'
+    : placeholder
 
   function getEffectiveSubs(macroId: string): SubCategory[] {
     const staticSubs: SubCategory[] = CATEGORIES

@@ -38,6 +38,7 @@ interface SavedFilters {
   quickFilter?: string
   filterPluggy?: boolean
   filterManual?: boolean
+  filterSub?: string
 }
 
 function loadSavedFilters(): SavedFilters {
@@ -69,6 +70,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterMonth, setFilterMonth] = useState(selectedMonth)
   const [filterType, setFilterType] = useState(savedFilters.filterType ?? '')
   const [filterMacro, setFilterMacro] = useState(savedFilters.filterMacro ?? '')
+  const [filterSub, setFilterSub] = useState(savedFilters.filterSub ?? '')
   const [filterStatus, setFilterStatus] = useState(savedFilters.filterStatus ?? '')
   const [filterTag, setFilterTag] = useState(savedFilters.filterTag ?? '')
   const [filterInstitution, setFilterInstitution] = useState(savedFilters.filterInstitution ?? '')
@@ -165,9 +167,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   // Persist filter selections (not search/month) across sessions
   useEffect(() => {
-    const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual }
+    const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterSub, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual }
     localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(payload))
-  }, [filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual])
+  }, [filterType, filterStatus, filterMacro, filterSub, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual])
 
   const allMacros = useMemo(() => getAllMacroCategories(), [])
 
@@ -236,6 +238,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
     if (filterType) result = result.filter(t => t.type === filterType)
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
+    if (filterSub) result = result.filter(t => t.subCategoryId === filterSub)
     if (filterStatus) result = result.filter(t => t.status === filterStatus)
     if (filterInstitution) result = result.filter(t => {
       const pInfo = pluggyAccountMap.get(t.accountId)
@@ -266,7 +269,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
 
   const summary = useMemo(() => {
     const income = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
@@ -471,7 +474,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort()
   }, [transactions, pluggyAccountMap])
 
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution || quickFilter || filterPluggy || filterManual)
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterSub || filterTag || filterInstitution || quickFilter || filterPluggy || filterManual)
 
   return (
     <main ref={mainRef} className="page-shell">
@@ -659,10 +662,20 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               )}
             </div>
 
-            <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Categoria">
-              <option value="">Todas categorias</option>
-              {allMacros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <div style={{ minWidth: 160 }}>
+              <CategorySelector
+                macroCategoryId={filterMacro || undefined}
+                subCategoryId={filterSub || undefined}
+                allMacros={allMacros}
+                subCategories={subCategories}
+                placeholder="Todas categorias"
+                onChange={(macroId, subId) => {
+                  setFilterMacro(macroId ?? '')
+                  setFilterSub(subId ?? '')
+                  setPage(0)
+                }}
+              />
+            </div>
 
             {allTags.length > 0 && (
               <select className="ledger-select" value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }} aria-label="Tag">
@@ -700,7 +713,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
             {hasFilters && (
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterSub(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
                 style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
               >
                 Limpar
