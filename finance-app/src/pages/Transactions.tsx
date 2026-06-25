@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
-import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Download, Trash2 } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Download, Trash2, CheckSquare, Eye } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { CATEGORIES } from '../config/categories'
@@ -36,6 +36,8 @@ interface SavedFilters {
   filterTag?: string
   filterInstitution?: string
   quickFilter?: string
+  filterPluggy?: boolean
+  filterManual?: boolean
 }
 
 function loadSavedFilters(): SavedFilters {
@@ -70,6 +72,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterStatus, setFilterStatus] = useState(savedFilters.filterStatus ?? '')
   const [filterTag, setFilterTag] = useState(savedFilters.filterTag ?? '')
   const [filterInstitution, setFilterInstitution] = useState(savedFilters.filterInstitution ?? '')
+  const [filterPluggy, setFilterPluggy] = useState(savedFilters.filterPluggy ?? false)
+  const [filterManual, setFilterManual] = useState(savedFilters.filterManual ?? false)
+  const [showStatusPicker, setShowStatusPicker] = useState(false)
+  const statusPickerRef = useRef<HTMLDivElement>(null)
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [showStatusBadges, setShowStatusBadges] = useState<boolean>(() => localStorage.getItem('fin_show_status_badges') !== 'false')
@@ -159,9 +165,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   // Persist filter selections (not search/month) across sessions
   useEffect(() => {
-    const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter }
+    const payload: SavedFilters = { filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual }
     localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(payload))
-  }, [filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter])
+  }, [filterType, filterStatus, filterMacro, filterTag, filterInstitution, quickFilter, filterPluggy, filterManual])
 
   const allMacros = useMemo(() => getAllMacroCategories(), [])
 
@@ -173,6 +179,17 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   useEffect(() => {
     if (inlineDescEdit && inlineDescRef.current) inlineDescRef.current.focus()
   }, [inlineDescEdit])
+
+  useEffect(() => {
+    if (!showStatusPicker) return
+    function handler(e: MouseEvent) {
+      if (statusPickerRef.current && !statusPickerRef.current.contains(e.target as Node)) {
+        setShowStatusPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showStatusPicker])
 
   const allMonths = useMemo(() => {
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
@@ -230,6 +247,12 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       result = result.filter(t => t.macroCategoryId != null && ids.has(t.macroCategoryId))
     }
     if (filterTag) result = result.filter(t => t.tags?.includes(filterTag))
+    if (filterPluggy || filterManual) {
+      result = result.filter(t =>
+        (filterPluggy && (t.source === 'pluggy' || t.origin === 'import_api')) ||
+        (filterManual && (t.origin === 'manual_entry' || t.origin === 'manual_adjustment'))
+      )
+    }
     if (quickFilter) result = result.filter(t => matchesQuickFilter(t, quickFilter, dqCtx))
     if (search.trim()) {
       const q = search.trim().toUpperCase()
@@ -243,17 +266,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterInstitution, filterTag, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
-
-  const NEUTRAL_TYPES = new Set<ClassificationType>(['transfer', 'neutral', 'adjustment', 'investment', 'redemption'])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap])
 
   const summary = useMemo(() => {
-    const income = filtered
-      .filter(t => t.type === 'income' && !NEUTRAL_TYPES.has(t.classificationType))
-      .reduce((s, t) => s + t.amount, 0)
-    const expense = filtered
-      .filter(t => t.type === 'expense' && !NEUTRAL_TYPES.has(t.classificationType))
-      .reduce((s, t) => s + t.amount, 0)
+    const income = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const expense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     return {
       total: filtered.length,
       pending: filtered.filter(t => t.status === 'pending').length,
@@ -261,7 +278,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       expense,
       result: income - expense,
     }
-  }, [filtered, NEUTRAL_TYPES])
+  }, [filtered])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const pageItems = filtered.slice(page * pageSize, (page + 1) * pageSize)
@@ -444,7 +461,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort()
   }, [transactions, pluggyAccountMap])
 
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution || quickFilter)
+  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterTag || filterInstitution || quickFilter || filterPluggy || filterManual)
 
   return (
     <main ref={mainRef} className="page-shell">
@@ -586,12 +603,51 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <option value="expense">Despesa</option>
             </select>
 
-            <select className="ledger-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0) }} aria-label="Status">
-              <option value="">Todos</option>
-              <option value="paid">Pago</option>
-              <option value="pending">Pendente</option>
-              <option value="cancelled">Cancelado</option>
-            </select>
+            {/* Status filter — icon button + popover */}
+            <div ref={statusPickerRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowStatusPicker(v => !v)}
+                aria-label="Status"
+                title={filterStatus ? `Status: ${filterStatus === 'paid' ? 'Pago' : filterStatus === 'pending' ? 'Pendente' : 'Cancelado'}` : 'Status'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 30, height: 30, borderRadius: 7, cursor: 'pointer', border: 'none',
+                  color: filterStatus ? 'var(--accent)' : 'var(--ink-2)',
+                  background: filterStatus ? 'var(--accent-soft)' : 'var(--well)',
+                  outline: filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                }}
+              >
+                <CheckSquare size={13} />
+              </button>
+              {showStatusPicker && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500,
+                  background: 'var(--paper, #fff)', border: '1px solid var(--line)',
+                  borderRadius: 9, boxShadow: '0 6px 20px rgba(0,0,0,.12)', padding: '4px 0', minWidth: 130,
+                }}>
+                  {[
+                    { value: '', label: 'Todos' },
+                    { value: 'paid', label: 'Pago' },
+                    { value: 'pending', label: 'Pendente' },
+                    { value: 'cancelled', label: 'Cancelado' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setFilterStatus(opt.value); setPage(0); setShowStatusPicker(false) }}
+                      style={{
+                        display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
+                        fontSize: 12, background: filterStatus === opt.value ? 'var(--accent-soft)' : 'transparent',
+                        color: filterStatus === opt.value ? 'var(--accent)' : 'var(--ink)',
+                        border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)',
+                        fontWeight: filterStatus === opt.value ? 700 : 400,
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <select className="ledger-select" value={filterMacro} onChange={e => { setFilterMacro(e.target.value); setPage(0) }} aria-label="Categoria">
               <option value="">Todas categorias</option>
@@ -612,25 +668,47 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               </select>
             )}
 
+            {/* Pluggy / Manual compact checkboxes */}
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11.5, color: filterPluggy ? 'var(--accent)' : 'var(--ink-2)', fontWeight: 600, userSelect: 'none' as const }}>
+              <input
+                type="checkbox"
+                checked={filterPluggy}
+                onChange={e => { setFilterPluggy(e.target.checked); setPage(0) }}
+                style={{ accentColor: 'var(--accent)', width: 13, height: 13 }}
+              />
+              Pluggy
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11.5, color: filterManual ? 'var(--accent)' : 'var(--ink-2)', fontWeight: 600, userSelect: 'none' as const }}>
+              <input
+                type="checkbox"
+                checked={filterManual}
+                onChange={e => { setFilterManual(e.target.checked); setPage(0) }}
+                style={{ accentColor: 'var(--accent)', width: 13, height: 13 }}
+              />
+              Manual
+            </label>
+
             {hasFilters && (
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
+                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
                 style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
               >
                 Limpar
               </button>
             )}
 
+            {/* Badge visibility toggle — icon only */}
             <button
               onClick={() => {
                 const next = !showStatusBadges
                 setShowStatusBadges(next)
                 localStorage.setItem('fin_show_status_badges', String(next))
               }}
-              title={showStatusBadges ? 'Ocultar status das linhas' : 'Mostrar status das linhas'}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: showStatusBadges ? 'var(--accent)' : 'var(--ink-2)', background: showStatusBadges ? 'var(--accent-soft)' : 'var(--well)', border: `1px solid ${showStatusBadges ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'var(--ui)' }}
+              aria-label={showStatusBadges ? 'Ocultar badges de status' : 'Mostrar badges de status'}
+              title={showStatusBadges ? 'Ocultar badges de status' : 'Mostrar badges de status'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, border: 'none', cursor: 'pointer', color: showStatusBadges ? 'var(--accent)' : 'var(--ink-2)', background: showStatusBadges ? 'var(--accent-soft)' : 'var(--well)', outline: showStatusBadges ? '1.5px solid var(--accent)' : '1px solid var(--line)' }}
             >
-              status
+              <Eye size={13} />
             </button>
             <button
               onClick={exportCsv}
@@ -646,7 +724,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         {/* ── Quick filter pills ── */}
         {!isReviewMode && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {(['no_category', 'pluggy', 'manual', 'neutral', 'high_value', 'with_tags', 'no_tags'] as QuickFilterKey[]).map(key => (
+            {(['no_category', 'neutral', 'high_value'] as QuickFilterKey[]).map(key => (
               <button
                 key={key}
                 onClick={() => { setQuickFilter(q => q === key ? '' : key); setPage(0) }}

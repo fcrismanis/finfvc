@@ -201,9 +201,9 @@ export function CategorySelector({
 
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
-          background: 'var(--card-bg)', border: '1px solid var(--line)',
-          borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,.14)',
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000,
+          background: 'var(--paper, #ffffff)', border: '1px solid var(--line)',
+          borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,.18)',
           overflow: 'hidden',
         }}>
           <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
