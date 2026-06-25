@@ -3,6 +3,7 @@ import { Home, Plus, Trash2, Car, Building2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { getLocalConnections, fetchPluggyInvestments } from '../services/pluggy.service'
+import { loadExcludedInvestments } from '../services/investmentPrefs'
 import type { PluggyLocalConnection, PluggyLocalAccount, PluggyInvestment } from '../services/pluggy.service'
 import {
   getBens, addBem, deleteBem,
@@ -97,7 +98,11 @@ export function PatrimonioPage() {
     return invested - redeemed
   }, [transactions])
 
-  const activeInvestments = investments.filter(i => i.status !== 'SOLD' && i.status !== 'CLOSED')
+  // Respect the user's per-investment exclusions from the Investimentos page.
+  const excludedInvestments = loadExcludedInvestments()
+  const activeInvestments = investments.filter(
+    i => i.status !== 'SOLD' && i.status !== 'CLOSED' && !excludedInvestments.has(i.id)
+  )
   const pluggyInvestTotal = activeInvestments.reduce((s, i) => s + (i.balance ?? 0), 0)
   const hasPluggyInvestments = activeInvestments.length > 0
 

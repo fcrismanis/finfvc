@@ -7,6 +7,7 @@ import { fetchPluggyInvestments, type PluggyInvestment } from '../services/plugg
 import { formatBRL } from '../utils/currency'
 import { getCompetenceMonth, formatFinancialDateBR } from '../utils/date'
 import { ICON_MAP } from '../utils/categoryIcons'
+import { loadExcludedInvestments, saveExcludedInvestments } from '../services/investmentPrefs'
 
 
 const TYPE_LABEL: Record<string, string> = {
@@ -49,13 +50,28 @@ export function InvestimentosPage() {
 
   useEffect(() => { loadInvestments() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalPluggyBalance = pluggyInvestments.reduce((s, i) => s + (i.balance ?? 0), 0)
-  const totalPluggyProfit  = pluggyInvestments.reduce((s, i) => s + (i.amountProfit ?? 0), 0)
+  // ── Excluded assets (kept, just not counted in totals) — persisted locally ──
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(() => loadExcludedInvestments())
+  function toggleExcluded(id: string) {
+    setExcludedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      saveExcludedInvestments(next)
+      return next
+    })
+  }
+  const includedInvestments = useMemo(
+    () => pluggyInvestments.filter(i => !excludedIds.has(i.id)),
+    [pluggyInvestments, excludedIds],
+  )
+
+  const totalPluggyBalance = includedInvestments.reduce((s, i) => s + (i.balance ?? 0), 0)
+  const totalPluggyProfit  = includedInvestments.reduce((s, i) => s + (i.amountProfit ?? 0), 0)
 
   // group by type
   const byType = useMemo(() => {
     const map = new Map<string, { label: string; total: number; count: number }>()
-    for (const inv of pluggyInvestments) {
+    for (const inv of includedInvestments) {
       const key = inv.type ?? 'OTHER'
       const label = TYPE_LABEL[key] ?? key
       if (!map.has(key)) map.set(key, { label, total: 0, count: 0 })
@@ -64,7 +80,7 @@ export function InvestimentosPage() {
       entry.count++
     }
     return Array.from(map.values()).sort((a, b) => b.total - a.total)
-  }, [pluggyInvestments])
+  }, [includedInvestments])
 
   // ── Transactions (aportes/resgates) ────────────────────────────────────────
   const investTxs = useMemo(() =>
@@ -194,7 +210,7 @@ export function InvestimentosPage() {
                 )}
 
                 {/* Assets list — Pluggy style */}
-                <AssetsList investments={pluggyInvestments} connections={connections} total={totalPluggyBalance} />
+                <AssetsList investments={pluggyInvestments} connections={connections} total={totalPluggyBalance} excludedIds={excludedIds} onToggle={toggleExcluded} />
               </>
             )}
           </>
@@ -312,10 +328,12 @@ export function InvestimentosPage() {
   )
 }
 
-function AssetsList({ investments, connections, total }: {
+function AssetsList({ investments, connections, total, excludedIds, onToggle }: {
   investments: PluggyInvestment[]
   connections: ReturnType<typeof getLocalConnections>
   total: number
+  excludedIds: Set<string>
+  onToggle: (id: string) => void
 }) {
   const connMap = useMemo(() => {
     const m = new Map<string, ReturnType<typeof getLocalConnections>[number]>()
@@ -331,10 +349,12 @@ function AssetsList({ investments, connections, total }: {
       if (!map.has(key)) map.set(key, { label, items: [], total: 0 })
       const g = map.get(key)!
       g.items.push(inv)
-      g.total += inv.balance ?? 0
+      if (!excludedIds.has(inv.id)) g.total += inv.balance ?? 0 // excluded don't count
     }
     return Array.from(map.values()).sort((a, b) => b.total - a.total)
-  }, [investments])
+  }, [investments, excludedIds])
+
+  const includedCount = investments.filter(i => !excludedIds.has(i.id)).length
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -343,7 +363,7 @@ function AssetsList({ investments, connections, total }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Briefcase size={16} color="var(--faint)" />
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
-            Carteira ({investments.length} ativos)
+            Carteira ({includedCount}/{investments.length} no total)
           </span>
         </div>
         <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>
@@ -365,6 +385,7 @@ function AssetsList({ investments, connections, total }: {
 
           {g.items.map((inv, idx) => {
             const conn = connMap.get(inv.itemId)
+            const excluded = excludedIds.has(inv.id)
             const pct = total > 0 ? ((inv.balance ?? 0) / total) * 100 : 0
             const isLast = gi === groups.length - 1 && idx === g.items.length - 1
             return (
@@ -373,8 +394,18 @@ function AssetsList({ investments, connections, total }: {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px',
                   borderBottom: isLast ? 'none' : '1px solid var(--line)',
+                  opacity: excluded ? 0.5 : 1,
                 }}
               >
+                {/* include-in-total toggle */}
+                <input
+                  type="checkbox"
+                  checked={!excluded}
+                  onChange={() => onToggle(inv.id)}
+                  title={excluded ? 'Incluir no total' : 'Excluir do total'}
+                  style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0, accentColor: 'var(--accent)' }}
+                />
+
                 {/* icon */}
                 <div style={{
                   width: 34, height: 34, borderRadius: '50%',
@@ -386,7 +417,7 @@ function AssetsList({ investments, connections, total }: {
 
                 {/* info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: excluded ? 'line-through' : 'none' }}>
                     {inv.name}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
@@ -414,7 +445,7 @@ function AssetsList({ investments, connections, total }: {
                     {formatBRL(inv.balance)}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>
-                    {pct.toFixed(1).replace('.', ',')}%
+                    {excluded ? 'fora do total' : `${pct.toFixed(1).replace('.', ',')}%`}
                   </div>
                 </div>
               </div>
