@@ -11,6 +11,11 @@ export interface BudgetSuggestion {
   lastMonth: number
   recurringForecast: number
   suggestedAmount: number
+  // Recommended savings band (10–20% below the 3-month average, floored at fixed costs).
+  targetMin: number
+  targetMax: number
+  // false when fixed/recurring costs leave no room to cut — suggestion holds the average.
+  reducible: boolean
   confidence: 'high' | 'medium' | 'low'
   reason: string
 }
@@ -64,18 +69,32 @@ export function generateBudgetSuggestions(
 
     if (avg3m === 0 && lastMonth === 0 && recurringForecast === 0) continue
 
-    // Suggested = max of avg3m and recurring, but at least lastMonth if that's higher
-    let suggested = Math.max(avg3m, recurringForecast)
-    // Don't let lastMonth alone inflate suggestion for atypical months
-    if (lastMonth > suggested * 1.5 && nonZeroTotals.length >= 2) {
-      suggested = avg3m // ignore atypical spike
-    } else if (lastMonth > suggested) {
-      suggested = (suggested + lastMonth) / 2
+    // Baseline is the realized 3-month average (fall back to last month / recurring).
+    const base = avg3m > 0 ? avg3m : Math.max(lastMonth, recurringForecast)
+    // Fixed/recurring commitments are the floor — we never plan a budget below them.
+    const fixedFloor = Math.min(recurringForecast, base)
+
+    // Savings band: aim for a 10–20% cut off the average to free up money.
+    const targetMin = Math.max(base * 0.80, fixedFloor) // -20%
+    const targetMax = Math.max(base * 0.90, fixedFloor) // -10%
+    // Reducible only if a 10% cut still clears the fixed floor.
+    const reducible = base > 0 && fixedFloor < base * 0.90
+
+    let suggested: number
+    let savingsReason: string
+    if (!reducible) {
+      // No slack: hold the average instead of forcing an unrealistic cut.
+      suggested = Math.ceil(base / 10) * 10
+      savingsReason = recurringForecast >= base * 0.9
+        ? 'Gasto majoritariamente fixo/recorrente — não recomendamos redução'
+        : 'Sem folga para reduzir — mantenha a média'
+    } else {
+      suggested = Math.round(((targetMin + targetMax) / 2) / 10) * 10
+      const pct = Math.max(0, Math.round((1 - suggested / base) * 100))
+      savingsReason = `Meta de economia: -${pct}% sobre a média de 3 meses`
     }
 
-    suggested = Math.ceil(suggested / 10) * 10
-
-    // Confidence
+    // Confidence (history depth / stability) — independent of the savings target.
     let confidence: BudgetSuggestion['confidence']
     let reason: string
 
@@ -100,9 +119,8 @@ export function generateBudgetSuggestions(
       reason = 'Histórico insuficiente (menos de 2 meses)'
     }
 
-    if (recurringForecast > 0 && avg3m > 0) {
-      reason += ` · Recorrentes detectados: ${recurringPatterns.filter(p => p.macroCategoryId === macro.id && p.confidence !== 'low').length}`
-    }
+    // Lead with the savings recommendation; keep the history/confidence note as context.
+    const fullReason = `${savingsReason} · ${reason}`
 
     suggestions.push({
       macroCategoryId: macro.id,
@@ -112,8 +130,11 @@ export function generateBudgetSuggestions(
       lastMonth,
       recurringForecast,
       suggestedAmount: suggested,
+      targetMin: Math.round(targetMin),
+      targetMax: Math.round(targetMax),
+      reducible,
       confidence,
-      reason,
+      reason: fullReason,
     })
   }
 

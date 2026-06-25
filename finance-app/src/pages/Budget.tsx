@@ -57,6 +57,22 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
   function saveEdit(macroCategoryId: string) {
     const val = parseFloat(editValue.replace(',', '.'))
     if (!isNaN(val) && val >= 0) {
+      // Validate manual target against the 3-month history: warn (not block) when
+      // it is below fixed costs (likely impossible) or far below the average (too aggressive).
+      const sug = smartSuggestions.find(s => s.macroCategoryId === macroCategoryId)
+      const avg = sug?.average3m ?? 0
+      const floor = sug?.recurringForecast ?? 0
+      let warn = ''
+      if (val > 0 && floor > 0 && val < floor) {
+        warn = `R$ ${val.toLocaleString('pt-BR')} fica abaixo dos custos fixos/recorrentes (~${formatBRL(floor)}). Provavelmente impossível de cumprir.`
+      } else if (val > 0 && avg > 0 && val < avg * 0.5) {
+        const cut = Math.round((1 - val / avg) * 100)
+        warn = `Meta agressiva: ${cut}% abaixo da média de 3 meses (${formatBRL(avg)}). Pode ser difícil de cumprir.`
+      }
+      if (warn && !window.confirm(`${warn}\n\nSalvar mesmo assim?`)) {
+        setEditingId(null)
+        return
+      }
       saveBudget({
         id: budgetIdFor(macroCategoryId, undefined),
         referenceMonth: month,
@@ -391,7 +407,7 @@ function SmartBudgetPanel({
             Orçamento inteligente
           </h3>
           <p style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>
-            Sugestões baseadas em histórico, média e recorrentes detectados. Selecione e aplique.
+            Meta sugerida = média de 3 meses reduzida 10–20% para gerar economia. Onde o gasto é fixo, mantemos a média.
           </p>
         </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 4 }}>
@@ -454,8 +470,11 @@ function SmartBudgetPanel({
                 <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--faint)' }}>
                   {s.recurringForecast > 0 ? formatBRL(s.recurringForecast) : '—'}
                 </td>
-                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>
+                <td className="table-td table-th-right" style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 800, color: s.reducible ? 'var(--pos)' : 'var(--ink)' }}>
                   {formatBRL(s.suggestedAmount)}
+                  {s.reducible
+                    ? <p style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', marginTop: 1, fontFamily: 'var(--ui)' }}>faixa {formatBRL(s.targetMin)}–{formatBRL(s.targetMax)}</p>
+                    : <p style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', marginTop: 1, fontFamily: 'var(--ui)' }}>sem redução</p>}
                 </td>
                 <td className="table-td">
                   <span style={{ fontSize: 10, fontWeight: 700, color: CONF_COLOR[s.confidence] }}>
