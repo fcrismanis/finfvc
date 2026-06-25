@@ -2,6 +2,7 @@ const KEY = 'finance_bens_patrimoniais'
 
 export type BemTipo = 'movel' | 'imovel' | 'outro'
 export type BemFinalidade = 'uso_proprio' | 'aluguel' | 'investimento' | 'outro'
+export type BemStatus = 'ativo' | 'inativo'
 
 export interface BemPatrimonial {
   id: string
@@ -12,7 +13,19 @@ export interface BemPatrimonial {
   valorMercado: number
   saldoDevedor: number
   descricao?: string
+  data?: string          // data de aquisição (YYYY-MM-DD), opcional
+  status?: BemStatus     // ausente = 'ativo' (compat com dados antigos)
   createdAt: string
+}
+
+export const STATUS_LABEL: Record<BemStatus, string> = {
+  ativo:   'Ativo',
+  inativo: 'Inativo',
+}
+
+// Helper: bens sem status são considerados ativos (dados anteriores ao campo).
+export function isBemAtivo(bem: BemPatrimonial): boolean {
+  return (bem.status ?? 'ativo') === 'ativo'
 }
 
 export const TIPO_LABEL: Record<BemTipo, string> = {

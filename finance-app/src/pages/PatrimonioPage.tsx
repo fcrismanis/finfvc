@@ -1,14 +1,14 @@
 import { useMemo, useEffect, useState } from 'react'
-import { Home, Plus, Trash2, Car, Building2 } from 'lucide-react'
+import { Home, Plus, Trash2, Car, Building2, Pencil, Eye, EyeOff } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { getLocalConnections, fetchPluggyInvestments } from '../services/pluggy.service'
 import { loadExcludedInvestments } from '../services/investmentPrefs'
 import type { PluggyLocalConnection, PluggyLocalAccount, PluggyInvestment } from '../services/pluggy.service'
 import {
-  getBens, addBem, deleteBem,
-  FINALIDADE_LABEL, CATEGORIAS_POR_TIPO,
-  type BemPatrimonial, type BemTipo, type BemFinalidade,
+  getBens, addBem, deleteBem, updateBem, isBemAtivo,
+  FINALIDADE_LABEL, CATEGORIAS_POR_TIPO, STATUS_LABEL,
+  type BemPatrimonial, type BemTipo, type BemFinalidade, type BemStatus,
 } from '../services/patrimonio.service'
 
 const TYPE_LABEL: Record<string, string> = {
@@ -45,6 +45,8 @@ function emptyForm() {
     valorMercado: 0,
     saldoDevedor: 0,
     descricao: '',
+    data: '',
+    status: 'ativo' as BemStatus,
   }
 }
 
@@ -57,6 +59,7 @@ export function PatrimonioPage() {
 
   const [bens, setBens] = useState<BemPatrimonial[]>([])
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
 
   useEffect(() => {
@@ -114,19 +117,37 @@ export function PatrimonioPage() {
   const bensImoveis = bens.filter(b => b.tipo === 'imovel')
   const bensOutros  = bens.filter(b => b.tipo === 'outro')
 
-  const totalBensLiquido  = bens.reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
-  const totalSaldoDevedor = bens.reduce((s, b) => s + b.saldoDevedor, 0)
+  // Bens inativos não entram nos totais de patrimônio.
+  const totalBensLiquido  = bens.filter(isBemAtivo).reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
+  const totalSaldoDevedor = bens.filter(isBemAtivo).reduce((s, b) => s + b.saldoDevedor, 0)
 
   const hasPluggyData = bankAccounts.length > 0 || totalInvestBalance > 0
 
   function openModal() {
+    setEditingId(null)
     setForm(emptyForm())
     setModalOpen(true)
   }
 
-  function handleAdd() {
+  function openEdit(bem: BemPatrimonial) {
+    setEditingId(bem.id)
+    setForm({
+      nome: bem.nome,
+      tipo: bem.tipo,
+      categoria: bem.categoria,
+      finalidade: bem.finalidade,
+      valorMercado: bem.valorMercado,
+      saldoDevedor: bem.saldoDevedor,
+      descricao: bem.descricao ?? '',
+      data: bem.data ?? '',
+      status: bem.status ?? 'ativo',
+    })
+    setModalOpen(true)
+  }
+
+  function handleSave() {
     if (!form.nome.trim() || !form.categoria) return
-    const novo = addBem({
+    const payload = {
       nome: form.nome.trim(),
       tipo: form.tipo,
       categoria: form.categoria,
@@ -134,14 +155,29 @@ export function PatrimonioPage() {
       valorMercado: form.valorMercado,
       saldoDevedor: form.saldoDevedor,
       descricao: form.descricao || undefined,
-    })
-    setBens(prev => [...prev, novo])
+      data: form.data || undefined,
+      status: form.status,
+    }
+    if (editingId) {
+      updateBem(editingId, payload)
+      setBens(prev => prev.map(b => (b.id === editingId ? { ...b, ...payload } : b)))
+    } else {
+      const novo = addBem(payload)
+      setBens(prev => [...prev, novo])
+    }
     setModalOpen(false)
+    setEditingId(null)
   }
 
   function handleDelete(id: string) {
     deleteBem(id)
     setBens(prev => prev.filter(b => b.id !== id))
+  }
+
+  function toggleStatus(bem: BemPatrimonial) {
+    const next: BemStatus = isBemAtivo(bem) ? 'inativo' : 'ativo'
+    updateBem(bem.id, { status: next })
+    setBens(prev => prev.map(b => (b.id === bem.id ? { ...b, status: next } : b)))
   }
 
   function setField<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
@@ -175,6 +211,8 @@ export function PatrimonioPage() {
           bens={bensMoveis}
           onAdd={openModal}
           onDelete={handleDelete}
+          onEdit={openEdit}
+          onToggleStatus={toggleStatus}
         />
 
         {/* Bens Imóveis */}
@@ -184,6 +222,8 @@ export function PatrimonioPage() {
           bens={bensImoveis}
           onAdd={openModal}
           onDelete={handleDelete}
+          onEdit={openEdit}
+          onToggleStatus={toggleStatus}
         />
 
         {/* Outros bens */}
@@ -194,6 +234,8 @@ export function PatrimonioPage() {
             bens={bensOutros}
             onAdd={openModal}
             onDelete={handleDelete}
+            onEdit={openEdit}
+            onToggleStatus={toggleStatus}
           />
         )}
 
@@ -262,7 +304,9 @@ export function PatrimonioPage() {
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
         >
           <div className="card" style={{ width: '100%', maxWidth: 480, padding: '28px 28px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>Novo Bem Patrimonial</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 750, color: 'var(--ink)', margin: 0 }}>
+              {editingId ? 'Editar Bem Patrimonial' : 'Novo Bem Patrimonial'}
+            </h2>
 
             <Field label="Nome">
               <input
@@ -314,6 +358,24 @@ export function PatrimonioPage() {
               </Field>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Data de aquisição (opcional)">
+                <input
+                  className="input"
+                  type="date"
+                  value={form.data}
+                  onChange={e => setField('data', e.target.value)}
+                />
+              </Field>
+              <Field label="Status">
+                <select className="input" value={form.status} onChange={e => setField('status', e.target.value as BemStatus)}>
+                  {(Object.keys(STATUS_LABEL) as BemStatus[]).map(s => (
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
             <Field label="Descrição (opcional)">
               <textarea
                 className="input"
@@ -326,13 +388,13 @@ export function PatrimonioPage() {
             </Field>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button className="btn-ghost" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button className="btn-ghost" onClick={() => { setModalOpen(false); setEditingId(null) }}>Cancelar</button>
               <button
                 className="btn-primary"
-                onClick={handleAdd}
+                onClick={handleSave}
                 disabled={!form.nome.trim() || !form.categoria}
               >
-                Adicionar
+                {editingId ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
           </div>
@@ -352,15 +414,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function BensSection({
-  title, icon, bens, onAdd, onDelete,
+  title, icon, bens, onAdd, onDelete, onEdit, onToggleStatus,
 }: {
   title: string
   icon: React.ReactNode
   bens: BemPatrimonial[]
   onAdd: () => void
   onDelete: (id: string) => void
+  onEdit: (bem: BemPatrimonial) => void
+  onToggleStatus: (bem: BemPatrimonial) => void
 }) {
-  const total = bens.reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
+  const total = bens.filter(isBemAtivo).reduce((s, b) => s + b.valorMercado - b.saldoDevedor, 0)
 
   return (
     <div className="card" style={{ padding: '18px 22px' }}>
@@ -392,15 +456,25 @@ function BensSection({
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {bens.map(b => <BemCard key={b.id} bem={b} onDelete={onDelete} />)}
+          {bens.map(b => <BemCard key={b.id} bem={b} onDelete={onDelete} onEdit={onEdit} onToggleStatus={onToggleStatus} />)}
         </div>
       )}
     </div>
   )
 }
 
-function BemCard({ bem, onDelete }: { bem: BemPatrimonial; onDelete: (id: string) => void }) {
+function BemCard({ bem, onDelete, onEdit, onToggleStatus }: {
+  bem: BemPatrimonial
+  onDelete: (id: string) => void
+  onEdit: (bem: BemPatrimonial) => void
+  onToggleStatus: (bem: BemPatrimonial) => void
+}) {
   const patrimonioLiquido = bem.valorMercado - bem.saldoDevedor
+  const ativo = isBemAtivo(bem)
+  const iconBtn = {
+    background: 'none', border: 'none', cursor: 'pointer',
+    color: 'var(--faint)', padding: 4, flexShrink: 0, borderRadius: 6,
+  } as const
 
   return (
     <div style={{
@@ -411,13 +485,22 @@ function BemCard({ bem, onDelete }: { bem: BemPatrimonial; onDelete: (id: string
       alignItems: 'flex-start',
       justifyContent: 'space-between',
       gap: 12,
+      opacity: ativo ? 1 : 0.55,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{bem.nome}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', margin: 0, textDecoration: ativo ? 'none' : 'line-through' }}>{bem.nome}</p>
           <span style={{ fontSize: 11, color: 'var(--faint)', background: 'var(--subtle)', padding: '1px 7px', borderRadius: 99 }}>
             {bem.categoria}
           </span>
+          {!ativo && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--warn)', background: 'var(--subtle)', padding: '1px 7px', borderRadius: 99 }}>
+              Inativo
+            </span>
+          )}
+          {bem.data && (
+            <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>· {bem.data}</span>
+          )}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginTop: 6 }}>
           <InfoRow label="Valor de Mercado" value={formatBRL(bem.valorMercado)} />
@@ -443,17 +526,17 @@ function BemCard({ bem, onDelete }: { bem: BemPatrimonial; onDelete: (id: string
           <p style={{ fontSize: 11.5, color: 'var(--faint)', margin: '6px 0 0' }}>{bem.descricao}</p>
         )}
       </div>
-      <button
-        onClick={() => onDelete(bem.id)}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--faint)', padding: 4, flexShrink: 0,
-          borderRadius: 6,
-        }}
-        title="Remover bem"
-      >
-        <Trash2 size={15} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <button onClick={() => onToggleStatus(bem)} style={iconBtn} title={ativo ? 'Desativar' : 'Ativar'}>
+          {ativo ? <Eye size={15} /> : <EyeOff size={15} />}
+        </button>
+        <button onClick={() => onEdit(bem)} style={iconBtn} title="Editar bem">
+          <Pencil size={15} />
+        </button>
+        <button onClick={() => onDelete(bem.id)} style={iconBtn} title="Remover bem">
+          <Trash2 size={15} />
+        </button>
+      </div>
     </div>
   )
 }
