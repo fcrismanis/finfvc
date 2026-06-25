@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { CATEGORIES } from '../config/categories'
 import { ICON_MAP } from '../utils/categoryIcons'
@@ -27,10 +28,25 @@ export function CategorySelector({
   defaultOpen?: boolean
   onClose?: () => void
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 280 })
+
+  function openDropdown() {
+    if (triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect()
+      setDropdownPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 260) })
+    }
+    setOpen(true)
+  }
+
+  // When defaultOpen=true (e.g. modal), open after mount so triggerRef is ready
+  useEffect(() => {
+    if (defaultOpen) openDropdown()
+  }, [])
 
   function closeDropdown() {
     setOpen(false)
@@ -100,7 +116,13 @@ export function CategorySelector({
   useEffect(() => {
     if (!open) return
     function handler(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      // Close if click is outside both the trigger container and the portal dropdown
+      const portalEl = document.getElementById('category-selector-portal')
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        !(portalEl && portalEl.contains(target))
+      ) {
         closeDropdown()
       }
     }
@@ -177,11 +199,87 @@ export function CategorySelector({
 
   const iconName = selectedSub?.icon ?? selectedMacro?.icon
 
+  const dropdownContent = open ? (
+    <div
+      id="category-selector-portal"
+      style={{
+        position: 'fixed',
+        top: dropdownPos.top,
+        left: dropdownPos.left,
+        width: dropdownPos.width,
+        zIndex: 9999,
+        background: '#FCFBF7',
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        boxShadow: '0 8px 28px rgba(0,0,0,.22)',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
+        <input
+          autoFocus
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nome ou keyword…"
+          style={{
+            width: '100%', fontSize: 12, padding: '5px 8px', borderRadius: 6,
+            border: '1px solid var(--line)', outline: 'none',
+            background: '#fff', color: 'var(--ink)', fontFamily: 'var(--ui)',
+            boxSizing: 'border-box' as const,
+          }}
+        />
+      </div>
+      <div style={{ maxHeight: 300, overflowY: 'auto', background: '#FCFBF7' }}>
+        <button
+          type="button"
+          onClick={() => { onChange(undefined, undefined); closeDropdown(); setSearch('') }}
+          style={{
+            display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
+            fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer',
+            color: !macroCategoryId ? 'var(--accent)' : 'var(--faint)',
+            fontFamily: 'var(--ui)', borderBottom: '1px solid var(--line)',
+          }}
+        >
+          Sem categoria
+        </button>
+
+        {totalCount === 0 && (
+          <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--faint)', textAlign: 'center' }}>
+            Nenhuma categoria encontrada
+          </div>
+        )}
+
+        {incomeGroups.length > 0 && (
+          <>
+            <div style={{
+              padding: '5px 14px 3px', fontSize: 9.5, fontWeight: 800,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--pos)',
+              background: 'var(--well)', borderTop: '1px solid var(--line)',
+            }}>Receitas</div>
+            {incomeGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
+          </>
+        )}
+
+        {expenseGroups.length > 0 && (
+          <>
+            <div style={{
+              padding: '5px 14px 3px', fontSize: 9.5, fontWeight: 800,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--crit)',
+              background: 'var(--well)', borderTop: '1px solid var(--line)',
+            }}>Despesas</div>
+            {expenseGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
+          </>
+        )}
+      </div>
+    </div>
+  ) : null
+
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => { if (open) closeDropdown(); else setOpen(true) }}
+        onClick={() => { if (open) closeDropdown(); else openDropdown() }}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)',
@@ -199,79 +297,7 @@ export function CategorySelector({
         <ChevronDown size={12} color="var(--faint)" />
       </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000,
-          background: 'var(--paper, #ffffff)', border: '1px solid var(--line)',
-          borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,.18)',
-          overflow: 'hidden',
-        }}>
-          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nome ou keyword…"
-              style={{
-                width: '100%', fontSize: 12, padding: '5px 8px', borderRadius: 6,
-                border: '1px solid var(--line)', outline: 'none',
-                background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--ui)',
-                boxSizing: 'border-box' as const,
-              }}
-            />
-          </div>
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            <button
-              type="button"
-              onClick={() => { onChange(undefined, undefined); closeDropdown(); setSearch('') }}
-              style={{
-                display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
-                fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer',
-                color: !macroCategoryId ? 'var(--accent)' : 'var(--faint)',
-                fontFamily: 'var(--ui)', borderBottom: '1px solid var(--line)',
-              }}
-            >
-              Sem categoria
-            </button>
-
-            {totalCount === 0 && (
-              <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--faint)', textAlign: 'center' }}>
-                Nenhuma categoria encontrada
-              </div>
-            )}
-
-            {incomeGroups.length > 0 && (
-              <>
-                <div style={{
-                  padding: '5px 14px 3px',
-                  fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em',
-                  textTransform: 'uppercase', color: 'var(--pos)',
-                  background: 'var(--well)',
-                  borderTop: '1px solid var(--line)',
-                }}>
-                  Receitas
-                </div>
-                {incomeGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
-              </>
-            )}
-
-            {expenseGroups.length > 0 && (
-              <>
-                <div style={{
-                  padding: '5px 14px 3px',
-                  fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em',
-                  textTransform: 'uppercase', color: 'var(--crit)',
-                  background: 'var(--well)',
-                  borderTop: '1px solid var(--line)',
-                }}>
-                  Despesas
-                </div>
-                {expenseGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {typeof document !== 'undefined' && createPortal(dropdownContent, document.body)}
     </div>
   )
 }
