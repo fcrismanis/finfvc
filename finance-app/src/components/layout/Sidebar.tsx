@@ -35,7 +35,7 @@ const GESTAO: NavEntry[] = [
   { route: '/fechamento', label: 'Fechamento', icon: Lock },
   { route: '/investimentos', label: 'Investimentos', icon: TrendingUp },
   { route: '/patrimonio', label: 'Patrimônio', icon: Home },
-  { route: '/dividas', label: 'Dívidas', icon: CreditCard },
+  { route: '/dividas', label: 'Financiamentos / Dívidas', icon: CreditCard },
   { route: '/lembretes', label: 'Lembretes', icon: Bell },
   { route: '/futuro', label: 'Futuro', icon: Calendar, phase2: true },
 ]
