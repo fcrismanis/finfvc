@@ -1,9 +1,14 @@
-import { useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Check, X, Bell, CreditCard, FileText, Zap, RefreshCw, MoreHorizontal } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Plus, Pencil, Trash2, Check, X, Bell, CreditCard, FileText, Zap, RefreshCw, MoreHorizontal, Pause, Play, CircleDollarSign } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { getLocalConnections } from '../services/pluggy.service'
 import { currentYearMonth, getCompetenceMonth, formatFinancialDateBR } from '../utils/date'
+import {
+  getFinanciamentos, updateFinanciamento, saldoRestante,
+  STATUS_LABEL as FIN_STATUS_LABEL, STATUS_COLOR as FIN_STATUS_COLOR,
+  type Financiamento, type FinanciamentoStatus,
+} from '../services/financiamentos.service'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,6 +168,41 @@ export function LembretesPage() {
     persist(items.map(i => i.id === id ? { ...i, active: !i.active } : i))
   }
 
+  // ── Recorrências de financiamentos (derivadas — sem duplicar lembretes) ─────
+  const [financiamentos, setFinanciamentos] = useState<Financiamento[]>([])
+  const [editingFin, setEditingFin] = useState<Financiamento | null>(null)
+  useEffect(() => { setFinanciamentos(getFinanciamentos()) }, [])
+
+  const recorrencias = useMemo(
+    () => financiamentos.filter(f => f.recorrente),
+    [financiamentos]
+  )
+
+  function patchFin(id: string, patch: Partial<Financiamento>) {
+    updateFinanciamento(id, patch)
+    setFinanciamentos(prev => prev.map(f => (f.id === id ? { ...f, ...patch } : f)))
+  }
+  function togglePausarFin(f: Financiamento) {
+    patchFin(f.id, { pausado: !f.pausado })
+  }
+  function marcarParcelaPaga(f: Financiamento) {
+    const inc = f.parcelaValor ?? 0
+    const valorPago = Math.min(f.valorTotal, f.valorPago + inc)
+    const parcelasPagas = Math.min(f.parcelasTotal || Infinity, f.parcelasPagas + 1)
+    const quitado = (f.parcelasTotal > 0 && parcelasPagas >= f.parcelasTotal) || valorPago >= f.valorTotal
+    patchFin(f.id, { valorPago, parcelasPagas, status: quitado ? 'quitado' : f.status })
+  }
+  function saveEditingFin() {
+    if (!editingFin) return
+    patchFin(editingFin.id, {
+      parcelaValor: editingFin.parcelaValor,
+      diaVencimento: editingFin.diaVencimento,
+      status: editingFin.status,
+      pausado: editingFin.pausado,
+    })
+    setEditingFin(null)
+  }
+
   // Manual cartao items (no pluggyAccountId)
   const manualCards = items.filter(i => i.type === 'cartao' && !i.pluggyAccountId)
     .sort((a, b) => (a.dueDay ?? 99) - (b.dueDay ?? 99))
@@ -189,6 +229,44 @@ export function LembretesPage() {
             <Plus size={14} /> Novo lembrete
           </button>
         </div>
+
+        {/* Recorrências de financiamentos — derivadas do módulo Financiamentos */}
+        {recorrencias.length > 0 && (
+          <Section
+            color={TYPE_META.recorrencia.color}
+            icon={<RefreshCw size={14} />}
+            title="Recorrências — financiamentos"
+          >
+            {recorrencias.map(f => {
+              const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: 3, display: 'flex' } as const
+              const pausado = !!f.pausado
+              return (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line)', opacity: pausado || f.status === 'quitado' ? 0.6 : 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{f.nome}</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', background: FIN_STATUS_COLOR[f.status], padding: '1px 6px', borderRadius: 99 }}>{FIN_STATUS_LABEL[f.status]}</span>
+                      {pausado && <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)', background: 'var(--well)', padding: '1px 6px', borderRadius: 99 }}>Pausada</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+                      {f.parcelaValor ? `${formatBRL(f.parcelaValor)}/mês · ` : ''}
+                      {f.parcelasTotal > 0 ? `${f.parcelasPagas}/${f.parcelasTotal} parcelas · ` : ''}
+                      {f.diaVencimento ? `vence dia ${f.diaVencimento} · ` : ''}
+                      saldo {formatBRL(saldoRestante(f))}
+                    </div>
+                  </div>
+                  {f.status !== 'quitado' && (
+                    <button onClick={() => marcarParcelaPaga(f)} style={iconBtn} title="Marcar parcela como paga"><CircleDollarSign size={15} /></button>
+                  )}
+                  <button onClick={() => togglePausarFin(f)} style={iconBtn} title={pausado ? 'Reativar recorrência' : 'Pausar recorrência'}>
+                    {pausado ? <Play size={15} /> : <Pause size={15} />}
+                  </button>
+                  <button onClick={() => setEditingFin({ ...f })} style={iconBtn} title="Editar recorrência"><Pencil size={15} /></button>
+                </div>
+              )
+            })}
+          </Section>
+        )}
 
         {/* Cartões — Pluggy + manuais */}
         <Section
@@ -534,6 +612,57 @@ export function LembretesPage() {
               <button className="btn btn-primary" onClick={save}>Salvar</button>
               <button className="btn btn-secondary" onClick={() => setEditing(null)}>Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Editar recorrência de financiamento */}
+      {editingFin && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(16,15,10,.45)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => e.target === e.currentTarget && setEditingFin(null)}
+        >
+          <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>Editar recorrência</h2>
+              <button onClick={() => setEditingFin(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)' }}><X size={16} /></button>
+            </div>
+            <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{editingFin.nome}</p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <MF label="Valor da parcela">
+                <input className="login-field" style={{ fontSize: 13 }} type="number" min={0}
+                  value={editingFin.parcelaValor ?? 0}
+                  onChange={e => setEditingFin(f => f ? { ...f, parcelaValor: parseFloat(e.target.value) || 0 } : f)} />
+              </MF>
+              <MF label="Dia de vencimento">
+                <input className="login-field" style={{ fontSize: 13 }} type="number" min={1} max={31}
+                  value={editingFin.diaVencimento ?? ''}
+                  onChange={e => setEditingFin(f => f ? { ...f, diaVencimento: e.target.value ? Number(e.target.value) : undefined } : f)} />
+              </MF>
+            </div>
+
+            <MF label="Status">
+              <select className="login-field" style={{ fontSize: 13 }} value={editingFin.status}
+                onChange={e => setEditingFin(f => f ? { ...f, status: e.target.value as FinanciamentoStatus } : f)}>
+                {(Object.keys(FIN_STATUS_LABEL) as FinanciamentoStatus[]).map(s => <option key={s} value={s}>{FIN_STATUS_LABEL[s]}</option>)}
+              </select>
+            </MF>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!editingFin.pausado}
+                onChange={e => setEditingFin(f => f ? { ...f, pausado: e.target.checked } : f)}
+                style={{ accentColor: 'var(--accent)' }} />
+              Recorrência pausada
+            </label>
+
+            <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+              <button className="btn btn-primary" onClick={saveEditingFin}>Salvar</button>
+              <button className="btn btn-secondary" onClick={() => setEditingFin(null)}>Cancelar</button>
+            </div>
+            <p style={{ fontSize: 10.5, color: 'var(--faint)', margin: 0 }}>
+              Edição completa (valor total, credor, parcelas) fica em Financiamentos / Dívidas.
+            </p>
           </div>
         </div>
       )}

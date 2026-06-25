@@ -17,6 +17,7 @@ export interface Financiamento {
   diaVencimento?: number   // dia do mês (1-31)
   taxaJuros?: number       // % a.m.
   recorrente: boolean      // débito mensal recorrente
+  pausado?: boolean        // recorrência pausada (não some, só não lembra)
   status: FinanciamentoStatus
   descricao?: string
   createdAt: string
