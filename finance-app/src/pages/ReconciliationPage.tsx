@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { formatMonthLabel, prevMonth, nextMonth, formatFinancialDateBR } from '../utils/date'
 import { getLocalConnections, fetchPluggyTransactions } from '../services/pluggy.service'
+import type { Transaction } from '../types'
 import {
   reconcileAccount,
   quickAccountSummary,
@@ -161,6 +162,8 @@ export function ReconciliationPage({ selectedMonth }: Props) {
                   </div>
                 </div>
 
+                <Metric label="Entradas" value={summary.entradasFIN} />
+                <Metric label="Saídas" value={summary.saidasFIN} />
                 <Metric label="Saldo banco" value={summary.saldoBanco} />
                 <Metric label="Saldo FIN" value={summary.saldoFIN} />
                 <Metric label="Diferença" value={summary.diferenca} highlight />
@@ -191,12 +194,99 @@ export function ReconciliationPage({ selectedMonth }: Props) {
         })}
       </div>
 
+      <CardInvoiceReconciliation transactions={transactions} accounts={accounts} period={period} />
+
       <p style={{ fontSize: 11, color: 'var(--ink-soft, #98A2B3)', marginTop: 18, lineHeight: 1.5 }}>
         Apenas diagnóstico — nenhuma alteração de dados é feita. A diferença de saldo pode refletir
         saldo defasado por sync ou baseline de abertura não modelado no FIN; o sinal acionável são as
         entradas/saídas do período e os lançamentos faltantes/extras.
       </p>
     </main>
+  )
+}
+
+// ── Cartão: cruza fatura (gasto no cartão) × pagamento (Neutra > Pagamento de Cartão) ──
+// Diagnóstico apenas. Pagamento e fatura podem cair em meses diferentes (você paga a
+// fatura do mês anterior), por isso a divergência é informativa, não uma correção.
+const PAG_CARTAO_SUBCAT = 'cat_pag_cartao'
+
+function CardInvoiceReconciliation({ transactions, accounts, period }: {
+  transactions: Transaction[]
+  accounts: FlatAccount[]
+  period: ReconPeriod
+}) {
+  const data = useMemo(() => {
+    const inP = (t: Transaction) => {
+      const d = (t.competenceDate || t.transactionDate || '').slice(0, 10)
+      return d >= period.from && d <= period.to && t.status !== 'cancelled'
+    }
+    const cards = accounts.filter(a => a.type === 'CREDIT')
+    const payments = transactions.filter(t =>
+      inP(t) && (t.categoryId === PAG_CARTAO_SUBCAT || t.subCategoryId === PAG_CARTAO_SUBCAT)
+    )
+    const totalPayments = payments.reduce((s, t) => s + Math.abs(t.amount), 0)
+
+    const perCard = cards.map(c => {
+      const spend = transactions.filter(t =>
+        inP(t) && t.accountId === c.id && t.type === 'expense' && t.classificationType !== 'neutral'
+      )
+      return { card: c, fatura: spend.reduce((s, t) => s + Math.abs(t.amount), 0), count: spend.length }
+    })
+    const totalFaturas = perCard.reduce((s, c) => s + c.fatura, 0)
+
+    const warnings: string[] = []
+    if (totalPayments > 1 && totalFaturas <= 1) warnings.push('Pagamento de cartão sem fatura correspondente no período.')
+    if (totalFaturas > 1 && totalPayments <= 1) warnings.push('Fatura de cartão sem pagamento correspondente no período.')
+
+    return { cards, payments, totalPayments, perCard, totalFaturas, diff: totalPayments - totalFaturas, warnings }
+  }, [transactions, accounts, period])
+
+  if (data.cards.length === 0 && data.payments.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 22, border: '1px solid var(--border-card, #EAECF0)', borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-card, #EAECF0)' }}>
+        <p style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink, #101828)' }}>Conciliação de cartões</p>
+        <p style={{ fontSize: 11.5, color: 'var(--ink-soft, #98A2B3)', marginTop: 2 }}>
+          Fatura (gasto no cartão) × pagamento (Neutra › Pagamento de Cartão). Podem cair em meses diferentes.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, padding: '14px 16px', flexWrap: 'wrap', borderBottom: data.perCard.length ? '1px solid var(--border-card, #F2F4F7)' : undefined }}>
+        <Metric label="Faturas (gasto)" value={data.totalFaturas} />
+        <Metric label="Pagamentos" value={data.totalPayments} />
+        <Metric label="Divergência" value={data.diff} highlight />
+      </div>
+
+      {data.perCard.map(({ card, fatura, count }) => (
+        <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 16px', fontSize: 12.5, borderBottom: '1px solid var(--border-card, #F2F4F7)' }}>
+          <span style={{ color: 'var(--ink-soft, #667085)', fontWeight: 600 }}>{card.name} <span style={{ color: 'var(--ink-soft, #98A2B3)', fontWeight: 400 }}>· {count} lanç.</span></span>
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatBRL(fatura)}</span>
+        </div>
+      ))}
+
+      {data.payments.length > 0 && (
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-card, #F2F4F7)' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--ink-soft, #98A2B3)', marginBottom: 6 }}>Pagamentos de cartão ({data.payments.length})</p>
+          {data.payments.map(p => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '4px 0', fontSize: 12.5 }}>
+              <span style={{ color: 'var(--ink-soft, #667085)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(p.competenceDate || p.transactionDate || '').slice(0, 10)} · {p.description}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatBRL(Math.abs(p.amount))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.warnings.length > 0 && (
+        <div style={{ padding: '10px 16px' }}>
+          {data.warnings.map((w, i) => (
+            <p key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#B42318', background: '#FEF3F2', padding: '8px 10px', borderRadius: 8, marginTop: i ? 6 : 0 }}>
+              <AlertTriangle size={14} /> {w}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
