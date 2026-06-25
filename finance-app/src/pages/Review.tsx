@@ -15,6 +15,7 @@ import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
 import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
 import { CategorySelector } from '../components/CategorySelector'
+import { newSubCategoryId } from '../services/subcategory.service'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 
 interface AISuggestion {
@@ -73,7 +74,19 @@ function deriveSuggestionSource(tx: Transaction): string | null {
 }
 
 export function Review({ onNavigate: _onNavigate }: Props) {
-  const { transactions, updateTransaction, updateTransactions, subCategories } = useData()
+  const { transactions, updateTransaction, updateTransactions, subCategories, saveSubCategory } = useData()
+
+  // Inline subcategory creation shared by the edit modal and the bulk bar.
+  // Generates the id synchronously so callers can select it immediately; the new
+  // sub shows up in every CategorySelector once subCategories state updates.
+  function createSubCategory(name: string, macroId: string): string {
+    const id = newSubCategoryId()
+    void saveSubCategory({
+      id, name: name.trim(), macroCategoryId: macroId,
+      essentiality: 'inherit', active: true, createdAt: new Date().toISOString(),
+    })
+    return id
+  }
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
@@ -978,6 +991,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
           onMarkNeutral={bulkMarkNeutral}
           onApplySuggestedTags={bulkApplySuggestedTags}
           onClear={clearSelection}
+          onCreateSubCategory={createSubCategory}
         />
       )}
 
@@ -1153,6 +1167,10 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                   allMacros={allMacros}
                   subCategories={subCategories}
                   onChange={(macroId, subId) => setModalPatch(p => ({ ...p, macroCategoryId: macroId, subCategoryId: subId }))}
+                  onCreateSubCategory={(name, macroId) => {
+                    const id = createSubCategory(name, macroId)
+                    setModalPatch(p => ({ ...p, macroCategoryId: macroId, subCategoryId: id }))
+                  }}
                 />
               </ModalField>
 
@@ -1349,10 +1367,11 @@ function IntelligentReviewPanel({
 
 function BulkActionBar({
   count, subCategories, onApplyCategory, onApplySubcategory, onApplyClassification, onAddTag, onRemoveTag,
-  onMarkReviewed, onMarkNeutral, onApplySuggestedTags, onClear,
+  onMarkReviewed, onMarkNeutral, onApplySuggestedTags, onClear, onCreateSubCategory,
 }: {
   count: number
   subCategories: import('../types').SubCategory[]
+  onCreateSubCategory: (name: string, macroId: string) => string
   onApplyCategory: (macroId: string) => void
   onApplySubcategory: (subId: string) => void
   onApplyClassification: (cls: ClassificationType) => void
@@ -1399,6 +1418,10 @@ function BulkActionBar({
             allMacros={allMacros}
             subCategories={subCategories}
             onChange={(macroId, subId) => { setPendingMacro(macroId); setPendingSub(subId) }}
+            onCreateSubCategory={(name, macroId) => {
+              const id = onCreateSubCategory(name, macroId)
+              setPendingMacro(macroId); setPendingSub(id)
+            }}
           />
         </div>
 

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { CATEGORIES } from '../config/categories'
 import { ICON_MAP } from '../utils/categoryIcons'
 import type { MacroCategory, SubCategory } from '../types'
@@ -20,6 +20,7 @@ export function CategorySelector({
   defaultOpen = false,
   onClose,
   placeholder = 'Sem categoria',
+  onCreateSubCategory,
 }: {
   macroCategoryId?: string
   subCategoryId?: string
@@ -29,6 +30,10 @@ export function CategorySelector({
   defaultOpen?: boolean
   onClose?: () => void
   placeholder?: string
+  // When provided, the dropdown offers an inline "create subcategory" action for
+  // the currently selected macro. The handler is responsible for persisting and
+  // selecting the new subcategory (it shows up immediately via subCategories).
+  onCreateSubCategory?: (name: string, macroId: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -272,6 +277,36 @@ export function CategorySelector({
             {expenseGroups.map(({ macro, subs }) => renderGroup(macro, subs))}
           </>
         )}
+
+        {onCreateSubCategory && search.trim().length >= 2 && (() => {
+          const q = search.trim()
+          const existsInMacro = selectedMacro
+            ? getEffectiveSubs(selectedMacro.id).some(s => s.name.toLowerCase() === q.toLowerCase())
+            : false
+          if (selectedMacro && existsInMacro) return null
+          return (
+            <div style={{ borderTop: '1px solid var(--line)', background: 'var(--well)' }}>
+              {selectedMacro ? (
+                <button
+                  type="button"
+                  onClick={() => { onCreateSubCategory(q, selectedMacro.id); closeDropdown(); setSearch('') }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                    padding: '8px 14px', textAlign: 'left', fontSize: 12, fontWeight: 600,
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--accent)', fontFamily: 'var(--ui)',
+                  }}
+                >
+                  <Plus size={13} /> Criar “{q}” em {selectedMacro.name}
+                </button>
+              ) : (
+                <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--ui)' }}>
+                  Escolha uma categoria para criar “{q}” como subcategoria
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   ) : null
