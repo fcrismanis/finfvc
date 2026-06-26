@@ -14,6 +14,26 @@ interface ClassificationRule {
 }
 
 const RULES: ClassificationRule[] = [
+  // FIT business income — ATM cash deposits from FIT-FXS9F24 clients
+  // Pattern: "DEP DIN ATM N. XXXXXXXXX" always = FIT operational income (Itaú account)
+  {
+    keywords: ['DEP DIN ATM', 'DEPOSITO DIN ATM', 'DEP. DIN ATM'],
+    type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit',
+    includeInOperationalResult: true, includeInCashflow: true, includeInBudget: true, isInternalTransfer: false,
+  },
+  // FIT PIX transfers received from own account (PIX TRANSF FABIO V = FIT revenue transfer)
+  // These come in as "PIX TRANSF FABIO V" on the Itaú checking account
+  {
+    keywords: ['PIX TRANSF FABIO V', 'PIX RECEBIDO FABIO VOLFE'],
+    type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit',
+    includeInOperationalResult: true, includeInCashflow: true, includeInBudget: true, isInternalTransfer: false,
+  },
+  // Salary credit
+  {
+    keywords: ['CREDITO DE SALARIO', 'CRÉDITO DE SALÁRIO', 'CREDIT SALARIO'],
+    type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_salario',
+    includeInOperationalResult: true, includeInCashflow: true, includeInBudget: true, isInternalTransfer: false,
+  },
   // Debt / special check interest
   {
     keywords: ['JUROS', 'LIMITE DA CONTA', 'IOF', 'CHEQUE ESPECIAL'],
