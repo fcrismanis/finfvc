@@ -6,7 +6,7 @@ import { getAllMacroCategories } from '../services/financeParentCategories.servi
 import { CATEGORIES } from '../config/categories'
 import { CategorySelector, TxCatIcon } from '../components/CategorySelector'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth, normalizeFinancialDate } from '../utils/date'
+import { getCompetenceMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
 import {
@@ -58,8 +58,26 @@ const CLS_LABELS: Record<ClassificationType, string> = {
   adjustment: 'Ajuste', neutral: 'Neutro',
 }
 
+const WEEKDAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
 function fmtGroupDate(isoDate: string): string {
-  return normalizeFinancialDate(isoDate, isoDate)
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  const dow = WEEKDAYS_PT[dt.getDay()]
+  return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y} · ${dow}`
+}
+
+function fmtRowDate(isoDate: string): { day: string; dow: string } {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return { day: `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`, dow: WEEKDAYS_PT[dt.getDay()] }
+}
+
+function fmtMonthLabel(ym: string): string {
+  if (!ym) return 'Todos os meses'
+  const [y, m] = ym.split('-').map(Number)
+  return `${MONTHS_PT[m - 1]} ${y}`
 }
 
 // A transaction is neutral if its own classification is neutral OR its macro is a Neutra macro.
@@ -586,31 +604,95 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
-        {/* Summary cards */}
+        {/* Summary cards — Artha style with icon circles */}
         {!isReviewMode && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Receitas</p>
-              <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--pos)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>+{formatBRL(summary.income)}</p>
-            </div>
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Despesas</p>
-              <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--crit)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>−{formatBRL(summary.expense)}</p>
-            </div>
-            <div className="card" style={{ padding: '14px 16px', background: 'var(--accent-soft)' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Resultado</p>
-              <p style={{ fontSize: 20, fontWeight: 800, color: summary.result >= 0 ? 'var(--pos)' : 'var(--crit)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>
-                {summary.result >= 0 ? '+' : ''}{formatBRL(summary.result)}
-              </p>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            {[
+              { label: 'Receitas', value: summary.income, sign: '+', color: 'var(--pos)', bg: '#e6f9f0', icon: '↑' },
+              { label: 'Despesas', value: summary.expense, sign: '−', color: 'var(--crit)', bg: '#fdecea', icon: '↓' },
+              { label: 'Resultado do Período', value: summary.result, sign: summary.result >= 0 ? '+' : '', color: summary.result >= 0 ? 'var(--pos)' : 'var(--crit)', bg: summary.result >= 0 ? '#e6f9f0' : '#fdecea', icon: '∼' },
+            ].map(card => (
+              <div key={card.label} className="card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: card.color, flexShrink: 0, fontWeight: 700 }}>
+                  {card.icon}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 3 }}>{card.label}</p>
+                  <p style={{ fontSize: 19, fontWeight: 800, color: card.color, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {card.sign}{formatBRL(card.value)}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         {!isReviewMode && (
           <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+
+            {/* Period selector with arrows */}
+            {(() => {
+              const monthIdx = filterMonth ? allMonths.indexOf(filterMonth) : -1
+              const hasPrev = monthIdx > 0
+              const hasNext = filterMonth ? monthIdx < allMonths.length - 1 : false
+              const btnBase: React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, border:'1px solid var(--line)', borderRadius:7, background:'var(--card-bg)', cursor:'pointer', color:'var(--ink-2)', fontSize:15, padding:0 }
+              const reviewCount = reviewItems.filter(i => i.tags.includes('no_category')).length
+              return (
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <button aria-label="Mês anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
+                    onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 12px', border:'1px solid var(--line)', borderRadius:8, background:'var(--card-bg)', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--ink)', fontFamily:'var(--ui)' }}
+                    onClick={() => {
+                      const cur = filterMonth || allMonths[0] || ''
+                      const idx = allMonths.indexOf(cur)
+                      if (idx >= 0) {
+                        // cycle through months or reset to 'all'
+                        const next = idx >= allMonths.length - 1 ? '' : allMonths[idx + 1]
+                        setFilterMonth(next); setPage(0)
+                      }
+                    }}
+                    aria-label="Período atual"
+                  >
+                    {fmtMonthLabel(filterMonth)}
+                  </button>
+                  <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext || !filterMonth ? 1 : 0.3, cursor: (hasNext || !filterMonth) ? 'pointer' : 'default'}}
+                    onClick={() => {
+                      if (!filterMonth && allMonths.length > 0) { setFilterMonth(allMonths[allMonths.length - 1]); setPage(0); return }
+                      if (hasNext) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) }
+                    }}>
+                    <ChevronRight size={14} />
+                  </button>
+                  {reviewCount > 0 && (
+                    <button
+                      onClick={() => { setQuickFilter('no_category'); setPage(0) }}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:20, border:'none', background:'var(--accent-soft)', color:'var(--accent)', fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:'var(--ui)' }}
+                      title="Lançamentos sem categoria"
+                    >
+                      <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
+                      A classificar {reviewCount}
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Tipo filter — compact */}
+            <div style={{ display:'flex', gap:4 }}>
+              {[{v:'', l:'Todos'},{v:'income', l:'Receitas'},{v:'expense', l:'Despesas'},{v:'neutral', l:'Neutros'}].map(opt => (
+                <button key={opt.v} onClick={() => { setFilterType(opt.v); setPage(0) }}
+                  style={{ padding:'4px 10px', borderRadius:20, border:'1px solid var(--line)', background: filterType===opt.v ? 'var(--ink)' : 'transparent', color: filterType===opt.v ? 'var(--card-bg)' : 'var(--ink-2)', fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}>
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              flex: '1 1 180px', border: '1px solid var(--line)', borderRadius: 8,
+              flex: '1 1 160px', border: '1px solid var(--line)', borderRadius: 8,
               padding: '5px 10px', background: 'var(--paper)',
             }}>
               <Search size={12} color="var(--faint)" />
@@ -620,19 +702,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 placeholder="Buscar por descrição…"
                 style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
               />
+              {search && (
+                <button onClick={() => { setSearch(''); setPage(0) }} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:0, display:'flex' }}>
+                  <X size={11} />
+                </button>
+              )}
             </div>
 
-            <select className="ledger-select" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(0) }} aria-label="Mês">
-              <option value="">Todos os meses</option>
-              {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-
-            <select className="ledger-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(0) }} aria-label="Tipo">
-              <option value="">Todos</option>
-              <option value="income">Receita</option>
-              <option value="expense">Despesa</option>
-              <option value="neutral">Neutros</option>
-            </select>
+            {/* Hidden but kept for compat: original Mês select removed, tipo moved above */}
 
             {/* Status filter — icon button + popover */}
             <div ref={statusPickerRef} style={{ position: 'relative' }}>
@@ -803,9 +880,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 540 }}>
                 <thead>
                   <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th className="table-th" style={{ width: 64, cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+                      if (sortField === 'competenceDate') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      else { setSortField('competenceDate'); setSortDir('desc') }
+                      setPage(0)
+                    }}>Data</th>
                     <th className="table-th" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
                       if (sortField === 'competenceDate') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
                       else { setSortField('competenceDate'); setSortDir('desc') }
@@ -825,24 +907,30 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   </tr>
                 </thead>
                 <tbody>
-                  {grouped.map(({ date, items }) => (
+                  {grouped.map(({ date, items }) => {
+                    const dayNet = items
+                      .filter(t => !txIsNeutral(t, neutralMacroIds))
+                      .reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0)
+                    return (
                     <Fragment key={date}>
-                      {/* Day group header */}
+                      {/* Day group header with right-aligned net total */}
                       <tr style={{ background: 'var(--well)' }}>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           style={{
                             padding: '5px 16px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: 'var(--ink-2)',
+                            fontSize: 11, fontWeight: 700, color: 'var(--ink-2)',
                             letterSpacing: '.03em',
                             borderBottom: '1px solid var(--line)',
                             borderTop: '1px solid var(--line)',
-                            fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          {fmtGroupDate(date)}
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            <span>{fmtGroupDate(date)}</span>
+                            <span style={{ fontVariantNumeric:'tabular-nums', color: dayNet >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                              {dayNet >= 0 ? '+' : ''}{formatBRL(dayNet)}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                       {items.map(tx => {
@@ -854,16 +942,23 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         const reviewItem = isReviewMode ? reviewItems.find(i => i.tx.id === tx.id) : undefined
                         const isInlineCat = inlineCatEdit?.id === tx.id
                         const isInlineDesc = inlineDescEdit?.id === tx.id
+                        const needsAttention = tx.needsReview || !tx.macroCategoryId
+                        const { day: rowDay, dow: rowDow } = fmtRowDate(tx.transactionDate)
 
                         return (
                           <tr
                             key={tx.id}
                             data-transaction-id={tx.id}
                             className="table-row"
-                            style={{ opacity: tx.status === 'pending' ? 0.65 : 1 }}
+                            style={{ opacity: tx.status === 'pending' ? 0.65 : 1, borderLeft: needsAttention ? '3px solid var(--warn, #f59e0b)' : '3px solid transparent' }}
                           >
+                            {/* Date column */}
+                            <td className="table-td" style={{ width: 64, paddingRight: 4, whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{rowDay}</div>
+                              <div style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 500, marginTop: 1 }}>{rowDow}</div>
+                            </td>
                             {/* Description */}
-                            <td className="table-td" style={{ maxWidth: 320 }}>
+                            <td className="table-td" style={{ maxWidth: 300 }}>
                               {isInlineDesc ? (
                                 <input
                                   ref={inlineDescRef}
@@ -1034,7 +1129,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                         )
                       })}
                     </Fragment>
-                  ))}
+                  )})}  {/* end grouped.map */}
                 </tbody>
                 {filtered.length > 0 && (() => {
                   // Brutal sum: every visible item, sign matches display (expense = negative)
@@ -1043,7 +1138,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   return (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--line)' }}>
-                        <td className="table-td" style={{ fontWeight: 700, fontSize: 12, color: 'var(--faint)', paddingTop: 10 }}>
+                        <td colSpan={2} className="table-td" style={{ fontWeight: 700, fontSize: 12, color: 'var(--faint)', paddingTop: 10 }}>
                           Total filtrado ({filtered.length})
                         </td>
                         <td className="table-td table-th-right" style={{ fontWeight: 800, fontSize: 13, color: totalColor, paddingTop: 10, whiteSpace: 'nowrap' }}>
