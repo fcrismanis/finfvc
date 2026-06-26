@@ -388,9 +388,9 @@ export function PatrimonioPage() {
             </Field>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button className="btn-ghost" onClick={() => { setModalOpen(false); setEditingId(null) }}>Cancelar</button>
+              <button className="btn btn-secondary" onClick={() => { setModalOpen(false); setEditingId(null) }}>Cancelar</button>
               <button
-                className="btn-primary"
+                className="btn btn-primary"
                 onClick={handleSave}
                 disabled={!form.nome.trim() || !form.categoria}
               >

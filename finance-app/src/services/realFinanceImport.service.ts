@@ -41,21 +41,8 @@ const SUB_SEEDS: SubSeed[] = [
   // Serviços
   { name: 'Manutenção', macroCategoryId: 'mac_servicos', essentiality: 'non_essential' },
 ]
-
-/** Mapping Excel categories → subcategory name (for subcategoryId resolution) */
-const EXCEL_CAT_TO_SUBNAME: Record<string, string> = {
-  'vivo': 'VIVO',
-  'claro tv': 'Claro TV',
-  'youtube': 'Youtube',
-  'brasil paralelo': 'Brasil Paralelo',
-  'apple storage': 'Apple Storage',
-  'limpeza': 'Limpeza / Faxina',
-  'faxina': 'Limpeza / Faxina',
-  'manutenção': 'Manutenção',
-  'acessórios': 'Acessórios',
-  'treinamentos': 'Treinamentos',
-  'multas e taxas': 'Multas e Taxas',
-}
+// Subcategorias agora são criadas dinamicamente no import (importRealFinanceBase),
+// uma por categoria do xlsx, sob o macro classificado. Sem mapa estático.
 
 // ── Row type ─────────────────────────────────────────────────────────────────
 
@@ -228,10 +215,26 @@ export function importRealFinanceBase(
   existingTransactions: Transaction[],
   batchId: string,
 ): { transactions: Transaction[]; result: Omit<RealImportResult, 'trainingExamples'> } {
-  const { byName: subByName } = ensureSubCategories()
-
   const existingHashes = new Set(existingTransactions.map(t => t.importHash).filter(Boolean))
   const now = new Date().toISOString()
+
+  // Subcategorias espelham a planilha: cada categoria do xlsx vira uma subcategoria
+  // com o nome EXATO, sob o macro que o classifier resolveu. Criadas sob demanda.
+  const subs = loadSubCategories()
+  const subByKey = new Map(subs.map(s => [normKey(s.name) + '|' + s.macroCategoryId, s.id]))
+  let subsCreated = 0
+  const ensureSub = (name: string, macroId: string): string | undefined => {
+    const clean = name.trim()
+    if (!clean || !macroId) return undefined
+    const key = normKey(clean) + '|' + macroId
+    const hit = subByKey.get(key)
+    if (hit) return hit
+    const id = newSubCategoryId()
+    subs.push({ id, name: clean, macroCategoryId: macroId, essentiality: 'non_essential', active: true, createdAt: now } as SubCategory)
+    subByKey.set(key, id)
+    subsCreated++
+    return id
+  }
 
   const accounts = new Set<string>()
   const cards = new Set<string>()
@@ -257,10 +260,8 @@ export function importRealFinanceBase(
     if (categoria) categoriesFound.add(categoria)
     const classification = classifyByDescription(descricao, row.tipo, categoria)
 
-    // Resolve subcategoryId from excel category name
-    const excelCatKey = categoria.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    const subName = EXCEL_CAT_TO_SUBNAME[excelCatKey]
-    const subCategoryId = subName ? (subByName.get(subName.toLowerCase()) ?? undefined) : undefined
+    // Subcategoria = nome exato da categoria do xlsx, sob o macro classificado.
+    const subCategoryId = ensureSub(categoria, classification.macroCategoryId)
 
     const formaPagamento = row.formaPagamento.toLowerCase()
     if (formaPagamento === 'cartão' || formaPagamento === 'cartao') {
@@ -326,13 +327,15 @@ export function importRealFinanceBase(
     existingHashes.add(hash)
   }
 
+  if (subsCreated > 0) saveSubCategories(subs)
+
   return {
     transactions: imported,
     result: {
       imported: imported.length,
       skipped,
       duplicates,
-      subcategoriesCreated: 0,
+      subcategoriesCreated: subsCreated,
       accounts: Array.from(accounts).sort(),
       cards: Array.from(cards).sort(),
       categoriesFound: Array.from(categoriesFound).sort(),

@@ -40,12 +40,30 @@ export function CategorySelector({
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 280 })
+  const [dropdownPos, setDropdownPos] = useState<{
+    top?: number; bottom?: number; left: number; width: number; maxHeight: number
+  }>({ top: 0, left: 0, width: 280, maxHeight: 360 })
 
   function openDropdown() {
     if (triggerRef.current) {
       const r = triggerRef.current.getBoundingClientRect()
-      setDropdownPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 260) })
+      const margin = 8
+      const spaceBelow = window.innerHeight - r.bottom - margin
+      const spaceAbove = r.top - margin
+      const desired = 360
+      // Flip upward when there isn't room below and there's more room above —
+      // otherwise the dropdown is clipped off the bottom of the viewport.
+      const openUp = spaceBelow < desired && spaceAbove > spaceBelow
+      const width = Math.max(r.width, 260)
+      // Clamp horizontally so the dropdown never spills off the right/left edge.
+      const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin))
+      setDropdownPos({
+        left,
+        width,
+        top: openUp ? undefined : r.bottom + 4,
+        bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
+        maxHeight: Math.max(180, Math.min(desired, openUp ? spaceAbove : spaceBelow)),
+      })
     }
     setOpen(true)
   }
@@ -212,6 +230,7 @@ export function CategorySelector({
       style={{
         position: 'fixed',
         top: dropdownPos.top,
+        bottom: dropdownPos.bottom,
         left: dropdownPos.left,
         width: dropdownPos.width,
         zIndex: 9999,
@@ -236,7 +255,7 @@ export function CategorySelector({
           }}
         />
       </div>
-      <div style={{ maxHeight: 300, overflowY: 'auto', background: '#FCFBF7' }}>
+      <div style={{ maxHeight: Math.max(120, dropdownPos.maxHeight - 52), overflowY: 'auto', background: '#FCFBF7' }}>
         <button
           type="button"
           onClick={() => { onChange(undefined, undefined); closeDropdown(); setSearch('') }}

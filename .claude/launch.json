@@ -7,6 +7,13 @@
       "runtimeArgs": ["-c", "npx vite --port ${PORT:-5175}"],
       "autoPort": true,
       "cwd": "finance-app"
+    },
+    {
+      "name": "finance-app (preview prod)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "npx vite preview --port ${PORT:-4173}"],
+      "autoPort": true,
+      "cwd": "finance-app"
     }
   ]
 }

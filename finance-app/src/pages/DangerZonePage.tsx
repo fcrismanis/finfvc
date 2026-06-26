@@ -4,6 +4,7 @@ import { DATA_PROVIDER } from '../config/env'
 import { findAllDuplicateGroups, type AllDuplicateGroup } from '../utils/transactionDedupe'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
+import { getDecompressed, setCompressed } from '../utils/lzStorage'
 import type { Transaction } from '../types'
 
 // ── Bill payment fix ──────────────────────────────────────────────────────────
@@ -33,14 +34,14 @@ function BillPaymentFixPanel() {
   function applyFix() {
     if (DATA_PROVIDER === 'supabase') return
     setApplying(true)
-    const raw = localStorage.getItem('finance_transactions')
+    const raw = getDecompressed('finance_transactions')
     if (!raw) { setApplying(false); return }
 
     const all: Transaction[] = JSON.parse(raw)
 
     // Backup before mutating
     const backupKey = `finance_transactions_backup_bilfix_${Date.now()}`
-    localStorage.setItem(backupKey, raw)
+    setCompressed(backupKey, raw)
 
     const candidateIds = new Set(candidates.map(t => t.id))
     const now = new Date().toISOString()
@@ -59,7 +60,7 @@ function BillPaymentFixPanel() {
       }
     })
 
-    localStorage.setItem('finance_transactions', JSON.stringify(updated))
+    setCompressed('finance_transactions', JSON.stringify(updated))
     setApplying(false)
     setDone({ fixed: candidateIds.size })
     setScanned(false)
@@ -261,7 +262,7 @@ function DuplicateCleanupPanel() {
     }
 
     if (DATA_PROVIDER !== 'supabase') {
-      const raw = localStorage.getItem('finance_transactions')
+      const raw = getDecompressed('finance_transactions')
       if (raw) {
         let txns: Transaction[] = JSON.parse(raw)
         const byId = new Map(txns.map(t => [t.id, t]))
@@ -291,7 +292,7 @@ function DuplicateCleanupPanel() {
           }
         }
         txns = Array.from(byId.values()).filter(t => !toRemove.has(t.id))
-        localStorage.setItem('finance_transactions', JSON.stringify(txns))
+        setCompressed('finance_transactions', JSON.stringify(txns))
       }
     }
 
@@ -459,7 +460,7 @@ export function DangerZonePage() {
     const newTxs = transactions.filter(t => !txInMonth(t, clearMonth))
     const newBudgets = budgets.filter(b => !b.referenceMonth.startsWith(clearMonth))
     const newClosings = closings.filter(c => c.month !== clearMonth)
-    localStorage.setItem('finance_transactions', JSON.stringify(newTxs))
+    setCompressed('finance_transactions', JSON.stringify(newTxs))
     localStorage.setItem('finance_budgets', JSON.stringify(newBudgets))
     localStorage.setItem('finance_closings', JSON.stringify(newClosings))
     window.location.reload()

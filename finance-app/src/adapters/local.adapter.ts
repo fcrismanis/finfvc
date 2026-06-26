@@ -1,12 +1,13 @@
 import type { Transaction } from '../types'
 import type { IDataAdapter } from './adapter.interface'
+import { getDecompressed, setCompressed } from '../utils/lzStorage'
 
 const STORAGE_KEY = 'finance_transactions'
 
 export class LocalAdapter implements IDataAdapter {
   getTransactions(): Transaction[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = getDecompressed(STORAGE_KEY)
       if (!raw) return []
       return JSON.parse(raw) as Transaction[]
     } catch {
@@ -24,11 +25,11 @@ export class LocalAdapter implements IDataAdapter {
     )
 
     const merged = [...existing, ...deduped]
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+    setCompressed(STORAGE_KEY, JSON.stringify(merged))
   }
 
   replaceAllTransactions(txns: Transaction[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(txns))
+    setCompressed(STORAGE_KEY, JSON.stringify(txns))
   }
 
   clearTransactions(): void {

@@ -3,6 +3,7 @@
 // Never overwrites non-empty data with empty. Never exposes secrets.
 
 import type { PluggyLocalConnection } from './pluggy.service'
+import { getDecompressed } from '../utils/lzStorage'
 
 export const CONNECTIONS_KEY = 'fin_pluggy_connections'
 export const CONNECTIONS_BACKUP_KEY = 'fin_pluggy_connections_backup'
@@ -140,7 +141,7 @@ function inspectKey(key: string, source: StorageKeyReport['source']): StorageKey
     let looksLikeConnections = false
 
     try {
-      const parsed = JSON.parse(raw)
+      const parsed = JSON.parse(getDecompressed(key) ?? raw)
       isValidJson = true
       if (Array.isArray(parsed)) {
         isArray = true

@@ -237,7 +237,12 @@ const RAW_CATEGORY_MAP: Record<string, Partial<ClassificationResult>> = {
   // Receita operacional — FIT
   'fit': { classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
   'fit - eit6247': { classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
+  'fit - fxs9f24': { type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit', includeInOperationalResult: true },
   // Excel: categorias encontradas no arquivo real
+  'viagem': { classificationType: 'operational_expense', macroCategoryId: 'mac_viagem', includeInOperationalResult: true },
+  'mensalidades': { classificationType: 'operational_expense', macroCategoryId: 'mac_servicos', categoryId: 'cat_mensalidades', includeInOperationalResult: true },
+  'juros de cheque especial': { classificationType: 'debt_cost', macroCategoryId: 'mac_divida', categoryId: 'cat_dividas', includeInOperationalResult: true },
+  'baba': { classificationType: 'operational_expense', macroCategoryId: 'mac_prestadores', includeInOperationalResult: true },
   'investimentos': { classificationType: 'investment', macroCategoryId: 'mac_movfin', categoryId: 'cat_aporte', includeInOperationalResult: false, includeInBudget: false },
   'acessorios': { classificationType: 'operational_expense', macroCategoryId: 'mac_compras', includeInOperationalResult: true },
   'despesa reembolsavel': { classificationType: 'reimbursement', macroCategoryId: 'mac_movfin', includeInOperationalResult: false, includeInBudget: false },
@@ -249,9 +254,19 @@ const RAW_CATEGORY_MAP: Record<string, Partial<ClassificationResult>> = {
   'pagamento de fatura de cartao': { classificationType: 'transfer', macroCategoryId: 'mac_movfin', isInternalTransfer: true, includeInOperationalResult: false, includeInBudget: false },
 }
 
+// RAW_CATEGORY_MAP keys carry accents (e.g. 'alimentação'), but the lookup key is
+// accent-stripped — so accented categories silently missed the map and fell to
+// fallback. Index the map by accent-stripped key so both sides line up.
+const NORM_CATEGORY_MAP: Record<string, Partial<ClassificationResult>> = Object.fromEntries(
+  Object.entries(RAW_CATEGORY_MAP).map(([k, v]) => [
+    k.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, ''),
+    v,
+  ]),
+)
+
 function classifyByRawCategory(rawCategory: string, rawType: string): ClassificationResult | null {
   const key = rawCategory.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const override = RAW_CATEGORY_MAP[key]
+  const override = NORM_CATEGORY_MAP[key]
   if (!override) return null
 
   const isIncome = ['operational_income', 'extraordinary_income', 'redemption'].includes(override.classificationType ?? '')

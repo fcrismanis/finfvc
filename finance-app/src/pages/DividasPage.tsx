@@ -127,7 +127,7 @@ export function DividasPage() {
             <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Financiamentos / Dívidas</h1>
             <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>Financiamentos cadastrados + custo de dívida nos lançamentos</div>
           </div>
-          <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, padding: '8px 14px' }} onClick={openNew}>
+          <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, padding: '8px 14px' }} onClick={openNew}>
             <Plus size={14} /> Novo financiamento
           </button>
         </div>
@@ -354,8 +354,8 @@ export function DividasPage() {
             </FinField>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 2 }}>
-              <button className="btn-ghost" onClick={() => { setModalOpen(false); setEditingId(null) }}>Cancelar</button>
-              <button className="btn-primary" onClick={handleSaveFin} disabled={!form.nome.trim()}>
+              <button className="btn btn-secondary" onClick={() => { setModalOpen(false); setEditingId(null) }}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSaveFin} disabled={!form.nome.trim()}>
                 {editingId ? 'Salvar' : 'Adicionar'}
               </button>
             </div>

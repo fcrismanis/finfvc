@@ -406,7 +406,11 @@ export function mapPluggyToTransactions(
     if (picked.sourceField === 'unknown') missingFinancialDateCount++
     dateConfidenceCounts[picked.confidence]++
     const financialDate = picked.date
-    const competenceDate = normalizeFinancialDate(ptx.competenceDate ?? picked.rawValue, financialDate)
+    // Competência = data real do lançamento (= data da compra), igual à planilha Artha
+    // (Data == Data Competência em 99,5%; cartão sempre igual). NÃO usar a competenceDate
+    // do Pluggy: p/ cartão ela vem como o mês da FATURA, jogando a compra no mês errado
+    // (o ledger filtra por competenceDate). paymentDate guarda quando a fatura é paga.
+    const competenceDate = financialDate
     const paymentDate = ptx.paymentDate ? normalizeFinancialDate(ptx.paymentDate, '') : undefined
     const importHash = ptx.providerCode
       ? `pluggy_${ptx.providerCode}`

@@ -236,6 +236,32 @@ body {
 .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 6px; gap: 4px; }
 .btn-lg { font-size: 14px; padding: 10px 20px; border-radius: 9px; }
 
+/* Form field — shared by modals (Patrimônio, Financiamentos). */
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+.input:focus { border-color: var(--ink); }
+.input::placeholder { color: var(--faint); }
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8578' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
 /* ── Table / Ledger ── */
 .table-th {
   font-family: var(--mono);
