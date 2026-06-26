@@ -1,10 +1,12 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useDashboard } from '../hooks/useDashboard'
 import { ClarityFunnel } from '../components/dashboard/ClarityFunnel'
 import { DataQualityCard } from '../components/dashboard/DataQualityCard'
 import { IntelligenceCard } from '../components/dashboard/IntelligenceCard'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
+import { MONTHS_PT } from '../utils/months'
 import type { BudgetComparison, AlertItem, TopTransaction } from '../types'
 import type { FunnelStep } from '../utils/funnelSteps'
 import type { NavFilter } from '../App'
@@ -16,7 +18,7 @@ interface Props {
 }
 
 export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
-  const { summary, funnelSteps, budgetComparison, alerts, topExpenses } = useDashboard(selectedMonth)
+  const { summary, funnelSteps, budgetComparison, alerts, topExpenses, expenseBreakdown, trend } = useDashboard(selectedMonth)
 
   const isCurrent = selectedMonth === currentYearMonth()
   const now = new Date()
@@ -135,6 +137,18 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
           <AlertsCard alerts={alerts} isPartial={isCurrent} daysLeft={daysLeft} />
           <TopCard data={topExpenses} onNavigate={onNavigate} />
         </div>
+
+        {/* ── Insights IA (Artha-style purple box) ── */}
+        <InsightsCard summary={summary} expenseBreakdown={expenseBreakdown} trend={trend} isCurrent={isCurrent} />
+
+        {/* ── 2 gráficos: Resumo Mensal + Gastos por Categoria ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+          <ResumoMensalChart trend={trend} />
+          <GastosCategoriaChart expenseBreakdown={expenseBreakdown} />
+        </div>
+
+        {/* ── Essenciais x Não Essenciais ── */}
+        <EssenciaisChart budgetComparison={budgetComparison} />
 
         {/* ── Inteligência financeira ── */}
         <IntelligenceCard month={selectedMonth} onNavigate={onNavigate} />
@@ -319,6 +333,130 @@ function TopCard({ data, onNavigate }: { data: TopTransaction[]; onNavigate: (r:
           </div>
         ))
       )}
+    </div>
+  )
+}
+
+/* ── Insights IA ── */
+function InsightsCard({ summary, expenseBreakdown, trend, isCurrent }: {
+  summary: { operationalIncome: number; totalExpenses: number; operationalResult: number }
+  expenseBreakdown: Array<{ name: string; total: number; percentage: number }>
+  trend: Array<{ month: string; operationalIncome: number; totalExpenses: number; operationalResult: number }>
+  isCurrent: boolean
+}) {
+  const topCat = expenseBreakdown.slice().sort((a, b) => b.total - a.total)[0]
+  const prevMonthTrend = trend.at(-2)
+  const resultDiff = prevMonthTrend ? summary.operationalResult - prevMonthTrend.operationalResult : null
+  const isPositive = summary.operationalResult >= 0
+  const bullets: string[] = []
+  if (topCat) bullets.push(`Categoria que mais consome: ${topCat.name} (${topCat.percentage.toFixed(0)}% das despesas).`)
+  if (isPositive) bullets.push('Saldo positivo! Continue assim.')
+  else bullets.push(`Saldo negativo de ${formatBRL(Math.abs(summary.operationalResult))}. Revise as despesas.`)
+  if (resultDiff !== null) {
+    if (resultDiff > 0) bullets.push(`Resultado ${formatBRL(resultDiff)} melhor que o mês anterior.`)
+    else if (resultDiff < 0) bullets.push(`Resultado ${formatBRL(Math.abs(resultDiff))} pior que o mês anterior.`)
+  }
+  if (isCurrent) bullets.push('Mês em andamento — valores parciais.')
+  return (
+    <div className="card" style={{ padding: '18px 20px', background: '#f5f0ff', border: '1px solid #e0d4ff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 20 }}>✨</span>
+        <h3 style={{ fontSize: 14, fontWeight: 750, color: '#6b21a8' }}>Insights do mês</h3>
+      </div>
+      <ul style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, margin: 0 }}>
+        {bullets.map((b, i) => (
+          <li key={i} style={{ fontSize: 13, color: '#4c1d95', lineHeight: 1.5 }}>{b}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/* ── Resumo Mensal (barra) ── */
+function ResumoMensalChart({ trend }: { trend: Array<{ month: string; operationalIncome: number; totalExpenses: number }> }) {
+  const data = trend.slice(-6).map(t => {
+    const [, m] = t.month.split('-').map(Number)
+    return { name: MONTHS_PT[m - 1], Receitas: Math.round(t.operationalIncome), Despesas: Math.round(t.totalExpenses) }
+  })
+  return (
+    <div className="card" style={{ padding: '18px 20px' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 16 }}>Resumo Mensal</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={data} barSize={14} barGap={4}>
+          <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--faint)' }} axisLine={false} tickLine={false} />
+          <YAxis hide />
+          <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} />
+          <Bar dataKey="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/* ── Gastos por Categoria (pizza) ── */
+const PIE_COLORS = ['#6366f1','#f59e0b','#22c55e','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6']
+function GastosCategoriaChart({ expenseBreakdown }: { expenseBreakdown: Array<{ name: string; total: number; color: string }> }) {
+  const top = expenseBreakdown.slice().sort((a, b) => b.total - a.total).slice(0, 8)
+  const data = top.map((d, i) => ({ name: d.name, value: Math.round(d.total), fill: PIE_COLORS[i % PIE_COLORS.length] }))
+  if (data.length === 0) return null
+  return (
+    <div className="card" style={{ padding: '18px 20px' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 16 }}>Gastos por Categoria</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <PieChart>
+          <Pie data={data} dataKey="value" cx="50%" cy="50%" outerRadius={75} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent??0)*100).toFixed(0)}%`} labelLine={false} style={{ fontSize: 10 }}>
+            {data.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+          </Pie>
+          <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/* ── Essenciais x Não Essenciais (donut) ─────────────────────────────────────
+   Essenciais = categorias com orçamento definido (planned>0) → controle ativo.
+   Não Essenciais = gastos sem orçamento ou acima do planejado (variável).         */
+function EssenciaisChart({ budgetComparison }: { budgetComparison: BudgetComparison[] }) {
+  const total = budgetComparison.reduce((s, d) => s + d.realized, 0)
+  if (total === 0) return null
+  const ess = budgetComparison.filter(d => d.planned > 0).reduce((s, d) => s + Math.min(d.realized, d.planned), 0)
+  const nonEss = total - ess
+  const essP = total > 0 ? Math.round(ess / total * 100) : 0
+  const nonP = 100 - essP
+  const data = [
+    { name: `Essenciais ${essP}%`, value: Math.round(ess), fill: '#22c55e' },
+    { name: `Não Essenciais ${nonP}%`, value: Math.round(nonEss), fill: '#f59e0b' },
+  ]
+  return (
+    <div className="card" style={{ padding: '18px 20px' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Essenciais × Não Essenciais</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <ResponsiveContainer width={160} height={160}>
+          <PieChart>
+            <Pie data={data} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3}>
+              {data.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+            </Pie>
+            <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {data.map(d => (
+            <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.fill, flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{d.name}</p>
+                <p style={{ fontSize: 11, color: 'var(--faint)' }}>{formatBRL(d.value)}</p>
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+            <p style={{ fontSize: 11, color: 'var(--faint)' }}>Total despesas</p>
+            <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>{formatBRL(total)}</p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

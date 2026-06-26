@@ -39,7 +39,7 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
 
   const totalPlanned = monthBudgets.reduce((s, b) => s + b.plannedAmount, 0)
   const totalRealized = realized.reduce((s, m) => s + m.total, 0)
-  const totalDev = totalRealized - totalPlanned
+  // totalDev not used directly (computed inline)
 
   function startEdit(macroCategoryId: string) {
     const existing = monthBudgets.find(b => b.macroCategoryId === macroCategoryId)
@@ -156,7 +156,7 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
     return { macro, plannedAmount, realizedAmount, dev, devPct, status, isEditing: editingId === macroId, avgLast3m }
   }
 
-  const devColor = totalDev > 0 ? 'var(--crit)' : 'var(--pos)'
+  // devColor now inline in IIFE below
 
   return (
     <main className="page-shell">
@@ -186,26 +186,53 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
           </div>
         </div>
 
-        {/* ── Summary cards ── */}
-        <div className="stats-grid-3">
-          <BudgetSummaryCard label="Planejado" value={formatBRL(totalPlanned)} color="var(--ink)" />
-          <BudgetSummaryCard
-            label="Realizado"
-            value={formatBRL(totalRealized)}
-            color={totalRealized > totalPlanned ? 'var(--crit)' : 'var(--pos)'}
-          />
-          <BudgetSummaryCard
-            label="Desvio total"
-            value={`${totalDev >= 0 ? '+' : ''}${formatBRL(totalDev)}`}
-            color={devColor}
-            soft={totalDev <= 0}
-          />
-        </div>
+        {/* ── Summary cards — 4 cards estilo Artha ── */}
+        {(() => {
+          const saldo = totalPlanned - totalRealized
+          const utilizPct = totalPlanned > 0 ? Math.round((totalRealized / totalPlanned) * 100) : 0
+          const barColor = utilizPct >= 100 ? 'var(--crit)' : utilizPct >= 85 ? 'var(--warn)' : 'var(--pos)'
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                {[
+                  { label: 'Total Orçado', value: formatBRL(totalPlanned), color: 'var(--ink)', icon: '🎯' },
+                  { label: 'Total Realizado', value: formatBRL(totalRealized), color: totalRealized > totalPlanned ? 'var(--crit)' : 'var(--pos)', icon: '💸' },
+                  { label: 'Saldo Disponível', value: formatBRL(Math.max(0, saldo)), color: saldo >= 0 ? 'var(--pos)' : 'var(--crit)', icon: '💰' },
+                  { label: 'Utilização', value: `${utilizPct}%`, color: barColor, icon: '📊' },
+                ].map(c => (
+                  <div key={c.label} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 22 }}>{c.icon}</span>
+                    <div>
+                      <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 2 }}>{c.label}</p>
+                      <p style={{ fontSize: 17, fontWeight: 800, color: c.color, fontVariantNumeric: 'tabular-nums' }}>{c.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Barra de progresso global */}
+              {totalPlanned > 0 && (
+                <div className="card" style={{ padding: '14px 18px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Progresso geral do orçamento</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: barColor }}>{utilizPct}%</span>
+                  </div>
+                  <div style={{ height: 10, borderRadius: 5, background: 'var(--well)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(utilizPct, 100)}%`, background: barColor, borderRadius: 5, transition: 'width .3s' }} />
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {/* ── Actions ── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            + Adicionar meta
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={handleCopyPrev}>
-            <Copy size={12} /> Copiar do mês anterior
+            <Copy size={12} /> Copiar de outro mês
           </button>
           <button className="btn btn-secondary btn-sm" onClick={handleSuggest}>
             <Lightbulb size={12} /> Sugerir pela média
@@ -267,9 +294,24 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
                             <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>{macro.name}</span>
                           )}
                         </div>
+                        {/* Badge de status — estilo Artha */}
+                        {row.status === 'critical' && row.plannedAmount > 0 && (
+                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#fdecea', color: 'var(--crit)', border: '1px solid #f5c6c2', verticalAlign: 'middle' }}>⚠ Atenção</span>
+                        )}
+                        {row.status === 'warning' && row.plannedAmount > 0 && (
+                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#fef3c7', color: 'var(--warn)', border: '1px solid #fde68a', verticalAlign: 'middle' }}>No limite</span>
+                        )}
+                        {row.status === 'ok' && row.plannedAmount > 0 && row.realizedAmount > 0 && (
+                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#e6f9f0', color: 'var(--pos)', border: '1px solid #bbf7d0', verticalAlign: 'middle' }}>✓ Ok</span>
+                        )}
                         {row.realizedAmount > 0 && (
-                          <div className="bbar" style={{ marginTop: 6, width: '100%' }}>
-                            <i style={{ width: `${barPct}%`, background: barColor }} />
+                          <div style={{ marginTop: 6, width: '100%', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--well)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(barPct, 100)}%`, background: barColor, borderRadius: 3, transition: 'width .3s' }} />
+                            </div>
+                            {row.plannedAmount > 0 && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: barColor, minWidth: 34, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{barPct.toFixed(0)}%</span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -374,14 +416,7 @@ export function Budget({ selectedMonth, onNavigate }: Props) {
   )
 }
 
-function BudgetSummaryCard({ label, value, color, soft }: { label: string; value: string; color: string; soft?: boolean }) {
-  return (
-    <div className="card" style={{ padding: '14px 18px', ...(soft ? { background: 'var(--accent-soft)' } : {}) }}>
-      <span className="eyebrow" style={{ display: 'block', marginBottom: 7 }}>{label}</span>
-      <p className="num" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', color }}>{value}</p>
-    </div>
-  )
-}
+
 
 const CONF_COLOR: Record<string, string> = {
   high: 'var(--pos)',

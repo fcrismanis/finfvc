@@ -6,7 +6,7 @@ import { getAllMacroCategories } from '../services/financeParentCategories.servi
 import { CATEGORIES } from '../config/categories'
 import { CategorySelector, TxCatIcon } from '../components/CategorySelector'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth } from '../utils/date'
+import { getCompetenceMonth, currentFinancialDate } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
 import {
@@ -87,7 +87,7 @@ function txIsNeutral(t: Transaction, neutralMacroIds: Set<string>): boolean {
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
-  const { transactions, isDemo, updateTransaction, subCategories } = useData()
+  const { transactions, isDemo, updateTransaction, appendTransactions, subCategories } = useData()
 
   const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
@@ -112,6 +112,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   })
   const [modalTx, setModalTx] = useState<Transaction | null>(null)
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
+  const [isNewTx, setIsNewTx] = useState(false)
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
@@ -334,8 +335,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }, [pageItems])
 
   function openModal(tx: Transaction) {
+    setIsNewTx(false)
     setModalTx(tx)
     setModalPatch({
+      type: tx.type,
+      amount: tx.amount,
       description: tx.description,
       status: tx.status,
       classificationType: tx.classificationType,
@@ -347,9 +351,72 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     })
   }
 
-  function saveModal() {
+  function openNewModal() {
+    const today = currentFinancialDate()
+    const blank: Transaction = {
+      id: `manual_${Date.now().toString(36)}`,
+      description: '',
+      originalDescription: '',
+      amount: 0,
+      type: 'expense',
+      classificationType: 'operational_expense',
+      transactionDate: today,
+      competenceDate: today,
+      status: 'paid',
+      accountId: '',
+      isRecurring: false,
+      includeInOperationalResult: true,
+      includeInCashflow: true,
+      includeInBudget: true,
+      isInternalTransfer: false,
+      isAdjustment: false,
+      paymentMethod: 'account' as const,
+      origin: 'manual_entry' as const,
+      source: 'manual_entry',
+      needsReview: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    setIsNewTx(true)
+    setModalTx(blank)
+    setModalPatch({ type: 'expense', amount: 0, description: '', status: 'paid', competenceDate: today, tags: [] })
+  }
+
+  async function saveModal() {
     if (!modalTx) return
+    if (isNewTx) {
+      const now = new Date().toISOString()
+      const amt = Math.abs(modalPatch.amount ?? 0)
+      if (!modalPatch.description?.trim() || amt === 0) return
+      const macro = modalPatch.macroCategoryId ? allMacros.find(m => m.id === modalPatch.macroCategoryId) : undefined
+      const newTx: Transaction = {
+        ...modalTx,
+        description: modalPatch.description!.trim(),
+        amount: amt,
+        type: modalPatch.type ?? 'expense',
+        competenceDate: modalPatch.competenceDate ?? currentFinancialDate(),
+        transactionDate: modalPatch.competenceDate ?? currentFinancialDate(),
+        status: modalPatch.status ?? 'paid',
+        macroCategoryId: modalPatch.macroCategoryId,
+        subCategoryId: modalPatch.subCategoryId,
+        notes: modalPatch.notes,
+        tags: (modalPatch.tags as string[] | undefined) ?? [],
+        classificationType: macro?.classificationType ?? (modalPatch.type === 'income' ? 'operational_income' : 'operational_expense'),
+        includeInOperationalResult: macro ? macro.displayInResult : true,
+        includeInCashflow: macro ? macro.displayInCashflow : true,
+        includeInBudget: macro ? macro.displayInBudget : true,
+        manualCategoryOverride: !!modalPatch.macroCategoryId,
+        manualEditedAt: now,
+        categorySuggestionSource: modalPatch.macroCategoryId ? 'manual' : 'none',
+        updatedAt: now,
+      }
+      await appendTransactions([newTx])
+      setModalTx(null)
+      setIsNewTx(false)
+      return
+    }
     const patch = { ...modalPatch }
+    if (patch.amount !== undefined) patch.amount = Math.abs(patch.amount)
     const catChanged = patch.macroCategoryId !== modalTx.macroCategoryId
     const subChanged = patch.subCategoryId !== modalTx.subCategoryId
     if (catChanged || subChanged) {
@@ -366,8 +433,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           patch.includeInOperationalResult = macro.displayInResult
           patch.includeInCashflow = macro.displayInCashflow
           patch.includeInBudget = macro.displayInBudget
-          // Sync type with macro so income macros always count as income.
-          // Neutras keep their original type — they never count as Receita/Despesa.
           if (!macro.isNeutral) {
             if (macro.tabType === 'income') patch.type = 'income'
             else if (macro.tabType === 'expense') patch.type = 'expense'
@@ -538,6 +603,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               {summary.total} {summary.total === 1 ? 'lançamento' : 'lançamentos'} no filtro atual
             </div>
           </div>
+          <button
+            className="btn btn-primary"
+            onClick={openNewModal}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 9 }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
+            Novo Lançamento
+          </button>
           {isDemo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-soft)', borderRadius: 9, padding: '7px 13px', fontSize: 12, color: 'var(--ink)' }}>
               <FlaskConical size={12} />
@@ -1218,8 +1291,8 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.02em' }}>
-                  Editar lançamento
-                  {modalTx.installmentCurrent && modalTx.installmentTotal && (
+                  {isNewTx ? 'Novo Lançamento' : 'Editar lançamento'}
+                  {!isNewTx && modalTx.installmentCurrent && modalTx.installmentTotal && (
                     <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 8, padding: '2px 7px', borderRadius: 4, background: 'var(--accent-soft)', color: 'var(--accent)', verticalAlign: 'middle' }}>
                       Parcela {modalTx.installmentCurrent}/{modalTx.installmentTotal}
                     </span>
@@ -1231,34 +1304,72 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               </button>
             </div>
 
-            {/* Type toggle */}
-            <div style={{ display: 'flex', gap: 6, padding: '4px', background: 'var(--well)', borderRadius: 9, border: '1px solid var(--line)' }}>
-              {(['income', 'expense'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setModalPatch(p => ({ ...p, type: t }))}
-                  style={{
-                    flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
-                    fontSize: 12, fontWeight: 700, fontFamily: 'var(--ui)',
-                    background: (modalPatch.type ?? modalTx.type) === t ? 'var(--card-bg)' : 'transparent',
-                    color: (modalPatch.type ?? modalTx.type) === t
-                      ? (t === 'income' ? 'var(--pos)' : 'var(--crit)')
-                      : 'var(--faint)',
-                    boxShadow: (modalPatch.type ?? modalTx.type) === t ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
-                    transition: 'all .15s',
-                  }}
-                >
-                  {t === 'income' ? 'Receita' : 'Despesa'}
-                </button>
-              ))}
+            {/* Type toggle — Receita / Despesa / Transferência */}
+            <div style={{ display: 'flex', gap: 4, padding: '4px', background: 'var(--well)', borderRadius: 9, border: '1px solid var(--line)' }}>
+              {([
+                { value: 'income', label: 'Receita', activeColor: 'var(--pos)' },
+                { value: 'expense', label: 'Despesa', activeColor: 'var(--crit)' },
+                { value: 'transfer', label: 'Transferência', activeColor: 'var(--faint)' },
+              ] as const).map(t => {
+                const currentType = modalPatch.type ?? modalTx.type
+                const isTransfer = modalPatch.classificationType === 'transfer' || modalTx.classificationType === 'transfer'
+                const active = t.value === 'transfer' ? (isTransfer && currentType !== 'income') : (currentType === t.value && !isTransfer)
+                return (
+                  <button
+                    key={t.value}
+                    onClick={() => {
+                      if (t.value === 'transfer') {
+                        setModalPatch(p => ({ ...p, type: 'expense', classificationType: 'transfer', includeInOperationalResult: false, isInternalTransfer: true }))
+                      } else {
+                        setModalPatch(p => ({ ...p, type: t.value as 'income'|'expense', classificationType: t.value === 'income' ? 'operational_income' : 'operational_expense', isInternalTransfer: false }))
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: '7px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, fontFamily: 'var(--ui)',
+                      background: active ? 'var(--card-bg)' : 'transparent',
+                      color: active ? t.activeColor : 'var(--faint)',
+                      boxShadow: active ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
+                      transition: 'all .15s',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <ModalField label="Valor *">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={modalPatch.amount ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+                    className="input"
+                    placeholder="0,00"
+                    style={{ fontSize: 15, fontWeight: 700 }}
+                  />
+                </ModalField>
+                <ModalField label="Data *">
+                  <input
+                    type="date"
+                    value={modalPatch.competenceDate ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, competenceDate: e.target.value }))}
+                    className="input"
+                    style={{ fontSize: 13 }}
+                  />
+                </ModalField>
+              </div>
+
               <ModalField label="Descrição">
                 <input
                   value={modalPatch.description ?? ''}
                   onChange={e => setModalPatch(p => ({ ...p, description: e.target.value }))}
-                  className="login-field"
+                  className="input"
+                  placeholder="Ex: Supermercado, Salário, Netflix..."
                   style={{ fontSize: 13 }}
                 />
                 {modalTx?.originalDescription && modalTx.originalDescription !== modalPatch.description && (
@@ -1268,28 +1379,40 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 )}
               </ModalField>
 
-              <ModalField label="Data de competência">
-                <input
-                  type="date"
-                  value={modalPatch.competenceDate ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, competenceDate: e.target.value }))}
-                  className="login-field"
-                  style={{ fontSize: 13 }}
-                />
-              </ModalField>
-
-              <ModalField label="Status">
-                <select
-                  value={modalPatch.status ?? ''}
-                  onChange={e => setModalPatch(p => ({ ...p, status: e.target.value as Transaction['status'] }))}
-                  className="ledger-select"
-                  style={{ width: '100%', fontSize: 12 }}
-                >
-                  <option value="paid">Pago</option>
-                  <option value="pending">Pendente</option>
-                  <option value="cancelled">Cancelado</option>
-                </select>
-              </ModalField>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <ModalField label="Status">
+                  <select
+                    value={modalPatch.status ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, status: e.target.value as Transaction['status'] }))}
+                    className="input"
+                    style={{ fontSize: 12 }}
+                  >
+                    <option value="paid">✓ Pago</option>
+                    <option value="pending">⏳ Pendente</option>
+                    <option value="cancelled">✕ Cancelado</option>
+                  </select>
+                </ModalField>
+                <ModalField label="Classificação">
+                  <select
+                    value={modalPatch.classificationType ?? modalTx?.classificationType ?? ''}
+                    onChange={e => setModalPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
+                    className="input"
+                    style={{ fontSize: 12 }}
+                  >
+                    <option value="">— automático —</option>
+                    <option value="operational_income">Receita operacional</option>
+                    <option value="extraordinary_income">Receita eventual</option>
+                    <option value="operational_expense">Despesa operacional</option>
+                    <option value="debt_cost">Custo de dívida</option>
+                    <option value="investment">Investimento</option>
+                    <option value="redemption">Resgate</option>
+                    <option value="transfer">Transferência</option>
+                    <option value="reimbursement">Reembolso</option>
+                    <option value="neutral">Neutra</option>
+                    <option value="adjustment">Ajuste</option>
+                  </select>
+                </ModalField>
+              </div>
 
               <ModalField label="Categoria">
                 <CategorySelector
@@ -1327,26 +1450,27 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 tags={(modalPatch.tags as string[] | undefined) ?? []}
                 onChange={tags => setModalPatch(p => ({ ...p, tags }))}
               />
-
               <ModalField label="Observações">
                 <textarea
                   value={modalPatch.notes ?? ''}
                   onChange={e => setModalPatch(p => ({ ...p, notes: e.target.value }))}
-                  rows={3}
+                  rows={2}
                   placeholder="Notas opcionais…"
-                  style={{
-                    width: '100%', fontSize: 12.5, lineHeight: 1.5,
-                    border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px',
-                    resize: 'none', outline: 'none', background: 'var(--paper)',
-                    fontFamily: 'var(--ui)', boxSizing: 'border-box', color: 'var(--ink)',
-                  } as React.CSSProperties}
+                  className="input"
+                  style={{ resize: 'none', fontFamily: 'var(--ui)' }}
                 />
               </ModalField>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
-              <button className="btn btn-primary" onClick={saveModal}>Salvar alterações</button>
-              <button className="btn btn-secondary" onClick={() => setModalTx(null)}>Cancelar</button>
+            <div style={{ display: 'flex', gap: 10, paddingTop: 4, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => { setModalTx(null); setIsNewTx(false) }}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={saveModal}
+                disabled={isNewTx && (!modalPatch.description?.trim() || !modalPatch.amount)}
+              >
+                {isNewTx ? 'Criar lançamento' : 'Salvar alterações'}
+              </button>
             </div>
           </div>
         </div>
