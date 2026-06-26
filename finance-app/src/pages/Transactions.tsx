@@ -87,7 +87,7 @@ function txIsNeutral(t: Transaction, neutralMacroIds: Set<string>): boolean {
 }
 
 export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilter }: Props) {
-  const { transactions, isDemo, updateTransaction, appendTransactions, subCategories } = useData()
+  const { transactions, isDemo, updateTransaction, updateTransactions, appendTransactions, subCategories } = useData()
 
   const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
@@ -114,6 +114,13 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [modalPatch, setModalPatch] = useState<Partial<Transaction>>({})
   const [isNewTx, setIsNewTx] = useState(false)
   const [reviewPill, setReviewPill] = useState<ReviewReason | 'all'>('all')
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkCatOpen, setBulkCatOpen] = useState(false)
+  const [bulkCatMacro, setBulkCatMacro] = useState<string | undefined>(undefined)
+  const [bulkCatSub, setBulkCatSub] = useState<string | undefined>(undefined)
+  const [bulkPayOpen, setBulkPayOpen] = useState(false)
+  const [bulkPayMethod, setBulkPayMethod] = useState<string>('')
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
@@ -526,6 +533,77 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   }
 
 
+  // ── Bulk actions ─────────────────────────────────────────────────────────────
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === pageItems.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(pageItems.map(t => t.id)))
+    }
+  }
+
+  async function bulkApplyCategory() {
+    if (!bulkCatMacro || selectedIds.size === 0) return
+    const macro = allMacros.find(m => m.id === bulkCatMacro)
+    const patches = Array.from(selectedIds).map(id => ({
+      id,
+      patch: {
+        macroCategoryId: bulkCatMacro,
+        subCategoryId: bulkCatSub,
+        classificationType: macro?.classificationType,
+        includeInOperationalResult: macro ? macro.displayInResult : true,
+        includeInCashflow: macro ? macro.displayInCashflow : true,
+        includeInBudget: macro ? macro.displayInBudget : true,
+        manualCategoryOverride: true,
+        manualEditedAt: new Date().toISOString(),
+        categorySuggestionSource: 'manual' as const,
+        needsReview: false,
+      } as Partial<Transaction>,
+    }))
+    await updateTransactions(patches, { markManual: true })
+    setBulkCatOpen(false)
+    setBulkCatMacro(undefined)
+    setBulkCatSub(undefined)
+    setSelectedIds(new Set())
+  }
+
+  async function bulkMarkConferido() {
+    if (selectedIds.size === 0) return
+    const patches = Array.from(selectedIds).map(id => ({
+      id,
+      patch: { status: 'paid' as const, needsReview: false },
+    }))
+    await updateTransactions(patches, { markManual: false })
+    setSelectedIds(new Set())
+  }
+
+  async function bulkApplyPayMethod() {
+    if (!bulkPayMethod || selectedIds.size === 0) return
+    const patches = Array.from(selectedIds).map(id => ({
+      id,
+      patch: { paymentMethod: bulkPayMethod as Transaction['paymentMethod'] },
+    }))
+    await updateTransactions(patches, { markManual: false })
+    setBulkPayOpen(false)
+    setBulkPayMethod('')
+    setSelectedIds(new Set())
+  }
+
+  function bulkDelete() {
+    if (selectedIds.size === 0) return
+    if (!window.confirm(`Excluir ${selectedIds.size} lançamento(s) selecionado(s)?`)) return
+    Array.from(selectedIds).forEach(id => updateTransaction(id, { status: 'cancelled' }))
+    setSelectedIds(new Set())
+  }
+
   function csvCell(v: string): string {
     const s = String(v ?? '')
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -594,6 +672,36 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <ArrowLeft size={13} />
             Voltar para {navFilter?.sourceLabel ?? 'tela anterior'}
           </button>
+        )}
+
+        {/* ── Barra de ações em lote (Artha-style) ── */}
+        {selectedIds.size > 0 && (
+          <div style={{
+            position: 'sticky', top: 0, zIndex: 90,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            padding: '10px 18px', background: 'var(--card-bg)',
+            border: '1px solid var(--line)', borderRadius: 12,
+            boxShadow: '0 4px 16px rgba(0,0,0,.1)',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
+              {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={bulkMarkConferido} style={{ display:'flex',alignItems:'center',gap:5 }}>
+              <Eye size={13} /> Marcar como conferidos ({selectedIds.size})
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setBulkCatOpen(true); setBulkCatMacro(undefined); setBulkCatSub(undefined) }}>
+              Alterar Categoria
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setBulkPayOpen(true)}>
+              Alterar Forma de Pagamento
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={bulkDelete} style={{ color: 'var(--crit)' }}>
+              <Trash2 size={13} /> Excluir
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--faint)',padding:4,display:'flex' }}>
+              <X size={16} />
+            </button>
+          </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -956,6 +1064,15 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 540 }}>
                 <thead>
                   <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th style={{ width: 36, padding: '9px 10px' }}>
+                      <input
+                        type="checkbox"
+                        checked={pageItems.length > 0 && selectedIds.size === pageItems.length}
+                        onChange={toggleSelectAll}
+                        style={{ cursor: 'pointer', width: 14, height: 14 }}
+                        title="Selecionar todos"
+                      />
+                    </th>
                     <th className="table-th" style={{ width: 64, cursor: 'pointer', userSelect: 'none' }} onClick={() => {
                       if (sortField === 'competenceDate') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
                       else { setSortField('competenceDate'); setSortDir('desc') }
@@ -989,7 +1106,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                       {/* Day group header with right-aligned net total */}
                       <tr style={{ background: 'var(--well)' }}>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           style={{
                             padding: '5px 16px',
                             fontSize: 11, fontWeight: 700, color: 'var(--ink-2)',
@@ -1023,8 +1140,18 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                             key={tx.id}
                             data-transaction-id={tx.id}
                             className="table-row"
-                            style={{ opacity: tx.status === 'pending' ? 0.65 : 1, borderLeft: needsAttention ? '3px solid var(--warn, #f59e0b)' : '3px solid transparent' }}
+                            style={{ opacity: tx.status === 'pending' ? 0.65 : 1, borderLeft: selectedIds.has(tx.id) ? '3px solid var(--accent)' : needsAttention ? '3px solid var(--warn, #f59e0b)' : '3px solid transparent', background: selectedIds.has(tx.id) ? 'var(--accent-soft)' : undefined }}
                           >
+                            {/* Checkbox column */}
+                            <td className="table-td" style={{ width: 36, paddingRight: 4 }} onClick={e => { e.stopPropagation(); toggleSelect(tx.id) }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(tx.id)}
+                                onChange={() => toggleSelect(tx.id)}
+                                onClick={e => e.stopPropagation()}
+                                style={{ cursor: 'pointer', width: 14, height: 14 }}
+                              />
+                            </td>
                             {/* Date column */}
                             <td className="table-td" style={{ width: 64, paddingRight: 4, whiteSpace: 'nowrap' }}>
                               <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{rowDay}</div>
@@ -1211,7 +1338,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   return (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--line)' }}>
-                        <td colSpan={2} className="table-td" style={{ fontWeight: 700, fontSize: 12, color: 'var(--faint)', paddingTop: 10 }}>
+                        <td colSpan={3} className="table-td" style={{ fontWeight: 700, fontSize: 12, color: 'var(--faint)', paddingTop: 10 }}>
                           Total filtrado ({filtered.length})
                         </td>
                         <td className="table-td table-th-right" style={{ fontWeight: 800, fontSize: 13, color: totalColor, paddingTop: 10, whiteSpace: 'nowrap' }}>
@@ -1488,6 +1615,63 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <strong>{similarToast.count}</strong> lançamento{similarToast.count !== 1 ? 's' : ''} semelhante{similarToast.count !== 1 ? 's' : ''} sem categoria {similarToast.count !== 1 ? 'receberam' : 'recebeu'} <strong>{similarToast.category}</strong> automaticamente.
           </p>
           <button onClick={() => setSimilarToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {/* ── Modal: Alterar Categoria em lote ── */}
+      {bulkCatOpen && (
+        <div style={{ position:'fixed', inset:0, zIndex:300, background:'rgba(16,15,10,.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => e.target === e.currentTarget && setBulkCatOpen(false)}>
+          <div style={{ background:'var(--card-bg)', borderRadius:14, padding:'24px 28px', width:'100%', maxWidth:400, boxShadow:'0 12px 40px rgba(0,0,0,.22)', display:'flex', flexDirection:'column', gap:16 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <h2 style={{ fontSize:16, fontWeight:800, color:'var(--ink)' }}>Alterar Categoria</h2>
+                <p style={{ fontSize:12, color:'var(--faint)', marginTop:2 }}>Aplicar a {selectedIds.size} lançamento{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}</p>
+              </div>
+              <button onClick={() => setBulkCatOpen(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:4 }}><X size={16} /></button>
+            </div>
+            <CategorySelector
+              macroCategoryId={bulkCatMacro}
+              subCategoryId={bulkCatSub}
+              allMacros={allMacros}
+              subCategories={subCategories}
+              onChange={(macroId, subId) => { setBulkCatMacro(macroId); setBulkCatSub(subId) }}
+              placeholder="Selecione a categoria"
+            />
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setBulkCatOpen(false)}>Cancelar</button>
+              <button className="btn btn-primary" disabled={!bulkCatMacro} onClick={bulkApplyCategory}>Aplicar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Alterar Forma de Pagamento em lote ── */}
+      {bulkPayOpen && (
+        <div style={{ position:'fixed', inset:0, zIndex:300, background:'rgba(16,15,10,.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => e.target === e.currentTarget && setBulkPayOpen(false)}>
+          <div style={{ background:'var(--card-bg)', borderRadius:14, padding:'24px 28px', width:'100%', maxWidth:360, boxShadow:'0 12px 40px rgba(0,0,0,.22)', display:'flex', flexDirection:'column', gap:16 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <h2 style={{ fontSize:16, fontWeight:800, color:'var(--ink)' }}>Alterar Forma de Pagamento</h2>
+                <p style={{ fontSize:12, color:'var(--faint)', marginTop:2 }}>Aplicar a {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}</p>
+              </div>
+              <button onClick={() => setBulkPayOpen(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:4 }}><X size={16} /></button>
+            </div>
+            <select className="input" value={bulkPayMethod} onChange={e => setBulkPayMethod(e.target.value)}>
+              <option value="">— selecione —</option>
+              <option value="account">Conta Bancária</option>
+              <option value="card">Cartão de Crédito</option>
+              <option value="pix">PIX</option>
+              <option value="cash">Dinheiro</option>
+              <option value="boleto">Boleto</option>
+              <option value="debit">Débito</option>
+            </select>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setBulkPayOpen(false)}>Cancelar</button>
+              <button className="btn btn-primary" disabled={!bulkPayMethod} onClick={bulkApplyPayMethod}>Aplicar</button>
+            </div>
+          </div>
         </div>
       )}
 
