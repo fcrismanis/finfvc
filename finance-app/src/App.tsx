@@ -25,27 +25,22 @@ import { useDailyPluggySync } from './hooks/useDailyPluggySync'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard        = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
-const Import           = lazy(() => import('./pages/Import').then(m => ({ default: m.Import })))
 const Transactions     = lazy(() => import('./pages/Transactions').then(m => ({ default: m.Transactions })))
 const Budget           = lazy(() => import('./pages/Budget').then(m => ({ default: m.Budget })))
-const Review           = lazy(() => import('./pages/Review').then(m => ({ default: m.Review })))
-const Closing          = lazy(() => import('./pages/Closing').then(m => ({ default: m.Closing })))
+const RevisaoReconciliacaoPage = lazy(() => import('./pages/RevisaoReconciliacaoPage').then(m => ({ default: m.RevisaoReconciliacaoPage })))
 const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ default: m.Advisor })))
-const FinanceAssistantPage = lazy(() => import('./pages/FinanceAssistantPage').then(m => ({ default: m.FinanceAssistantPage })))
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
 const CategoryRulesPage = lazy(() => import('./pages/CategoryRulesPage').then(m => ({ default: m.CategoryRulesPage })))
 const AccountsPage     = lazy(() => import('./pages/AccountsPage').then(m => ({ default: m.AccountsPage })))
 const CardsPage        = lazy(() => import('./pages/CardsPage').then(m => ({ default: m.CardsPage })))
 const PluggyPage       = lazy(() => import('./pages/PluggyPage').then(m => ({ default: m.PluggyPage })))
-const BackupPage       = lazy(() => import('./pages/BackupPage').then(m => ({ default: m.BackupPage })))
-const DangerZonePage   = lazy(() => import('./pages/DangerZonePage').then(m => ({ default: m.DangerZonePage })))
 const RelatoriosPage   = lazy(() => import('./pages/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })))
-const InvestimentosPage = lazy(() => import('./pages/InvestimentosPage').then(m => ({ default: m.InvestimentosPage })))
-const PatrimonioPage   = lazy(() => import('./pages/PatrimonioPage').then(m => ({ default: m.PatrimonioPage })))
+const PatrimonioInvestimentosPage = lazy(() => import('./pages/PatrimonioInvestimentosPage').then(m => ({ default: m.PatrimonioInvestimentosPage })))
 const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
+const EconomistaPage    = lazy(() => import('./pages/EconomistaPage').then(m => ({ default: m.EconomistaPage })))
 
 const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
 
@@ -141,14 +136,16 @@ function AppShell() {
   function renderPage() {
     switch (activeRoute) {
       case '/':              return <Dashboard selectedMonth={selectedMonth} onNavigate={navigate} onMonthChange={setSelectedMonth} />
-      case '/conectar':      return <Import onNavigate={navigate} />
+      case '/conectar':      { navigate('/pluggy'); return null }
       case '/lancamentos':   return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
       case '/orcamento':     return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
-      case '/revisao':       return <Review onNavigate={navigate} />
-      case '/fechamento':    return <Closing selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/revisao':       return <RevisaoReconciliacaoPage selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/reconciliacao': { navigate('/revisao'); return null }
+      case '/fechamento':    { navigate('/'); return null }
       case '/migrar':        return <MigrationPage />
       case '/consultor':     return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />
-      case '/assistente':    return <FinanceAssistantPage />
+      case '/economista':    return <EconomistaPage selectedMonth={selectedMonth} />
+      case '/assistente':    { navigate('/consultor'); return null }
       case '/configuracoes': return <Settings onNavigate={navigate} />
       case '/categorias':    return <CategoriesPage onNavigate={navigate} />
       case '/subcategorias': { navigate('/categorias'); return null }
@@ -156,13 +153,13 @@ function AppShell() {
       case '/contas':        return <AccountsPage onNavigate={navigate} />
       case '/cartoes':       return <CardsPage onNavigate={navigate} />
       case '/pluggy':        return <PluggyErrorBoundary><PluggyPage /></PluggyErrorBoundary>
-      case '/backup':        return <BackupPage />
-      case '/zona-perigo':   return <DangerZonePage />
+      case '/backup':        { navigate('/configuracoes'); return null }
+      case '/zona-perigo':   { navigate('/configuracoes'); return null }
       // Phase 2 placeholders
       case '/clareza':       return <Placeholder title="Clareza Financeira" description="Visualização avançada do fluxo financeiro da família." />
       case '/futuro':        return <Placeholder title="Futuro" description="Projeção de fluxo de caixa e planejamento de metas." />
-      case '/investimentos': return <InvestimentosPage />
-      case '/patrimonio':    return <PatrimonioPage />
+      case '/investimentos': return <PatrimonioInvestimentosPage initialTab="investimentos" />
+      case '/patrimonio':    return <PatrimonioInvestimentosPage initialTab="patrimonio" />
       case '/dividas':       return <DividasPage />
       case '/lembretes':     return <LembretesPage />
       case '/relatorios':    return <RelatoriosPage selectedMonth={selectedMonth} />

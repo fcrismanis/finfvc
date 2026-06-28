@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import {
-  LayoutDashboard, BarChart2, List, Target, ClipboardCheck, Lock,
-  Calendar, TrendingUp, Home, Bell, Landmark, CreditCard,
-  Tag, Upload, Link2, Bot, Settings,
-  Archive, AlertTriangle, LogOut, X, Wand2, FileBarChart, ChevronDown, Scale,
+  LayoutDashboard, BarChart2, List, Target, ClipboardCheck,
+  Calendar, TrendingUp, Bell, Landmark, CreditCard,
+  Tag, Link2, Bot, Settings,
+  LogOut, X, Wand2, FileBarChart, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { DATA_PROVIDER } from '../../config/env'
@@ -30,11 +30,8 @@ const GESTAO: NavEntry[] = [
   { route: '/lancamentos', label: 'Lançamentos', icon: List },
   { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/relatorios', label: 'Relatórios', icon: FileBarChart },
-  { route: '/reconciliacao', label: 'Reconciliação', icon: Scale },
-  { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
-  { route: '/fechamento', label: 'Fechamento', icon: Lock },
-  { route: '/investimentos', label: 'Investimentos', icon: TrendingUp },
-  { route: '/patrimonio', label: 'Patrimônio', icon: Home },
+  { route: '/revisao', label: 'Revisão & Reconciliação', icon: ClipboardCheck },
+  { route: '/patrimonio', label: 'Patrimônio & Invest.', icon: TrendingUp },
   { route: '/dividas', label: 'Financiamentos / Dívidas', icon: CreditCard },
   { route: '/lembretes', label: 'Lembretes', icon: Bell },
   { route: '/futuro', label: 'Futuro', icon: Calendar, phase2: true },
@@ -46,25 +43,18 @@ const CADASTROS: NavEntry[] = [
   { route: '/categorias', label: 'Categorias', icon: Tag },
 ]
 
-const INTEGRACOES: NavEntry[] = [
-  { route: '/conectar', label: 'Importação', icon: Upload },
-  { route: '/pluggy', label: 'Pluggy', icon: Link2 },
-  { route: '/consultor', label: 'Consultor IA', icon: Bot },
-  { route: '/assistente', label: 'Assistente', icon: Wand2 },
-]
-
 const SISTEMA: NavEntry[] = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
   { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
-  { route: '/backup', label: 'Backup', icon: Archive },
-  { route: '/zona-perigo', label: 'Zona de Perigo', icon: AlertTriangle },
+  { route: '/pluggy', label: 'Importação & Pluggy', icon: Link2 },
+  { route: '/economista', label: 'Economista FIN', icon: Bot },
+  { route: '/consultor', label: 'Consultor IA', icon: Bot },
 ]
 
 const GROUPS = [
   { label: 'Principal', items: PRINCIPAL, defaultOpen: true },
   { label: 'Gestão', items: GESTAO, defaultOpen: true },
   { label: 'Cadastros', items: CADASTROS, defaultOpen: false },
-  { label: 'Integrações', items: INTEGRACOES, defaultOpen: false },
   { label: 'Sistema', items: SISTEMA, defaultOpen: false },
 ]
 
