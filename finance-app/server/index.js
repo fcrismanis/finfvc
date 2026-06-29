@@ -821,11 +821,218 @@ app.post('/api/advisor', async (req, res) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString(), providers: getProviderStatus() }))
 
+// ── Engine Financeira — persistência server-side (paths definidos após __dirname) ─
+
+let ENGINE_FILE, AUDIT_FILE
+// Serão inicializados em initEngineFiles() chamado após __dirname estar disponível
+
+function readEngineConfig() {
+  try { return JSON.parse(readFileSync(ENGINE_FILE, 'utf8')) } catch { return { version: 1, scopes: {} } }
+}
+function writeEngineConfig(data) {
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(ENGINE_FILE, JSON.stringify(data, null, 2))
+}
+function readAudit() {
+  try { return JSON.parse(readFileSync(AUDIT_FILE, 'utf8')) } catch { return [] }
+}
+function appendAudit(entry) {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const log = readAudit()
+  log.unshift({ ...entry, id: Date.now().toString(36), changed_at: new Date().toISOString() })
+  writeFileSync(AUDIT_FILE, JSON.stringify(log.slice(0, 500), null, 2))
+}
+
+// GET /api/engine/config — retorna toda config da engine
+app.get('/api/engine/config', (_req, res) => res.json(readEngineConfig()))
+
+// PUT /api/engine/config — salva toda config
+app.put('/api/engine/config', (req, res) => {
+  const data = req.body
+  if (!data || typeof data !== 'object') return res.status(400).json({ error: 'body inválido' })
+  writeEngineConfig({ ...data, updatedAt: new Date().toISOString() })
+  res.json({ ok: true })
+})
+
+// PATCH /api/engine/config/:scope/:scopeId — atualiza uma regra específica + audit
+app.patch('/api/engine/config/:scope/:scopeId', (req, res) => {
+  const { scope, scopeId } = req.params
+  const { config, note, flag, oldValue, newValue, scopeName } = req.body ?? {}
+  const data = readEngineConfig()
+  if (!data.scopes) data.scopes = {}
+  if (!data.scopes[scope]) data.scopes[scope] = {}
+  data.scopes[scope][scopeId] = { ...data.scopes[scope][scopeId], ...config, updatedAt: new Date().toISOString() }
+  writeEngineConfig(data)
+  appendAudit({ scope, scope_id: scopeId, scope_name: scopeName, flag, old_value: oldValue, new_value: newValue, note, origin: 'ui' })
+  res.json({ ok: true })
+})
+
+// GET /api/engine/audit — últimas 200 entradas
+app.get('/api/engine/audit', (_req, res) => res.json(readAudit().slice(0, 200)))
+
+// ── Agente financeiro com tool use ────────────────────────────────────────────
+
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const FAMILY_ID    = process.env.FAMILY_ID
+
+async function sbQuery(table, filters = {}, select = '*', limit = 2000) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('Supabase não configurado no servidor')
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${select}&family_id=eq.${FAMILY_ID}&limit=${limit}&order=competence_date.desc`
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== null) url += `&${k}=${encodeURIComponent(v)}`
+  }
+  const res = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' } })
+  if (!res.ok) throw new Error(`Supabase ${table}: ${res.status}`)
+  return res.json()
+}
+
+const AGENT_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_transactions',
+      description: 'Lista lançamentos financeiros com filtros. Retorna totais de receita/despesa, contagens de revisão e sem categoria.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', description: 'Mês YYYY-MM' },
+          type: { type: 'string', enum: ['income', 'expense', 'any'] },
+          needs_review: { type: 'boolean' },
+          macro_category_id: { type: 'string' },
+          text: { type: 'string', description: 'Busca na descrição' },
+          limit: { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_spending_insights',
+      description: 'Detecta variações de gastos vs meses anteriores. Identifica categorias em alta, queda e oportunidades.',
+      parameters: {
+        type: 'object',
+        properties: {
+          month: { type: 'string', description: 'Mês YYYY-MM' },
+          compare_months: { type: 'number', description: 'Meses de histórico (padrão 3)' },
+        },
+        required: ['month'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_budget_analysis',
+      description: 'Analisa orçamento vs realizado por categoria com médias históricas.',
+      parameters: {
+        type: 'object',
+        properties: {
+          month: { type: 'string', description: 'Mês YYYY-MM' },
+          compare_months: { type: 'number' },
+        },
+        required: ['month'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_reconciliation_status',
+      description: 'Verifica pendências: movimentos internos não neutralizados, revisões, despesas pendentes.',
+      parameters: {
+        type: 'object',
+        properties: { month: { type: 'string' } },
+        required: ['month'],
+      },
+    },
+  },
+]
+
+async function executeTool(name, args) {
+  const res = await fetch('http://localhost:3010/mcp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name, arguments: args } }),
+  })
+  if (!res.ok) throw new Error(`MCP ${name}: ${res.status}`)
+  const text = await res.text()
+  // Streamable HTTP may return SSE lines or plain JSON
+  const jsonLine = text.split('\n').find(l => l.startsWith('data:'))
+  const parsed = jsonLine ? JSON.parse(jsonLine.slice(5).trim()) : JSON.parse(text)
+  return parsed.result?.content?.[0]?.text ?? JSON.stringify(parsed.result)
+}
+
+const AGENT_SYSTEM = `Você é o Economista FIN — assistente financeiro pessoal integrado ao FINFVC.
+Você tem acesso direto aos dados financeiros reais via tools.
+Responda em português do Brasil. Use os tools para buscar dados reais antes de responder.
+Seja direto: fatos → análise → recomendação. Não invente valores.`
+
+app.post('/api/agent', async (req, res) => {
+  const { question, month } = req.body ?? {}
+  if (!question) return res.status(400).json({ error: 'question obrigatória' })
+  if (!month) return res.status(400).json({ error: 'month obrigatório (YYYY-MM)' })
+  if (!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'Nenhuma API key configurada' })
+  }
+
+  const messages = [{ role: 'user', content: `Mês de referência: ${month}\n\nPergunta: ${question}` }]
+
+  try {
+    // Agentic loop: max 5 iterations
+    for (let i = 0; i < 5; i++) {
+      const apiKey = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY
+      const baseUrl = process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1' : 'https://openrouter.ai/api/v1'
+      const model = process.env.OPENAI_API_KEY
+        ? (process.env.ADVISOR_OPENAI_MODEL || 'gpt-4o-mini')
+        : (process.env.ADVISOR_OPENROUTER_MODEL || 'anthropic/claude-haiku-4-5')
+
+      const r = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, tool_choice: 'auto', max_tokens: 2000 }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        return res.status(503).json({ error: err.error?.message ?? `API error ${r.status}` })
+      }
+      const data = await r.json()
+      const choice = data.choices?.[0]
+      messages.push(choice.message)
+
+      if (choice.finish_reason !== 'tool_calls' || !choice.message.tool_calls?.length) {
+        return res.json({ answer: choice.message.content ?? '', provider: 'agent' })
+      }
+
+      // Execute tool calls
+      for (const tc of choice.message.tool_calls) {
+        let toolResult
+        try {
+          toolResult = await executeTool(tc.function.name, JSON.parse(tc.function.arguments))
+        } catch (e) {
+          toolResult = `Erro ao executar ${tc.function.name}: ${e.message}`
+        }
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+      }
+    }
+    return res.json({ answer: 'Análise concluída — dados processados.', provider: 'agent' })
+  } catch (err) {
+    console.error('[agent] error:', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Pluggy connections file backup (survives localStorage wipe) ──────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = join(__dirname, '.data')
 const CONNECTIONS_FILE = join(DATA_DIR, 'pluggy-connections.json')
+ENGINE_FILE = join(DATA_DIR, 'engine-config.json')
+AUDIT_FILE  = join(DATA_DIR, 'engine-audit.json')
 
 function ensureDataDir() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })

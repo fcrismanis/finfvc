@@ -1,7 +1,7 @@
 /**
  * Finance Engine — fonte única de verdade para regras financeiras.
  *
- * Hierarquia: Subcategoria > Categoria > Classificação > Padrão do sistema
+ * Hierarquia: Subcategoria > Categoria > Classificação > Default do sistema
  * Nenhum cálculo financeiro deve existir fora desta camada.
  */
 
@@ -21,10 +21,9 @@ export type ClassificationType =
   | 'neutral'
   | 'adjustment'
 
-export interface ClassificationRule {
-  classificationType: ClassificationType
-  label: string
-  // Participação nos cálculos
+export type EngineScope = 'classification' | 'category' | 'subcategory'
+
+export interface EngineFlags {
   includeInOperationalResult: boolean
   includeInCashflow: boolean
   includeInBudget: boolean
@@ -32,356 +31,271 @@ export interface ClassificationRule {
   includeInDashboard: boolean
   includeInAI: boolean
   includeInIndicators: boolean
-  includeInProjections: boolean
   includeInReports: boolean
-  // Visibilidade
   hideInDashboard: boolean
   hideInCharts: boolean
   hideInAnalysis: boolean
-  // Permissões
+}
+
+export interface ClassificationRule extends EngineFlags {
+  classificationType: ClassificationType
+  label: string
   allowManualEdit: boolean
   allowCategoryOverride: boolean
   allowSubcategoryOverride: boolean
 }
 
-export interface CategoryRuleOverride {
-  categoryId: string
-  name: string
-  useClassificationDefault: boolean
-  overrides: Partial<Pick<ClassificationRule,
-    'includeInOperationalResult' | 'includeInCashflow' | 'includeInBudget' |
-    'includeInDashboard' | 'includeInAI' | 'hideInDashboard'
-  >>
+export interface ScopeOverride extends Partial<EngineFlags> {
+  inherit: 'classification' | 'category' | 'custom'  // source of truth
+  note?: string
+  updatedAt?: string
+}
+
+export interface AuditEntry {
+  id: string
+  scope: EngineScope
+  scope_id: string
+  scope_name?: string
+  flag?: string
+  old_value?: unknown
+  new_value?: unknown
+  changed_at: string
+  changed_by?: string
+  note?: string
+  origin: string
 }
 
 export interface EngineConfig {
   version: number
   updatedAt: string
   classifications: ClassificationRule[]
-  categoryOverrides: CategoryRuleOverride[]
-}
-
-// ── Configuração padrão canônica (resultado da auditoria) ─────────────────────
-
-export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
-  version: 1,
-  updatedAt: new Date().toISOString(),
-  categoryOverrides: [],
-  classifications: [
-    {
-      classificationType: 'operational_income',
-      label: 'Receita Operacional',
-      includeInOperationalResult: true,
-      includeInCashflow: true,
-      includeInBudget: true,
-      includeInPatrimony: false,
-      includeInDashboard: true,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: true,
-      includeInReports: true,
-      hideInDashboard: false,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'extraordinary_income',
-      label: 'Receita Extraordinária',
-      includeInOperationalResult: true,
-      includeInCashflow: true,
-      includeInBudget: false,
-      includeInPatrimony: false,
-      includeInDashboard: true,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: false,
-      includeInReports: true,
-      hideInDashboard: false,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'operational_expense',
-      label: 'Despesa Operacional',
-      includeInOperationalResult: true,
-      includeInCashflow: true,
-      includeInBudget: true,
-      includeInPatrimony: false,
-      includeInDashboard: true,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: true,
-      includeInReports: true,
-      hideInDashboard: false,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'debt_cost',
-      label: 'Dívida / Passivo',
-      includeInOperationalResult: true,
-      includeInCashflow: true,
-      includeInBudget: true,
-      includeInPatrimony: true,
-      includeInDashboard: true,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: true,
-      includeInReports: true,
-      hideInDashboard: false,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'investment',
-      label: 'Investimento / Aporte',
-      includeInOperationalResult: false,
-      includeInCashflow: true,
-      includeInBudget: false,
-      includeInPatrimony: true,
-      includeInDashboard: false,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: true,
-      includeInReports: true,
-      hideInDashboard: true,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'redemption',
-      label: 'Resgate',
-      includeInOperationalResult: false,
-      includeInCashflow: true,
-      includeInBudget: false,
-      includeInPatrimony: true,
-      includeInDashboard: false,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: true,
-      includeInReports: true,
-      hideInDashboard: true,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'transfer',
-      label: 'Transferência Própria',
-      includeInOperationalResult: false,
-      includeInCashflow: false,
-      includeInBudget: false,
-      includeInPatrimony: false,
-      includeInDashboard: false,
-      includeInAI: false,
-      includeInIndicators: false,
-      includeInProjections: false,
-      includeInReports: false,
-      hideInDashboard: true,
-      hideInCharts: true,
-      hideInAnalysis: true,
-      allowManualEdit: true,
-      allowCategoryOverride: false,
-      allowSubcategoryOverride: false,
-    },
-    {
-      classificationType: 'reimbursement',
-      label: 'Reembolso',
-      includeInOperationalResult: true,
-      includeInCashflow: true,
-      includeInBudget: false,
-      includeInPatrimony: false,
-      includeInDashboard: true,
-      includeInAI: true,
-      includeInIndicators: true,
-      includeInProjections: false,
-      includeInReports: true,
-      hideInDashboard: false,
-      hideInCharts: false,
-      hideInAnalysis: false,
-      allowManualEdit: true,
-      allowCategoryOverride: true,
-      allowSubcategoryOverride: true,
-    },
-    {
-      classificationType: 'neutral',
-      label: 'Neutra',
-      includeInOperationalResult: false,
-      includeInCashflow: false,
-      includeInBudget: false,
-      includeInPatrimony: false,
-      includeInDashboard: false,
-      includeInAI: false,
-      includeInIndicators: false,
-      includeInProjections: false,
-      includeInReports: false,
-      hideInDashboard: true,
-      hideInCharts: true,
-      hideInAnalysis: true,
-      allowManualEdit: true,
-      allowCategoryOverride: false,
-      allowSubcategoryOverride: false,
-    },
-    {
-      classificationType: 'adjustment',
-      label: 'Ajuste Contábil',
-      includeInOperationalResult: false,
-      includeInCashflow: false,
-      includeInBudget: false,
-      includeInPatrimony: false,
-      includeInDashboard: false,
-      includeInAI: false,
-      includeInIndicators: false,
-      includeInProjections: false,
-      includeInReports: false,
-      hideInDashboard: true,
-      hideInCharts: true,
-      hideInAnalysis: true,
-      allowManualEdit: false,
-      allowCategoryOverride: false,
-      allowSubcategoryOverride: false,
-    },
-  ],
-}
-
-// ── Persistência ──────────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'fin_engine_config'
-
-export function loadEngineConfig(): EngineConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_ENGINE_CONFIG
-    const saved = JSON.parse(raw) as Partial<EngineConfig>
-    // Merge: preserve any new defaults not yet in saved config
-    const merged: EngineConfig = {
-      ...DEFAULT_ENGINE_CONFIG,
-      ...saved,
-      classifications: DEFAULT_ENGINE_CONFIG.classifications.map(def => {
-        const override = saved.classifications?.find(c => c.classificationType === def.classificationType)
-        return override ? { ...def, ...override } : def
-      }),
-    }
-    return merged
-  } catch {
-    return DEFAULT_ENGINE_CONFIG
+  scopes: {
+    category?: Record<string, ScopeOverride>
+    subcategory?: Record<string, ScopeOverride>
   }
 }
 
-export function saveEngineConfig(config: EngineConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, updatedAt: new Date().toISOString() }))
+// ── Configuração canônica padrão ──────────────────────────────────────────────
+
+export const DEFAULT_FLAGS: Record<ClassificationType, EngineFlags> = {
+  operational_income:   { includeInOperationalResult: true,  includeInCashflow: true,  includeInBudget: true,  includeInPatrimony: false, includeInDashboard: true,  includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: false, hideInCharts: false, hideInAnalysis: false },
+  extraordinary_income: { includeInOperationalResult: true,  includeInCashflow: true,  includeInBudget: false, includeInPatrimony: false, includeInDashboard: true,  includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: false, hideInCharts: false, hideInAnalysis: false },
+  operational_expense:  { includeInOperationalResult: true,  includeInCashflow: true,  includeInBudget: true,  includeInPatrimony: false, includeInDashboard: true,  includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: false, hideInCharts: false, hideInAnalysis: false },
+  debt_cost:            { includeInOperationalResult: true,  includeInCashflow: true,  includeInBudget: true,  includeInPatrimony: true,  includeInDashboard: true,  includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: false, hideInCharts: false, hideInAnalysis: false },
+  investment:           { includeInOperationalResult: false, includeInCashflow: true,  includeInBudget: false, includeInPatrimony: true,  includeInDashboard: false, includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: true,  hideInCharts: false, hideInAnalysis: false },
+  redemption:           { includeInOperationalResult: false, includeInCashflow: true,  includeInBudget: false, includeInPatrimony: true,  includeInDashboard: false, includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: true,  hideInCharts: false, hideInAnalysis: false },
+  transfer:             { includeInOperationalResult: false, includeInCashflow: false, includeInBudget: false, includeInPatrimony: false, includeInDashboard: false, includeInAI: false, includeInIndicators: false, includeInReports: false, hideInDashboard: true,  hideInCharts: true,  hideInAnalysis: true  },
+  reimbursement:        { includeInOperationalResult: true,  includeInCashflow: true,  includeInBudget: false, includeInPatrimony: false, includeInDashboard: true,  includeInAI: true,  includeInIndicators: true,  includeInReports: true,  hideInDashboard: false, hideInCharts: false, hideInAnalysis: false },
+  neutral:              { includeInOperationalResult: false, includeInCashflow: false, includeInBudget: false, includeInPatrimony: false, includeInDashboard: false, includeInAI: false, includeInIndicators: false, includeInReports: false, hideInDashboard: true,  hideInCharts: true,  hideInAnalysis: true  },
+  adjustment:           { includeInOperationalResult: false, includeInCashflow: false, includeInBudget: false, includeInPatrimony: false, includeInDashboard: false, includeInAI: false, includeInIndicators: false, includeInReports: false, hideInDashboard: true,  hideInCharts: true,  hideInAnalysis: true  },
+}
+
+const CLASSIFICATION_META: Record<ClassificationType, { label: string; allowCategoryOverride: boolean; allowSubcategoryOverride: boolean }> = {
+  operational_income:   { label: 'Receita Operacional',    allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  extraordinary_income: { label: 'Receita Extraordinária', allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  operational_expense:  { label: 'Despesa Operacional',    allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  debt_cost:            { label: 'Dívida / Passivo',       allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  investment:           { label: 'Investimento / Aporte',  allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  redemption:           { label: 'Resgate',                allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  transfer:             { label: 'Transferência Própria',  allowCategoryOverride: false, allowSubcategoryOverride: false },
+  reimbursement:        { label: 'Reembolso',              allowCategoryOverride: true,  allowSubcategoryOverride: true  },
+  neutral:              { label: 'Neutra',                  allowCategoryOverride: false, allowSubcategoryOverride: false },
+  adjustment:           { label: 'Ajuste Contábil',         allowCategoryOverride: false, allowSubcategoryOverride: false },
+}
+
+export function buildDefaultConfig(): EngineConfig {
+  return {
+    version: 2,
+    updatedAt: new Date().toISOString(),
+    scopes: { category: {}, subcategory: {} },
+    classifications: (Object.keys(DEFAULT_FLAGS) as ClassificationType[]).map(ct => ({
+      classificationType: ct,
+      label: CLASSIFICATION_META[ct].label,
+      allowManualEdit: true,
+      allowCategoryOverride: CLASSIFICATION_META[ct].allowCategoryOverride,
+      allowSubcategoryOverride: CLASSIFICATION_META[ct].allowSubcategoryOverride,
+      ...DEFAULT_FLAGS[ct],
+    })),
+  }
+}
+
+export const DEFAULT_ENGINE_CONFIG = buildDefaultConfig()
+
+// ── Cache em memória ──────────────────────────────────────────────────────────
+
+let _cache: EngineConfig | null = null
+const LOCAL_KEY = 'fin_engine_config'
+
+// ── Persistência: localStorage + backend sync ─────────────────────────────────
+
+export function loadEngineConfig(): EngineConfig {
+  if (_cache) return _cache
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<EngineConfig>
+      const def = buildDefaultConfig()
+      _cache = {
+        ...def,
+        ...saved,
+        scopes: {
+          category: { ...(saved.scopes?.category ?? {}) },
+          subcategory: { ...(saved.scopes?.subcategory ?? {}) },
+        },
+        classifications: def.classifications.map(d => {
+          const override = saved.classifications?.find(c => c.classificationType === d.classificationType)
+          return override ? { ...d, ...override } : d
+        }),
+      }
+      return _cache
+    }
+  } catch { /* ignore */ }
+  _cache = buildDefaultConfig()
+  return _cache
+}
+
+export function invalidateEngineCache(): void { _cache = null }
+
+export function updateEngineConfig(config: EngineConfig): void {
+  _cache = config
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(config))
+  // Sync with server (fire and forget)
+  fetch('/api/engine/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) }).catch(() => {})
+}
+
+/** Atualiza uma regra específica de escopo com audit */
+export async function patchScopeRule(
+  scope: EngineScope,
+  scopeId: string,
+  scopeName: string,
+  patch: Partial<ScopeOverride>,
+  flag?: string,
+  oldValue?: unknown,
+  note?: string,
+): Promise<void> {
+  const config = loadEngineConfig()
+  const current = config.scopes[scope === 'classification' ? 'category' : scope as 'category' | 'subcategory']?.[scopeId] ?? {}
+  const updated = { ...current, ...patch, updatedAt: new Date().toISOString() }
+
+  if (scope === 'classification') {
+    config.classifications = config.classifications.map(c =>
+      c.classificationType === scopeId ? { ...c, ...patch } : c,
+    )
+  } else {
+    const key = scope as 'category' | 'subcategory'
+    config.scopes[key] = {
+      ...(config.scopes[key] ?? {}),
+      [scopeId]: updated as ScopeOverride,
+    }
+  }
+  updateEngineConfig(config)
+
+  // Audit via server
+  fetch('/api/engine/config/' + scope + '/' + encodeURIComponent(scopeId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config: patch, note, flag, oldValue, newValue: patch[flag as keyof ScopeOverride], scopeName }),
+  }).catch(() => {})
+}
+
+export async function loadAuditLog(): Promise<AuditEntry[]> {
+  try {
+    const r = await fetch('/api/engine/audit')
+    if (r.ok) return r.json() as Promise<AuditEntry[]>
+  } catch { /* ignore */ }
+  return []
 }
 
 export function resetEngineConfig(): void {
-  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(LOCAL_KEY)
+  _cache = null
+  fetch('/api/engine/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildDefaultConfig()) }).catch(() => {})
 }
 
-// ── Motor de decisão ──────────────────────────────────────────────────────────
+// ── Motor de decisão — hierarquia completa ────────────────────────────────────
 
-function getRule(tx: Transaction, config: EngineConfig): ClassificationRule | null {
-  // 1. Subcategoria — future
-  // 2. Categoria — check category overrides
-  if (tx.categoryId) {
-    const catRule = config.categoryOverrides.find(o => o.categoryId === tx.categoryId)
-    if (catRule && !catRule.useClassificationDefault) {
-      const base = config.classifications.find(c => c.classificationType === (tx.classificationType as ClassificationType))
-      if (base) return { ...base, ...catRule.overrides }
+export type FlagName = keyof EngineFlags
+
+export type RuleSource = 'subcategory' | 'category' | 'classification' | 'manual_override' | 'system_default'
+
+export interface ResolvedFlag {
+  value: boolean
+  source: RuleSource
+}
+
+function getClassificationFlags(tx: Transaction, config: EngineConfig): EngineFlags {
+  const rule = config.classifications.find(c => c.classificationType === tx.classificationType)
+  return rule ?? DEFAULT_FLAGS[tx.classificationType as ClassificationType] ?? DEFAULT_FLAGS.neutral
+}
+
+export function resolveFlag(tx: Transaction, flag: FlagName, config: EngineConfig): ResolvedFlag {
+  // 1. Subcategoria override
+  if (tx.subCategoryId) {
+    const subRule = config.scopes.subcategory?.[tx.subCategoryId]
+    if (subRule && subRule.inherit === 'custom' && flag in subRule) {
+      return { value: subRule[flag] as boolean, source: 'subcategory' }
+    }
+    if (subRule && subRule.inherit === 'classification') {
+      // Skip category, go straight to classification
+      const classFlags = getClassificationFlags(tx, config)
+      return { value: classFlags[flag], source: 'classification' }
     }
   }
-  // 3. Classificação
-  return config.classifications.find(c => c.classificationType === (tx.classificationType as ClassificationType)) ?? null
+
+  // 2. Categoria override
+  if (tx.categoryId) {
+    const catRule = config.scopes.category?.[tx.categoryId]
+    if (catRule && catRule.inherit === 'custom' && flag in catRule) {
+      return { value: catRule[flag] as boolean, source: 'category' }
+    }
+  }
+
+  // 3. Manual override por transação (apenas para includeInOperationalResult)
+  if (tx.manualCategoryOverride && flag === 'includeInOperationalResult') {
+    return { value: tx.includeInOperationalResult, source: 'manual_override' }
+  }
+
+  // 4. Classificação
+  const classFlags = getClassificationFlags(tx, config)
+  return { value: classFlags[flag], source: 'classification' }
 }
 
-// Resolve com respeito ao override manual do usuário
-function resolveFlag(
-  tx: Transaction,
-  config: EngineConfig,
-  flag: keyof ClassificationRule,
-  storedValue: boolean,
-): boolean {
-  // Manual override: respeit flag armazenado na transação
-  if (tx.manualCategoryOverride && flag === 'includeInOperationalResult') return storedValue
-  const rule = getRule(tx, config)
-  if (rule) return rule[flag] as boolean
-  // Fallback sistema
-  if (flag === 'includeInOperationalResult') return tx.type === 'income' || tx.type === 'expense'
-  return false
-}
-
-// ── API pública da engine ─────────────────────────────────────────────────────
-
-let _cachedConfig: EngineConfig | null = null
-
+/** API pública principal */
 export function getEngineConfig(): EngineConfig {
-  if (!_cachedConfig) _cachedConfig = loadEngineConfig()
-  return _cachedConfig
+  return loadEngineConfig()
 }
 
-export function invalidateEngineCache(): void {
-  _cachedConfig = null
-}
-
-export function updateEngineConfig(config: EngineConfig): void {
-  saveEngineConfig(config)
-  _cachedConfig = config
-}
-
-/** Participa do resultado operacional? */
 export function includesInResult(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  return resolveFlag(tx, cfg, 'includeInOperationalResult', tx.includeInOperationalResult)
+  return resolveFlag(tx, 'includeInOperationalResult', config ?? getEngineConfig()).value
 }
 
-/** Participa do fluxo de caixa? */
 export function includesInCashflow(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  return resolveFlag(tx, cfg, 'includeInCashflow', tx.includeInCashflow)
+  return resolveFlag(tx, 'includeInCashflow', config ?? getEngineConfig()).value
 }
 
-/** Participa do orçamento? */
 export function includesInBudget(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  return resolveFlag(tx, cfg, 'includeInBudget', tx.includeInBudget)
+  return resolveFlag(tx, 'includeInBudget', config ?? getEngineConfig()).value
 }
 
-/** Participa do dashboard? */
-export function includesInDashboard(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  const rule = getRule(tx, cfg)
-  return rule ? !rule.hideInDashboard : true
-}
-
-/** Participa da IA / Hermes? */
 export function includesInAI(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  return resolveFlag(tx, cfg, 'includeInAI', true)
+  return resolveFlag(tx, 'includeInAI', config ?? getEngineConfig()).value
 }
 
-/** Deve ser ocultado no dashboard? */
 export function isHiddenInDashboard(tx: Transaction, config?: EngineConfig): boolean {
-  const cfg = config ?? getEngineConfig()
-  const rule = getRule(tx, cfg)
-  return rule?.hideInDashboard ?? false
+  return resolveFlag(tx, 'hideInDashboard', config ?? getEngineConfig()).value
 }
 
-/** Retorna o label da classificação */
+export function getSourceLabel(source: RuleSource): string {
+  const labels: Record<RuleSource, string> = {
+    subcategory: 'Regra da Subcategoria',
+    category: 'Regra da Categoria',
+    classification: 'Regra da Classificação',
+    manual_override: 'Override Manual',
+    system_default: 'Padrão do Sistema',
+  }
+  return labels[source]
+}
+
 export function getClassificationLabel(classificationType: string): string {
-  return DEFAULT_ENGINE_CONFIG.classifications.find(c => c.classificationType === classificationType)?.label ?? classificationType
+  return CLASSIFICATION_META[classificationType as ClassificationType]?.label ?? classificationType
 }
