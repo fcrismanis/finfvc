@@ -59,3 +59,4 @@ Thumbs.db
 
 # TypeScript build info
 *.tsbuildinfo
+.mcp.json

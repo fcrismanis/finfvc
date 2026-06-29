@@ -137,10 +137,16 @@ export function ReconciliationPage({ selectedMonth }: Props) {
       </header>
 
       {accounts.length === 0 && (
-        <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft, #667085)', background: 'var(--well, #F9FAFB)', borderRadius: 12, border: '1px solid var(--border-card, #EAECF0)' }}>
-          <Landmark size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-          <p style={{ fontWeight: 700 }}>Nenhuma conta Pluggy conectada.</p>
-          <p style={{ fontSize: 13, marginTop: 4 }}>Conecte uma conta em Integrações › Pluggy para reconciliar.</p>
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--faint)', background: 'var(--well)', borderRadius: 12, border: '1px solid var(--line)' }}>
+          <Landmark size={32} style={{ opacity: 0.3, marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
+          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', marginBottom: 6 }}>Nenhuma conta conectada</p>
+          <p style={{ fontSize: 13, color: 'var(--faint)', maxWidth: 360, margin: '0 auto 16px', lineHeight: 1.6 }}>
+            A reconciliação compara os lançamentos do FIN com os dados reais do banco via Pluggy.
+            Conecte suas contas em <strong>Sistema → Importação & Pluggy</strong> para ativar.
+          </p>
+          <p style={{ fontSize: 11.5, color: 'var(--faint)', fontStyle: 'italic' }}>
+            Apenas diagnóstico — nenhuma alteração nos dados.
+          </p>
         </div>
       )}
 

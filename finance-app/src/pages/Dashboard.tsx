@@ -1,15 +1,16 @@
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { useState, useMemo, useEffect } from 'react'
+import { ChevronLeft, ChevronRight, Plus, Lock, Unlock, TrendingUp } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useDashboard } from '../hooks/useDashboard'
-import { ClarityFunnel } from '../components/dashboard/ClarityFunnel'
 import { DataQualityCard } from '../components/dashboard/DataQualityCard'
 import { IntelligenceCard } from '../components/dashboard/IntelligenceCard'
 import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
-import { MONTHS_PT } from '../utils/months'
-import type { BudgetComparison, AlertItem, TopTransaction } from '../types'
-import type { FunnelStep } from '../utils/funnelSteps'
+import { useData } from '../context/DataContext'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { CHECKLIST_ITEMS, emptyClosing } from '../services/closing.service'
 import type { NavFilter } from '../App'
+import type { BudgetComparison, AlertItem } from '../types'
 
 interface Props {
   selectedMonth: string
@@ -18,142 +19,279 @@ interface Props {
 }
 
 export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
-  const { summary, funnelSteps, budgetComparison, alerts, topExpenses, expenseBreakdown, trend } = useDashboard(selectedMonth)
+  const { summary, budgetComparison, alerts, expenseBreakdown, trend } = useDashboard(selectedMonth)
+  const { transactions, closings, saveClosing } = useData()
 
   const isCurrent = selectedMonth === currentYearMonth()
-  const now = new Date()
-  const day = now.getDate()
-  const totalDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const daysLeft = totalDays - day
   const canGoNext = selectedMonth < currentYearMonth()
 
-  // Status dinâmico baseado em alertas
+  // ── Fechamento state ─────────────────────────────────────────────────────────
+  const [showFechamento, setShowFechamento] = useState(false)
+  const [closing, setClosing] = useState(() => closings.find(c => c.month === selectedMonth) ?? emptyClosing(selectedMonth))
+
+  useEffect(() => {
+    setClosing(closings.find(c => c.month === selectedMonth) ?? emptyClosing(selectedMonth))
+  }, [closings, selectedMonth])
+
+  function toggleChecklist(id: string) {
+    if (closing.isClosed) return
+    const updated = { ...closing, checklist: { ...closing.checklist, [id]: !closing.checklist[id] } }
+    setClosing(updated)
+    saveClosing(updated)
+  }
+
+  function toggleClose() {
+    const updated = closing.isClosed
+      ? { ...closing, isClosed: false, closedAt: undefined }
+      : { ...closing, isClosed: true, closedAt: new Date().toISOString() }
+    setClosing(updated)
+    saveClosing(updated)
+  }
+
+  const checklistDone = CHECKLIST_ITEMS.filter(i => closing.checklist[i.id]).length
+  const checklistTotal = CHECKLIST_ITEMS.length
+
+  // ── Income categories (grouped) ───────────────────────────────────────────
+  const allMacros = useMemo(() => getAllMacroCategories(), [])
+  const incomeMacros = useMemo(() => allMacros.filter(m => m.tabType === 'income'), [allMacros])
+
+  const incomeBreakdown = useMemo(() => {
+    const monthTxs = transactions.filter(t =>
+      t.competenceDate.startsWith(selectedMonth) &&
+      t.status !== 'cancelled' &&
+      t.type === 'income' &&
+      t.includeInOperationalResult !== false
+    )
+    const totalIncome = monthTxs.reduce((s, t) => s + t.amount, 0)
+    const result = incomeMacros
+      .map(macro => {
+        const total = monthTxs.filter(t => t.macroCategoryId === macro.id).reduce((s, t) => s + t.amount, 0)
+        return total > 0 ? { id: macro.id, name: macro.name, color: macro.color, total, percentage: totalIncome > 0 ? (total / totalIncome) * 100 : 0 } : null
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => b.total - a.total)
+
+    const uncatTotal = monthTxs.filter(t => !t.macroCategoryId).reduce((s, t) => s + t.amount, 0)
+    if (uncatTotal > 0) result.push({ id: 'uncat', name: 'Não classificado', color: 'var(--faint)', total: uncatTotal, percentage: totalIncome > 0 ? (uncatTotal / totalIncome) * 100 : 0 })
+    return result
+  }, [transactions, selectedMonth, incomeMacros])
+
+  // ── Status ────────────────────────────────────────────────────────────────
   const hasCritical = alerts.some(a => a.level === 'critical')
   const hasWarning = !hasCritical && alerts.some(a => a.level === 'warning')
-  const badgeClass = hasCritical ? 'b-crit' : hasWarning ? 'b-warn' : 'b-ok'
   const statusLabel = hasCritical ? 'Crítico' : hasWarning ? 'Atenção' : isCurrent ? 'Em andamento' : 'Saudável'
 
-  const statusText = (() => {
-    if (!isCurrent) return 'Leitura completa do mês. Entradas, saídas e sobra consolidados.'
-    const top = alerts[0]
-    if (top) return top.message + (alerts.length > 1 ? ` Mais ${alerts.length - 1} alerta(s) este mês.` : '')
-    return `Mês em andamento — dia ${day} de ${totalDays}. Sem pontos críticos até agora.`
-  })()
+  // ── Trend chart data ──────────────────────────────────────────────────────
+  const trendData = useMemo(() => trend.slice().reverse().map(t => {
+    const [, m] = t.month.split('-').map(Number)
+    const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    return {
+      label: `${MONTHS[m - 1]}/${t.month.slice(2, 4)}`,
+      Resultado: Math.round(t.operationalResult),
+      Receita: Math.round(t.operationalIncome),
+      Despesa: Math.round(t.totalExpenses),
+    }
+  }), [trend])
 
   return (
     <main className="flex-1 overflow-y-auto" style={{ background: 'var(--paper)' }}>
-      {/* Container editorial: clamp lateral + max-width 1280 */}
-      <div
-        style={{
-          maxWidth: 1280,
-          margin: '0 auto',
-          padding: '24px clamp(28px,4vw,72px)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 18,
-          width: '100%',
-        }}
-      >
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px clamp(16px,3vw,48px)', display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
 
-        {/* ── Page header ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        {/* ── Header ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Visão geral</h1>
-            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
-              Resultado do mês e jornada do dinheiro · {formatMonthFull(selectedMonth)}
-            </div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Visão Geral</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>Visão geral dos seus dados financeiros.</div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="month-nav">
-              <button
-                className="btn-ghost"
-                style={{ width: 26, height: 26 }}
-                onClick={() => onMonthChange(prevMonth(selectedMonth))}
-              >
-                <ChevronLeft size={14} />
-              </button>
+              <button className="btn-ghost" style={{ width: 26, height: 26 }} onClick={() => onMonthChange(prevMonth(selectedMonth))}><ChevronLeft size={14} /></button>
               <span className="m">{formatMonthFull(selectedMonth)}</span>
+              <button className="btn-ghost" style={{ width: 26, height: 26, opacity: canGoNext ? 1 : 0.3 }} onClick={() => canGoNext && onMonthChange(nextMonth(selectedMonth))} disabled={!canGoNext}><ChevronRight size={14} /></button>
+            </div>
+            <button className="btn btn-primary" onClick={() => onNavigate('/lancamentos')}><Plus size={14} /> Lançar</button>
+          </div>
+        </div>
+
+        {/* ── Overview Pluggy-style: 3 colunas ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+
+          {/* CONTAS / RECEITAS */}
+          <div className="card" style={{ padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--pos)' }}>Receitas</span>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums', marginBottom: 18 }}>
+              {formatBRL(summary.operationalIncome)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {incomeBreakdown.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--faint)' }}>Sem receitas neste mês</p>
+              ) : incomeBreakdown.map((cat, i) => (
+                <div key={cat.id}
+                  onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [cat.id], filterLabel: cat.name, sourcePage: 'dashboard', sourceLabel: 'Visão Geral' })}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: i < incomeBreakdown.length - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer', gap: 10 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color || 'var(--pos)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{cat.name}</span>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{formatBRL(cat.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CARTÕES / DESPESAS */}
+          <div className="card" style={{ padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--crit)' }}>Despesas</span>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums', marginBottom: 18 }}>
+              {formatBRL(summary.totalExpenses)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {expenseBreakdown.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--faint)' }}>Sem despesas neste mês</p>
+              ) : expenseBreakdown.slice(0, 8).map((cat, i) => (
+                <div key={cat.macroCategoryId}
+                  onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [cat.macroCategoryId], filterLabel: cat.name, sourcePage: 'dashboard', sourceLabel: 'Visão Geral' })}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: i < Math.min(expenseBreakdown.length, 8) - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer', gap: 10 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color || 'var(--crit)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, color: 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>{cat.percentage.toFixed(0)}%</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--crit)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(cat.total)}</span>
+                  </div>
+                </div>
+              ))}
+              {expenseBreakdown.length > 8 && (
+                <button onClick={() => onNavigate('/lancamentos')} style={{ fontSize: 12, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '8px 0' }}>
+                  +{expenseBreakdown.length - 8} mais…
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* RESULTADO / SALDO */}
+          <div className="card" style={{ padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <TrendingUp size={12} color={summary.operationalResult >= 0 ? 'var(--pos)' : 'var(--crit)'} />
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: summary.operationalResult >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                {isCurrent ? 'Saldo parcial' : 'Resultado do mês'}
+              </span>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: summary.operationalResult >= 0 ? 'var(--pos)' : 'var(--crit)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums', marginBottom: 18 }}>
+              {summary.operationalResult >= 0 ? '+' : ''}{formatBRL(summary.operationalResult)}
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 16 }}>
+              {[
+                { label: 'Margem de poupança', value: `${(summary.savingsRate * 100).toFixed(1)}%`, color: 'var(--ink-2)' },
+                { label: 'Comprometido pendente', value: formatBRL(summary.pendingAmount ?? 0), color: 'var(--warn)' },
+                { label: 'Status', value: statusLabel, color: hasCritical ? 'var(--crit)' : hasWarning ? 'var(--warn)' : 'var(--pos)' },
+              ].map((row, i) => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < 2 ? '1px solid var(--line)' : 'none' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--faint)' }}>{row.label}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: row.color }}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Fechamento progress */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Checklist do mês</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: checklistDone === checklistTotal ? 'var(--pos)' : 'var(--ink-2)' }}>{checklistDone}/{checklistTotal}</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 6, background: 'var(--well)', overflow: 'hidden', marginBottom: 10 }}>
+                <div style={{ height: '100%', width: `${(checklistDone / checklistTotal) * 100}%`, background: checklistDone === checklistTotal ? 'var(--pos)' : 'var(--accent)', borderRadius: 6, transition: 'width .3s' }} />
+              </div>
               <button
-                className="btn-ghost"
-                style={{ width: 26, height: 26, opacity: canGoNext ? 1 : 0.3 }}
-                onClick={() => canGoNext && onMonthChange(nextMonth(selectedMonth))}
-                disabled={!canGoNext}
+                onClick={() => setShowFechamento(v => !v)}
+                style={{ fontSize: 11.5, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)', fontWeight: 600, padding: 0 }}
               >
-                <ChevronRight size={14} />
+                {showFechamento ? 'Ocultar checklist ↑' : 'Ver checklist ↓'}
               </button>
             </div>
-            <button className="btn btn-primary" onClick={() => onNavigate('/lancamentos')}>
-              <Plus size={14} /> Lançar
-            </button>
           </div>
         </div>
 
-        {/* ── Faixa status + KPIs ── */}
-        <div className="card status-row">
-          <div className="status-text">
-            <span className={`badge ${badgeClass}`} style={{ alignSelf: 'flex-start', marginBottom: 11 }}>
-              <span className="dot" />
-              {statusLabel}
-            </span>
-            <p>{statusText}</p>
+        {/* ── Checklist expandível (abaixo dos 3 cards) ── */}
+        {showFechamento && (
+          <div className="card" style={{ padding: '18px 22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {closing.isClosed ? <Lock size={14} color="var(--pos)" /> : <Unlock size={14} color="var(--faint)" />}
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Fechamento do mês</span>
+                {closing.isClosed && <span style={{ fontSize: 11, color: 'var(--pos)', fontWeight: 600 }}>Fechado</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={toggleClose} className={`btn btn-sm ${closing.isClosed ? 'btn-secondary' : 'btn-primary'}`} style={{ fontSize: 12 }}>
+                  {closing.isClosed ? <><Unlock size={12} /> Reabrir</> : <><Lock size={12} /> Fechar mês</>}
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 6 }}>
+              {CHECKLIST_ITEMS.map(item => {
+                const done = !!closing.checklist[item.id]
+                return (
+                  <button key={item.id} onClick={() => toggleChecklist(item.id)} disabled={closing.isClosed}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, border: 'none', cursor: closing.isClosed ? 'default' : 'pointer', background: done ? 'var(--pos-soft)' : 'var(--well)', textAlign: 'left', fontFamily: 'var(--ui)' }}
+                  >
+                    <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${done ? 'var(--pos)' : 'var(--line)'}`, background: done ? 'var(--pos)' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 12.5, fontWeight: 500, color: done ? 'var(--pos)' : 'var(--ink)', textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <div className="status-kpis">
-            <div className="status-kpi">
-              <span className="kl">Entrou</span>
-              <span className="kv num" style={{ color: 'var(--pos)' }}>{formatBRL(summary.operationalIncome)}</span>
-            </div>
-            <div className="status-kpi">
-              <span className="kl">Saiu</span>
-              <span className="kv num" style={{ color: 'var(--ink)' }}>{formatBRL(summary.totalExpenses)}</span>
-            </div>
-            <div className="status-kpi soft">
-              <span className="kl">{isCurrent ? 'Saldo parcial' : 'Saldo do mês'}</span>
-              <span className="kv num" style={{ color: 'var(--pos)' }}>{formatBRL(summary.operationalResult)}</span>
-            </div>
-          </div>
-        </div>
+        )}
 
-        {/* ── Funil herói (1.6fr) + Planejado (1fr) ── */}
-        <div className="fpgrid">
-          <ClarityFunnel
-            income={summary.operationalIncome}
-            steps={funnelSteps}
-            isPartial={isCurrent}
-            partialDay={day}
-            partialTotal={totalDays}
-            onStepClick={(step: FunnelStep) => onNavigate('/lancamentos', {
-              macroCategoryIds: step.macroIds,
-              filterLabel: step.label,
-              sourcePage: 'dashboard',
-              sourceLabel: 'Visão Geral',
-            })}
-          />
+        {/* ── Evolução do saldo (Pluggy-style area chart) ── */}
+        {trendData.length > 1 && (
+          <div className="card" style={{ padding: '22px 24px' }}>
+            <div style={{ marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Evolução do resultado</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
+                {summary.operationalResult >= 0 ? '+' : ''}{formatBRL(summary.operationalResult)}
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={140}>
+              <AreaChart data={trendData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="resultGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="var(--pos)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--faint)' }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), 'Resultado']} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid var(--line)' }} />
+                <Area type="monotone" dataKey="Resultado" stroke="var(--pos)" strokeWidth={2} fill="url(#resultGradient)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* ── Planejado + Alertas ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <PlanejadoCard data={budgetComparison} isPartial={isCurrent} onNavigate={onNavigate} />
+          <AlertsCard alerts={alerts} isPartial={isCurrent} />
         </div>
 
-        {/* ── 3 cards alinhados ── */}
-        <div className="grid3">
-          <VillainsCard data={budgetComparison} />
-          <AlertsCard alerts={alerts} isPartial={isCurrent} daysLeft={daysLeft} />
-          <TopCard data={topExpenses} onNavigate={onNavigate} />
-        </div>
-
-        {/* ── Insights IA (Artha-style purple box) ── */}
-        <InsightsCard summary={summary} expenseBreakdown={expenseBreakdown} trend={trend} isCurrent={isCurrent} />
-
-        {/* ── 2 gráficos: Resumo Mensal + Gastos por Categoria ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-          <ResumoMensalChart trend={trend} />
-          <GastosCategoriaChart expenseBreakdown={expenseBreakdown} />
-        </div>
-
-        {/* ── Essenciais x Não Essenciais ── */}
-        <EssenciaisChart budgetComparison={budgetComparison} />
-
-        {/* ── Inteligência financeira ── */}
+        {/* ── Inteligência ── */}
         <IntelligenceCard month={selectedMonth} onNavigate={onNavigate} />
 
-        {/* ── Qualidade dos dados ── */}
+        {/* ── Qualidade ── */}
         <DataQualityCard selectedMonth={selectedMonth} onNavigate={onNavigate} />
 
       </div>
@@ -162,7 +300,7 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
 }
 
 /* ── Planejado × realizado ── */
-function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison[]; isPartial: boolean; onNavigate: (r: string) => void }) {
+function PlanejadoCard({ data, onNavigate }: { data: BudgetComparison[]; isPartial?: boolean; onNavigate: (r: string) => void }) {
   const withBudget = data.filter(d => d.planned > 0)
   const totalPlanned = withBudget.reduce((s, d) => s + d.planned, 0)
   const totalRealized = withBudget.reduce((s, d) => s + d.realized, 0)
@@ -172,10 +310,7 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
     <div className="card" style={{ padding: '18px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)' }}>Planejado × realizado</h3>
-        <button
-          onClick={() => onNavigate('/orcamento')}
-          style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)', background: 'none', border: 'none', cursor: 'pointer' }}
-        >
+        <button onClick={() => onNavigate('/orcamento')} style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)', background: 'none', border: 'none', cursor: 'pointer' }}>
           Orçamento ›
         </button>
       </div>
@@ -183,34 +318,25 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
       {totalPlanned === 0 ? (
         <div className="empty-state">
           <div className="empty-glyph" />
-          <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Sem orçamento definido</h4>
-          <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 200 }}>
-            {isPartial ? 'Mês em andamento — sem plano definido.' : 'Nenhum orçamento para este mês.'}
-          </p>
-          <button className="btn btn-primary" style={{ marginTop: 4, fontSize: 12 }} onClick={() => onNavigate('/orcamento')}>
-            Definir orçamento
-          </button>
+          <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Sem orçamento</h4>
+          <button className="btn btn-primary" style={{ marginTop: 4, fontSize: 12 }} onClick={() => onNavigate('/orcamento')}>Definir orçamento</button>
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 16 }}>
             <span className="num" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>{pct}%</span>
-            <span style={{ fontSize: 12, color: 'var(--faint)' }}>
-              {formatBRL(totalRealized)} de {formatBRL(totalPlanned)}
-            </span>
+            <span style={{ fontSize: 12, color: 'var(--faint)' }}>{formatBRL(totalRealized)} de {formatBRL(totalPlanned)}</span>
           </div>
           {withBudget.slice(0, 4).map(d => {
             const fill = d.planned > 0 ? Math.min((d.realized / d.planned) * 100, 100) : 0
-            const over = d.status === 'critical'
-            const warn = d.status === 'warning'
-            const barColor = over ? 'var(--crit)' : warn ? 'var(--warn)' : 'var(--ink)'
+            const over = d.status === 'critical'; const warn = d.status === 'warning'
             return (
               <div className="bcat" key={d.macroCategoryId || d.categoryId}>
                 <div className="r1">
                   <span className="nm">{d.name}</span>
                   <span className="vl">{formatBRL(d.realized)} / {formatBRL(d.planned)}</span>
                 </div>
-                <div className="bbar"><i style={{ width: `${fill}%`, background: barColor }} /></div>
+                <div className="bbar"><i style={{ width: `${fill}%`, background: over ? 'var(--crit)' : warn ? 'var(--warn)' : 'var(--ink)' }} /></div>
               </div>
             )
           })}
@@ -220,77 +346,21 @@ function PlanejadoCard({ data, isPartial, onNavigate }: { data: BudgetComparison
   )
 }
 
-/* ── Maiores vilões ── */
-function VillainsCard({ data }: { data: BudgetComparison[] }) {
-  const villains = data
-    .filter(d => d.planned > 0 && d.deviationRs > 0 && (d.status === 'critical' || d.status === 'warning'))
-    .sort((a, b) => b.deviationRs - a.deviationRs)
-    .slice(0, 4)
-
-  const noPlanned = data.filter(d => d.planned === 0 && d.realized > 0).slice(0, 2)
-
-  return (
-    <div className="card" style={{ padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)' }}>Maiores vilões</h3>
-        <button
-          onClick={() => {}}
-          style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)', background: 'none', border: 'none', cursor: 'pointer' }}
-        >
-          Tudo ›
-        </button>
-      </div>
-
-      {villains.length === 0 && noPlanned.length === 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9, background: 'var(--pos-soft)', fontSize: 12.5, color: 'var(--pos)', fontWeight: 600 }}>
-          Nenhum grupo estourou o previsto.
-        </div>
-      ) : (
-        <>
-          {villains.map(d => (
-            <div className="villain-row" key={d.macroCategoryId || d.categoryId}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="vdot" style={{ background: d.status === 'critical' ? 'var(--crit)' : 'var(--warn)' }} />
-                {d.name}
-              </span>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: d.status === 'critical' ? 'var(--crit)' : 'var(--warn)' }}>
-                + {formatBRL(d.deviationRs)}
-              </span>
-            </div>
-          ))}
-          {noPlanned.map(d => (
-            <div className="villain-row" key={d.macroCategoryId || d.categoryId}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="vdot" style={{ background: 'var(--ink)' }} />
-                {d.name}
-              </span>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--faint)' }}>no plano</span>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  )
-}
-
-/* ── Alertas do mês ── */
-function AlertsCard({ alerts, isPartial, daysLeft }: { alerts: AlertItem[]; isPartial: boolean; daysLeft: number }) {
+/* ── Alertas ── */
+function AlertsCard({ alerts, isPartial }: { alerts: AlertItem[]; isPartial: boolean }) {
+  const now = new Date()
+  const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()
   return (
     <div className="card" style={{ padding: '18px 20px' }}>
       <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 14 }}>Alertas do mês</h3>
-
       {isPartial && (
         <div className="alert-row" style={{ background: 'var(--accent-soft)' }}>
           <span className="vdot" style={{ background: 'var(--ink)' }} />
           <span>Leitura parcial: faltam {daysLeft} dias para fechar.</span>
         </div>
       )}
-      {alerts.slice(0, 3).map(a => (
-        <div
-          key={a.id}
-          className="alert-row"
-          style={{ background: a.level === 'critical' ? 'var(--crit-soft)' : 'var(--warn-soft)' }}
-        >
+      {alerts.slice(0, 4).map(a => (
+        <div key={a.id} className="alert-row" style={{ background: a.level === 'critical' ? 'var(--crit-soft)' : 'var(--warn-soft)' }}>
           <span className="vdot" style={{ background: a.level === 'critical' ? 'var(--crit)' : 'var(--warn)' }} />
           <span>{a.message}</span>
         </div>
@@ -298,165 +368,9 @@ function AlertsCard({ alerts, isPartial, daysLeft }: { alerts: AlertItem[]; isPa
       {!isPartial && alerts.length === 0 && (
         <div className="alert-row" style={{ background: 'var(--pos-soft)' }}>
           <span className="vdot" style={{ background: 'var(--pos)' }} />
-          <span style={{ color: 'var(--pos)', fontWeight: 600 }}>Nenhum ponto crítico neste mês.</span>
+          <span style={{ color: 'var(--pos)', fontWeight: 600 }}>Nenhum ponto crítico.</span>
         </div>
       )}
-    </div>
-  )
-}
-
-/* ── Maiores lançamentos ── */
-function TopCard({ data, onNavigate }: { data: TopTransaction[]; onNavigate: (r: string) => void }) {
-  return (
-    <div className="card" style={{ padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)' }}>Maiores lançamentos</h3>
-        <button
-          onClick={() => onNavigate('/lancamentos')}
-          style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)', background: 'none', border: 'none', cursor: 'pointer' }}
-        >
-          Ver ›
-        </button>
-      </div>
-
-      {data.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--faint)', padding: '16px 0', textAlign: 'center' }}>Nenhum lançamento registrado</p>
-      ) : (
-        data.slice(0, 4).map(item => (
-          <div className="villain-row" key={item.id}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>
-              {item.description}
-            </span>
-            <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', flexShrink: 0 }}>
-              {formatBRL(item.amount)}
-            </span>
-          </div>
-        ))
-      )}
-    </div>
-  )
-}
-
-/* ── Insights IA ── */
-function InsightsCard({ summary, expenseBreakdown, trend, isCurrent }: {
-  summary: { operationalIncome: number; totalExpenses: number; operationalResult: number }
-  expenseBreakdown: Array<{ name: string; total: number; percentage: number }>
-  trend: Array<{ month: string; operationalIncome: number; totalExpenses: number; operationalResult: number }>
-  isCurrent: boolean
-}) {
-  const topCat = expenseBreakdown.slice().sort((a, b) => b.total - a.total)[0]
-  const prevMonthTrend = trend.at(-2)
-  const resultDiff = prevMonthTrend ? summary.operationalResult - prevMonthTrend.operationalResult : null
-  const isPositive = summary.operationalResult >= 0
-  const bullets: string[] = []
-  if (topCat) bullets.push(`Categoria que mais consome: ${topCat.name} (${topCat.percentage.toFixed(0)}% das despesas).`)
-  if (isPositive) bullets.push('Saldo positivo! Continue assim.')
-  else bullets.push(`Saldo negativo de ${formatBRL(Math.abs(summary.operationalResult))}. Revise as despesas.`)
-  if (resultDiff !== null) {
-    if (resultDiff > 0) bullets.push(`Resultado ${formatBRL(resultDiff)} melhor que o mês anterior.`)
-    else if (resultDiff < 0) bullets.push(`Resultado ${formatBRL(Math.abs(resultDiff))} pior que o mês anterior.`)
-  }
-  if (isCurrent) bullets.push('Mês em andamento — valores parciais.')
-  return (
-    <div className="card" style={{ padding: '18px 20px', background: '#f5f0ff', border: '1px solid #e0d4ff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 20 }}>✨</span>
-        <h3 style={{ fontSize: 14, fontWeight: 750, color: '#6b21a8' }}>Insights do mês</h3>
-      </div>
-      <ul style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, margin: 0 }}>
-        {bullets.map((b, i) => (
-          <li key={i} style={{ fontSize: 13, color: '#4c1d95', lineHeight: 1.5 }}>{b}</li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/* ── Resumo Mensal (barra) ── */
-function ResumoMensalChart({ trend }: { trend: Array<{ month: string; operationalIncome: number; totalExpenses: number }> }) {
-  const data = trend.slice(-6).map(t => {
-    const [, m] = t.month.split('-').map(Number)
-    return { name: MONTHS_PT[m - 1], Receitas: Math.round(t.operationalIncome), Despesas: Math.round(t.totalExpenses) }
-  })
-  return (
-    <div className="card" style={{ padding: '18px 20px' }}>
-      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 16 }}>Resumo Mensal</h3>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data} barSize={14} barGap={4}>
-          <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--faint)' }} axisLine={false} tickLine={false} />
-          <YAxis hide />
-          <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} />
-          <Bar dataKey="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-/* ── Gastos por Categoria (pizza) ── */
-const PIE_COLORS = ['#6366f1','#f59e0b','#22c55e','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6']
-function GastosCategoriaChart({ expenseBreakdown }: { expenseBreakdown: Array<{ name: string; total: number; color: string }> }) {
-  const top = expenseBreakdown.slice().sort((a, b) => b.total - a.total).slice(0, 8)
-  const data = top.map((d, i) => ({ name: d.name, value: Math.round(d.total), fill: PIE_COLORS[i % PIE_COLORS.length] }))
-  if (data.length === 0) return null
-  return (
-    <div className="card" style={{ padding: '18px 20px' }}>
-      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 16 }}>Gastos por Categoria</h3>
-      <ResponsiveContainer width="100%" height={200}>
-        <PieChart>
-          <Pie data={data} dataKey="value" cx="50%" cy="50%" outerRadius={75} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent??0)*100).toFixed(0)}%`} labelLine={false} style={{ fontSize: 10 }}>
-            {data.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-          </Pie>
-          <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-/* ── Essenciais x Não Essenciais (donut) ─────────────────────────────────────
-   Essenciais = categorias com orçamento definido (planned>0) → controle ativo.
-   Não Essenciais = gastos sem orçamento ou acima do planejado (variável).         */
-function EssenciaisChart({ budgetComparison }: { budgetComparison: BudgetComparison[] }) {
-  const total = budgetComparison.reduce((s, d) => s + d.realized, 0)
-  if (total === 0) return null
-  const ess = budgetComparison.filter(d => d.planned > 0).reduce((s, d) => s + Math.min(d.realized, d.planned), 0)
-  const nonEss = total - ess
-  const essP = total > 0 ? Math.round(ess / total * 100) : 0
-  const nonP = 100 - essP
-  const data = [
-    { name: `Essenciais ${essP}%`, value: Math.round(ess), fill: '#22c55e' },
-    { name: `Não Essenciais ${nonP}%`, value: Math.round(nonEss), fill: '#f59e0b' },
-  ]
-  return (
-    <div className="card" style={{ padding: '18px 20px' }}>
-      <h3 style={{ fontSize: 14, fontWeight: 750, color: 'var(--ink)', marginBottom: 4 }}>Essenciais × Não Essenciais</h3>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-        <ResponsiveContainer width={160} height={160}>
-          <PieChart>
-            <Pie data={data} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3}>
-              {data.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-            </Pie>
-            <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), ""]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {data.map(d => (
-            <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.fill, flexShrink: 0 }} />
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{d.name}</p>
-                <p style={{ fontSize: 11, color: 'var(--faint)' }}>{formatBRL(d.value)}</p>
-              </div>
-            </div>
-          ))}
-          <div style={{ marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
-            <p style={{ fontSize: 11, color: 'var(--faint)' }}>Total despesas</p>
-            <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>{formatBRL(total)}</p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { AlertTriangle, Tag, Clock, CreditCard, Zap, X, ArrowLeft, Sparkles, CheckSquare, Square, Brain } from 'lucide-react'
+import { Zap, X, CheckSquare, Square, Brain } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import { MACRO_CATEGORIES, CATEGORIES } from '../config/categories'
+import { MACRO_CATEGORIES } from '../config/categories'
 import { formatBRL } from '../utils/currency'
 import { getReviewItems } from '../utils/reviewItems'
 import { generateFinancialReviewItems, countBySeverity } from '../utils/financialReview'
@@ -13,7 +13,7 @@ import { canAutoCategorize, learnRuleFromTransaction } from '../services/categor
 import { currentYearMonth, formatFinancialDateBR } from '../utils/date'
 import type { ReviewReason } from '../utils/reviewItems'
 import type { Transaction, ClassificationType } from '../types'
-import { suggestCategories, buildClipboardPrompt } from '../services/categorize.service'
+import { suggestCategories } from '../services/categorize.service'
 import { CategorySelector } from '../components/CategorySelector'
 import { newSubCategoryId } from '../services/subcategory.service'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
@@ -35,43 +35,6 @@ interface Props {
 
 type ActivePanel = ReviewReason | 'all' | 'import_api' | null
 
-const CLS_LABELS: Record<ClassificationType, string> = {
-  operational_income: 'Receita Op.', extraordinary_income: 'Rec. Eventual',
-  operational_expense: 'Desp. Op.', debt_cost: 'Dívida',
-  investment: 'Investimento', redemption: 'Resgate',
-  transfer: 'Transferência', reimbursement: 'Reembolso',
-  adjustment: 'Ajuste', neutral: 'Neutro',
-}
-
-const SUGGESTION_SOURCE_LABEL: Record<NonNullable<Transaction['categorySuggestionSource']>, string> = {
-  pluggy_id:      'Pluggy categoryId',
-  pluggy_name:    'Pluggy category',
-  text_inference: 'Inferência por texto',
-  history:        'Histórico',
-  rule:           'Regra aprendida',
-  ai:             'IA',
-  command:        'Comando',
-  manual:         'Manual',
-  none:           '—',
-}
-
-const CONFIDENCE_META: Record<NonNullable<Transaction['categoryConfidence']>, { label: string; color: string }> = {
-  high:   { label: 'alta confiança',  color: 'var(--pos)' },
-  medium: { label: 'média confiança', color: 'var(--warn)' },
-  low:    { label: 'baixa confiança', color: 'var(--faint)' },
-}
-
-/** Deriva a origem da sugestão; usa o campo persistido e cai para heurística em lançamentos legados. */
-function deriveSuggestionSource(tx: Transaction): string | null {
-  if (tx.categorySuggestionSource && tx.categorySuggestionSource !== 'none') {
-    return SUGGESTION_SOURCE_LABEL[tx.categorySuggestionSource]
-  }
-  if (tx.manualCategoryOverride || tx.manualSubCategoryOverride) return SUGGESTION_SOURCE_LABEL.manual
-  if (tx.pluggyCategoryMapped && tx.pluggyCategoryId) return SUGGESTION_SOURCE_LABEL.pluggy_id
-  if (tx.pluggyCategoryMapped && tx.pluggyCategory)   return SUGGESTION_SOURCE_LABEL.pluggy_name
-  if (tx.categoryConfidence === 'low')                return SUGGESTION_SOURCE_LABEL.text_inference
-  return null
-}
 
 export function Review({ onNavigate: _onNavigate }: Props) {
   const { transactions, updateTransaction, updateTransactions, subCategories, saveSubCategory } = useData()
@@ -157,31 +120,6 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     import_api:   pluggyItems.length,
   }), [reviewItems, pluggyItems])
 
-  const panelItems = useMemo(() => {
-    if (!activePanel) return []
-    if (activePanel === 'all') return reviewItems
-    if (activePanel === 'import_api') return []  // handled separately
-    return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason))
-  }, [reviewItems, activePanel])
-
-  const filteredPanelItems = useMemo(() => {
-    const q = panelSearch.trim().toLowerCase()
-    if (!q) return panelItems
-    return panelItems.filter(i =>
-      i.tx.description.toLowerCase().includes(q) ||
-      (MACRO_CATEGORIES.find(m => m.id === i.tx.macroCategoryId)?.name ?? '').toLowerCase().includes(q)
-    )
-  }, [panelItems, panelSearch])
-
-  function applySuggestion(tx: Transaction) {
-    const s = suggestions.get(tx.id)
-    if (!s) return
-    updateTransaction(tx.id, {
-      macroCategoryId:    s.macroCategoryId,
-      categoryId:         s.categoryId,
-      classificationType: s.classificationType,
-    })
-  }
 
   /**
    * Apply every high-confidence suggestion in one batch:
@@ -331,12 +269,6 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     })
   }
 
-  function copyPendingToClipboard() {
-    const uncategorized = pluggyItems.filter(t => !t.macroCategoryId)
-    const prompt = buildClipboardPrompt(uncategorized)
-    navigator.clipboard.writeText(prompt).catch(() => {/* ignore */})
-  }
-
   async function categorizeWithAI() {
     const candidates = transactions.filter(t =>
       canAutoCategorize(t) && (!t.macroCategoryId || t.needsReview || t.categoryConfidence === 'low')
@@ -452,78 +384,49 @@ export function Review({ onNavigate: _onNavigate }: Props) {
     setModalTx(null)
   }
 
-  const TRIAGE_CARDS: Array<{
-    key: ActivePanel
-    label: string
-    description: string
-    icon: React.ReactNode
-    color: string
-    count: number
-  }> = [
-    {
-      key: 'no_category',
-      label: 'Sem categoria',
-      description: 'Lançamentos sem macro categoria definida',
-      icon: <Tag size={18} />,
-      color: 'var(--warn)',
-      count: counts.no_category,
-    },
-    {
-      key: 'pending',
-      label: 'Pendentes',
-      description: 'Compromissos futuros não confirmados',
-      icon: <Clock size={18} />,
-      color: 'var(--ink-2)',
-      count: counts.pending,
-    },
-    {
-      key: 'transfer',
-      label: 'Possíveis transferências',
-      description: 'Movimentações internas que podem duplicar despesas',
-      icon: <CreditCard size={18} />,
-      color: 'var(--faint)',
-      count: counts.transfer,
-    },
-    {
-      key: 'high_value',
-      label: 'Alto valor',
-      description: 'Despesas acima da média × 4 ou acima de R$ 2.000',
-      icon: <AlertTriangle size={18} />,
-      color: 'var(--crit)',
-      count: counts.high_value,
-    },
-    {
-      key: 'needs_review',
-      label: 'Precisa revisar',
-      description: 'Classificações atípicas que merecem atenção',
-      icon: <Zap size={18} />,
-      color: 'var(--accent)',
-      count: counts.needs_review,
-    },
-    {
-      key: 'import_api' as ActivePanel,
-      label: 'Importadas via Pluggy',
-      description: `${suggestions.size} com sugestão de categoria automática`,
-      icon: <Sparkles size={18} />,
-      color: 'var(--pos)',
-      count: counts.import_api,
-    },
-  ]
+  // ── Computed display items (replaces activePanel navigation) ─────────────────
+  const displayItems = useMemo(() => {
+    const base = (() => {
+      if (!activePanel || activePanel === 'all') return reviewItems.map(i => ({ tx: i.tx, reasons: i.reasons }))
+      if (activePanel === 'import_api') return pluggyItems.map(tx => ({ tx, reasons: [] as string[] }))
+      return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason)).map(i => ({ tx: i.tx, reasons: i.reasons }))
+    })()
+    const q = panelSearch.trim().toLowerCase()
+    if (!q) return base
+    return base.filter(i =>
+      i.tx.description.toLowerCase().includes(q) ||
+      (MACRO_CATEGORIES.find(m => m.id === i.tx.macroCategoryId)?.name ?? '').toLowerCase().includes(q)
+    )
+  }, [activePanel, reviewItems, pluggyItems, panelSearch])
 
   return (
     <main className="page-shell">
       <div className="page-content section-gap">
 
         {/* ── Header ── */}
-        <div>
-          <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Revisão</h1>
-          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
-            Central de triagem — {counts.all} {counts.all === 1 ? 'item precisa' : 'itens precisam'} de atenção
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Revisão</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              {counts.all === 0 ? 'Tudo revisado ✓' : `${counts.all} ${counts.all === 1 ? 'item precisa' : 'itens precisam'} de atenção`}
+            </div>
           </div>
+          {/* AI actions when in pluggy panel */}
+          {activePanel === 'import_api' && pluggyItems.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={applyAllSuggestions} disabled={applyingAll} style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
+                {applyingAll ? 'Aplicando…' : `Aplicar alta confiança (${suggestions.size})`}
+              </button>
+              <button onClick={categorizeWithAI} disabled={aiLoading} style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', fontFamily: 'var(--ui)', display: 'inline-flex', alignItems: 'center', gap: 5, opacity: aiLoading ? 0.65 : 1 }}>
+                <Brain size={13} /> {aiLoading ? 'Consultando IA…' : 'Categorizar com IA'}
+              </button>
+              {aiError && <span style={{ fontSize: 11, color: 'var(--crit)', fontWeight: 600 }}>{aiError}</span>}
+            </div>
+          )}
         </div>
 
-        {/* ── Revisão Inteligente (Fase 2.1) ── */}
-        {!activePanel && intelligentItems.length > 0 && (
+        {/* ── Revisão Inteligente (colapsável) ── */}
+        {intelligentItems.length > 0 && (
           <IntelligentReviewPanel
             items={intelligentItems}
             filteredItems={filteredIntelligent}
@@ -532,448 +435,132 @@ export function Review({ onNavigate: _onNavigate }: Props) {
             dismissed={dismissedIntelligent}
             onFilterChange={setIntelligentFilter}
             onDismiss={dismissIntelligentItem}
-            onNavigateToTx={txId => {
-              const tx = transactions.find(t => t.id === txId)
-              if (tx) openModal(tx)
-            }}
+            onNavigateToTx={txId => { const tx = transactions.find(t => t.id === txId); if (tx) openModal(tx) }}
           />
         )}
 
-        {/* ── Triage cards ── */}
-        {!activePanel && (
-          <>
-            <div className="stats-grid-3" style={{ gap: 12 }}>
-              {TRIAGE_CARDS.map(card => (
-                <button
-                  key={card.key as string}
-                  onClick={() => card.count > 0 && setActivePanel(card.key)}
-                  disabled={card.count === 0}
-                  style={{
-                    textAlign: 'left', background: 'var(--card-bg)',
-                    border: `1px solid ${card.count > 0 ? card.color + '55' : 'var(--line)'}`,
-                    borderRadius: 12, padding: '16px 18px', cursor: card.count > 0 ? 'pointer' : 'default',
-                    opacity: card.count === 0 ? 0.4 : 1,
-                    transition: 'border-color .15s, box-shadow .15s',
-                    fontFamily: 'var(--ui)',
-                  }}
-                  onMouseEnter={e => { if (card.count > 0) (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 10px rgba(0,0,0,.08)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = '' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ color: card.color }}>{card.icon}</span>
-                    <span style={{
-                      fontSize: 18, fontWeight: 800, color: card.count > 0 ? card.color : 'var(--faint)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}>
-                      {card.count}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>{card.label}</p>
-                  <p style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5 }}>{card.description}</p>
-                </button>
-              ))}
+        {/* ── Filter pills + search ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {([
+            { key: null,          label: 'Todos',            count: counts.all },
+            { key: 'no_category', label: 'Sem categoria',    count: counts.no_category },
+            { key: 'pending',     label: 'Pendentes',        count: counts.pending },
+            { key: 'high_value',  label: 'Alto valor',       count: counts.high_value },
+            { key: 'transfer',    label: 'Transferências',   count: counts.transfer },
+            { key: 'needs_review',label: 'Precisa revisar',  count: counts.needs_review },
+            { key: 'import_api',  label: 'Via Pluggy',       count: counts.import_api },
+          ] as { key: ActivePanel; label: string; count: number }[]).map(pill => (
+            <button
+              key={pill.key ?? 'all'}
+              onClick={() => { setActivePanel(pill.key); setPanelSearch(''); setSelected(new Set()) }}
+              className={`filter-pill${activePanel === pill.key ? ' active' : ''}`}
+            >
+              {pill.label}
+              {pill.count > 0 && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: activePanel === pill.key ? 'rgba(255,255,255,.22)' : 'var(--well)', color: activePanel === pill.key ? '#fff' : 'var(--faint)', marginLeft: 2 }}>
+                  {pill.count}
+                </span>
+              )}
+            </button>
+          ))}
 
-              {/* All items card */}
-              <button
-                onClick={() => setActivePanel('all')}
-                disabled={counts.all === 0}
-                style={{
-                  textAlign: 'left', background: counts.all > 0 ? 'var(--accent-soft)' : 'var(--card-bg)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 12, padding: '16px 18px', cursor: counts.all > 0 ? 'pointer' : 'default',
-                  opacity: counts.all === 0 ? 0.4 : 1,
-                  fontFamily: 'var(--ui)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ color: 'var(--ink-2)', fontSize: 18 }}>⚡</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>
-                    {counts.all}
-                  </span>
-                </div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Todos os itens</p>
-                <p style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5 }}>Ver tudo que precisa de revisão</p>
-              </button>
-            </div>
+          {/* Search */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 160px', border: '1px solid var(--line)', borderRadius: 8, padding: '4px 10px', background: 'var(--paper)' }}>
+            <span style={{ color: 'var(--faint)', fontSize: 12 }}>🔍</span>
+            <input
+              value={panelSearch}
+              onChange={e => setPanelSearch(e.target.value)}
+              placeholder="Buscar descrição ou categoria…"
+              style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
+            />
+            {panelSearch && <button onClick={() => setPanelSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', display: 'flex', padding: 0 }}><X size={12} /></button>}
+          </div>
+          <span style={{ fontSize: 11.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{displayItems.length} itens</span>
+        </div>
 
-            {counts.all === 0 && (
-              <div style={{ textAlign: 'center', padding: '48px 16px' }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--pos)', marginBottom: 8 }}>Tudo revisado!</h3>
-                <p style={{ fontSize: 13, color: 'var(--faint)' }}>Nenhum lançamento precisa de atenção no momento.</p>
-              </div>
-            )}
-          </>
+        {/* ── All-clear ── */}
+        {counts.all === 0 && (
+          <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--pos)', marginBottom: 8 }}>Tudo revisado!</h3>
+            <p style={{ fontSize: 13, color: 'var(--faint)' }}>Nenhum lançamento precisa de atenção no momento.</p>
+          </div>
         )}
 
-        {/* ── Active panel: list ── */}
-        {activePanel && (
-          <>
-            {/* Back to triage cards */}
-            <button
-              onClick={() => setActivePanel(null)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)',
-                background: 'var(--well)', border: '1px solid var(--line)',
-                borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
-                fontFamily: 'var(--ui)', alignSelf: 'flex-start',
-              }}
-            >
-              <ArrowLeft size={13} />
-              Voltar para Revisão
-            </button>
-
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
-              {activePanel === 'import_api' ? pluggyItems.length : panelItems.length}&nbsp;
-              {(activePanel === 'import_api' ? pluggyItems.length : panelItems.length) === 1 ? 'item' : 'itens'} · {
-                activePanel === 'all' ? 'Todos os itens' :
-                activePanel === 'import_api' ? 'Importadas via Pluggy' :
-                TRIAGE_CARDS.find(c => c.key === activePanel)?.label ?? activePanel
-              }
-            </div>
-
-            {/* ── Pluggy import panel ── */}
-            {activePanel === 'import_api' && (
-              <>
-                {pluggyItems.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-                      {suggestions.size} com sugestão de histórico · marque linhas para ações em lote
-                    </span>
-                    <button
-                      onClick={applyAllSuggestions}
-                      disabled={applyingAll}
-                      style={{
-                        fontSize: 11.5, fontWeight: 700, color: '#fff',
-                        background: 'var(--pos)', border: 'none', borderRadius: 7,
-                        padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
-                      }}
-                    >
-                      {applyingAll ? 'Aplicando…' : 'Aplicar todas de alta confiança'}
-                    </button>
-                    {pluggyItems.filter(t => !t.macroCategoryId).length > 0 && (
-                      <button
-                        onClick={copyPendingToClipboard}
-                        style={{
-                          fontSize: 11.5, fontWeight: 600, color: 'var(--ink-2)',
-                          background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 7,
-                          padding: '5px 12px', cursor: 'pointer', fontFamily: 'var(--ui)',
-                        }}
-                      >
-                        Copiar pendências para ChatGPT
+        {/* ── Unified table ── */}
+        {counts.all > 0 && (
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
+                <thead>
+                  <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
+                    <th className="table-th" style={{ width: 32 }}>
+                      <button onClick={() => toggleSelectAll(displayItems.map(i => i.tx.id))} aria-label="Selecionar todos" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}>
+                        {displayItems.length > 0 && displayItems.every(i => selected.has(i.tx.id)) ? <CheckSquare size={15} /> : <Square size={15} />}
                       </button>
-                    )}
-                    <button
-                      onClick={categorizeWithAI}
-                      disabled={aiLoading}
-                      title="Envia pendentes para IA e mostra sugestões de categoria para aprovação"
-                      style={{
-                        fontSize: 11.5, fontWeight: 700, color: '#fff',
-                        background: 'var(--accent)', border: 'none', borderRadius: 7,
-                        padding: '5px 14px', cursor: 'pointer', fontFamily: 'var(--ui)',
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        opacity: aiLoading ? 0.65 : 1,
-                      }}
-                    >
-                      <Brain size={13} />
-                      {aiLoading ? 'Consultando IA…' : 'Categorizar com IA'}
-                    </button>
-                    {aiError && (
-                      <span style={{ fontSize: 11, color: 'var(--crit)', fontWeight: 600 }}>{aiError}</span>
-                    )}
-                  </div>
-                )}
-                <div className="card" style={{ overflow: 'hidden' }}>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
-                      <thead>
-                        <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
-                          <th className="table-th" style={{ width: 32 }}>
-                            <button
-                              onClick={() => toggleSelectAll(pluggyItems.map(t => t.id))}
-                              aria-label="Selecionar todos"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
-                            >
-                              {pluggyItems.length > 0 && pluggyItems.every(t => selected.has(t.id))
-                                ? <CheckSquare size={15} /> : <Square size={15} />}
-                            </button>
-                          </th>
-                          <th className="table-th">Data</th>
-                          <th className="table-th">Descrição</th>
-                          <th className="table-th table-th-right">Valor</th>
-                          <th className="table-th">Cat. Pluggy</th>
-                          <th className="table-th">Categoria atual</th>
-                          <th className="table-th">Sugestão</th>
-                          <th style={{ width: 100 }} />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pluggyItems.map(tx => {
-                          const macro   = MACRO_CATEGORIES.find(m => m.id === tx.macroCategoryId)
-                          const sugg    = suggestions.get(tx.id)
-                          const suggMacro = sugg ? MACRO_CATEGORIES.find(m => m.id === sugg.macroCategoryId) : null
-                          const suggCat   = sugg ? CATEGORIES.find(c => c.id === sugg.categoryId) : null
-                          const suggSource = deriveSuggestionSource(tx)
-                          const confMeta   = tx.categoryConfidence ? CONFIDENCE_META[tx.categoryConfidence] : null
-                          const isSel = selected.has(tx.id)
-                          return (
-                            <tr key={tx.id} className="table-row" style={{ background: isSel ? 'var(--accent-soft)' : undefined }}>
-                              <td className="table-td">
-                                <button
-                                  onClick={() => toggleSelect(tx.id)}
-                                  aria-label={isSel ? 'Desmarcar' : 'Selecionar'}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSel ? 'var(--accent)' : 'var(--faint)', padding: 0, display: 'flex' }}
-                                >
-                                  {isSel ? <CheckSquare size={15} /> : <Square size={15} />}
-                                </button>
-                              </td>
-                              <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
-                                {formatFinancialDateBR(tx.competenceDate)}
-                              </td>
-                              <td className="table-td" style={{ maxWidth: 200 }}>
-                                <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
-                                  {tx.description}
-                                </p>
-                                {tx.pluggyInstitutionName && (
-                                  <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{tx.pluggyInstitutionName}</p>
-                                )}
-                              </td>
-                              <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                                {(tx.pluggyCategory || tx.pluggyCategoryId) ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    {tx.pluggyCategory && (
-                                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--well)', color: 'var(--ink-2)', fontWeight: 500, border: '1px solid var(--line)', whiteSpace: 'nowrap' }}>
-                                        {tx.pluggyCategory}
-                                      </span>
-                                    )}
-                                    {tx.pluggyCategoryId && (
-                                      <span style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--mono)' }}>
-                                        {tx.pluggyCategoryId}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
-                              </td>
-                              <td className="table-td table-th-right" style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: tx.type === 'income' ? 'var(--pos)' : 'var(--crit)' }}>
-                                {tx.type === 'expense' ? '−' : '+'}{formatBRL(tx.amount)}
-                              </td>
-                              <td className="table-td">
-                                {macro ? (
-                                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12` }}>
-                                    {macro.name}
-                                  </span>
-                                ) : <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }}>Sem categoria</span>}
-                              </td>
-                              <td className="table-td">
-                                {sugg && suggMacro ? (
-                                  <div>
-                                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: `1px solid ${suggMacro.color}50`, color: suggMacro.color, fontWeight: 600, background: `${suggMacro.color}12` }}>
-                                      {suggCat?.name ?? suggMacro.name}
-                                    </span>
-                                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
-                                      Histórico · {sugg.reason} · {sugg.confidence === 'high' ? 'alta confiança' : 'média confiança'}
-                                    </span>
-                                  </div>
-                                ) : (tx.subCategoryNameSuggested || confMeta || suggSource) ? (
-                                  <div>
-                                    {tx.subCategoryNameSuggested && (
-                                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px dashed var(--line)', color: 'var(--ink-2)', fontWeight: 600, background: 'var(--well)' }}>
-                                        {tx.subCategoryNameSuggested}
-                                      </span>
-                                    )}
-                                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
-                                      {suggSource ?? 'Sugestão'}
-                                      {confMeta && <> · <span style={{ color: confMeta.color, fontWeight: 600 }}>{confMeta.label}</span></>}
-                                    </span>
-                                  </div>
-                                ) : <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>}
-                              </td>
-                              <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                  {sugg && !tx.macroCategoryId && (
-                                    <button
-                                      onClick={() => applySuggestion(tx)}
-                                      style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--pos)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
-                                    >
-                                      Aplicar
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => openModal(tx)}
-                                    style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
-                                  >
-                                    Editar
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                        {pluggyItems.length === 0 && (
-                          <tr><td colSpan={8}><div className="empty-state"><h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma transação importada via Pluggy</h4></div></td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ── Standard review panel ── */}
-            {activePanel !== 'import_api' && (
-            <React.Fragment>
-              {/* Search bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <input
-                    value={panelSearch}
-                    onChange={e => setPanelSearch(e.target.value)}
-                    placeholder="Buscar por descrição ou categoria…"
-                    className="login-field"
-                    style={{ width: '100%', fontSize: 12.5, paddingLeft: 32 }}
-                  />
-                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--faint)', pointerEvents: 'none', fontSize: 13 }}>🔍</span>
-                </div>
-                {panelSearch && (
-                  <button onClick={() => setPanelSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', display: 'flex', padding: 4 }}>
-                    <X size={14} />
-                  </button>
-                )}
-                <span style={{ fontSize: 11.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-                  {filteredPanelItems.length} de {panelItems.length} · marque para editar em lote
-                </span>
-              </div>
-            <div className="card" style={{ overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
-                      <th className="table-th" style={{ width: 32 }}>
-                        <button
-                          onClick={() => toggleSelectAll(filteredPanelItems.map(i => i.tx.id))}
-                          aria-label="Selecionar todos"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)', padding: 0, display: 'flex' }}
-                        >
-                          {filteredPanelItems.length > 0 && filteredPanelItems.every(i => selected.has(i.tx.id))
-                            ? <CheckSquare size={15} /> : <Square size={15} />}
-                        </button>
-                      </th>
-                      <th className="table-th">Data</th>
-                      <th className="table-th">Descrição</th>
-                      <th className="table-th table-th-right">Valor</th>
-                      <th className="table-th">Categoria</th>
-                      <th className="table-th">Atenção</th>
-                      <th style={{ width: 64 }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPanelItems.map(item => {
-                      const macro = MACRO_CATEGORIES.find(m => m.id === item.tx.macroCategoryId)
-                      const isSel = selected.has(item.tx.id)
-                      return (
-                        <tr key={item.tx.id} className="table-row" style={{ opacity: item.tx.status === 'pending' ? 0.7 : 1, background: isSel ? 'var(--accent-soft)' : undefined }}>
-                          <td className="table-td">
-                            <button
-                              onClick={() => toggleSelect(item.tx.id)}
-                              aria-label={isSel ? 'Desmarcar' : 'Selecionar'}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSel ? 'var(--accent)' : 'var(--faint)', padding: 0, display: 'flex' }}
-                            >
-                              {isSel ? <CheckSquare size={15} /> : <Square size={15} />}
-                            </button>
-                          </td>
-                          <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5 }}>
-                            {formatFinancialDateBR(item.tx.competenceDate)}
-                          </td>
-                          <td className="table-td" style={{ maxWidth: 240 }}>
-                            <p
-                              onClick={() => setPanelSearch(item.tx.description)}
-                              title="Filtrar por esta descrição"
-                              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', cursor: 'pointer' }}
-                            >
-                              {item.tx.description}
-                            </p>
-                            <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>
-                              {CLS_LABELS[item.tx.classificationType] ?? item.tx.classificationType}
-                            </p>
-                          </td>
-                          <td className="table-td table-th-right" style={{
-                            fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13,
-                            color: item.tx.type === 'income' ? 'var(--pos)' : 'var(--crit)',
-                          }}>
-                            {item.tx.type === 'expense' ? '−' : '+'}{formatBRL(item.tx.amount)}
-                          </td>
-                          <td className="table-td">
-                            {macro ? (
-                              <span
-                                onClick={() => setPanelSearch(macro.name)}
-                                title="Filtrar por esta categoria"
-                                style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  fontSize: 10, padding: '2px 7px', borderRadius: 4,
-                                  border: `1px solid ${macro.color}50`, color: macro.color,
-                                  fontWeight: 600, background: `${macro.color}12`, cursor: 'pointer',
-                                }}
-                              >
-                                {macro.name}
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }}>Sem categoria</span>
-                            )}
-                          </td>
-                          <td className="table-td" style={{ maxWidth: 200 }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                              {item.reasons.map((r, i) => (
-                                <span key={i} className="review-note" style={{ fontSize: 10.5 }}>{r}</span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                            <button
-                              onClick={() => openModal(item.tx)}
-                              style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
-                            >
-                              Editar
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {filteredPanelItems.length === 0 && (
-                      <tr>
-                        <td colSpan={7}>
-                          <div className="empty-state">
-                            <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
-                              {panelSearch ? 'Nenhum resultado para esta busca' : 'Nenhum item nesta categoria'}
-                            </h4>
+                    </th>
+                    <th className="table-th">Data</th>
+                    <th className="table-th">Descrição</th>
+                    <th className="table-th table-th-right">Valor</th>
+                    <th className="table-th">Categoria</th>
+                    <th className="table-th">Atenção</th>
+                    <th style={{ width: 64 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayItems.map(item => {
+                    const macro = MACRO_CATEGORIES.find(m => m.id === item.tx.macroCategoryId)
+                    const isSel = selected.has(item.tx.id)
+                    return (
+                      <tr key={item.tx.id} className="table-row" style={{ opacity: item.tx.status === 'pending' ? 0.7 : 1, background: isSel ? 'var(--accent-soft)' : undefined }}>
+                        <td className="table-td">
+                          <button onClick={() => toggleSelect(item.tx.id)} aria-label={isSel ? 'Desmarcar' : 'Selecionar'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSel ? 'var(--accent)' : 'var(--faint)', padding: 0, display: 'flex' }}>
+                            {isSel ? <CheckSquare size={15} /> : <Square size={15} />}
+                          </button>
+                        </td>
+                        <td className="table-td" style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5 }}>
+                          {formatFinancialDateBR(item.tx.competenceDate)}
+                        </td>
+                        <td className="table-td" style={{ maxWidth: 240 }}>
+                          <p onClick={() => setPanelSearch(item.tx.description)} title="Filtrar por descrição" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)', cursor: 'pointer' }}>
+                            {item.tx.description}
+                          </p>
+                          <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>{item.tx.pluggyAccountName ?? ''}</p>
+                        </td>
+                        <td className="table-td table-th-right" style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: item.tx.type === 'income' ? 'var(--pos)' : 'var(--crit)' }}>
+                          {item.tx.type === 'expense' ? '−' : '+'}{formatBRL(item.tx.amount)}
+                        </td>
+                        <td className="table-td">
+                          {macro ? (
+                            <span onClick={() => setPanelSearch(macro.name)} title="Filtrar por categoria" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 7px', borderRadius: 4, border: `1px solid ${macro.color}50`, color: macro.color, fontWeight: 600, background: `${macro.color}12`, cursor: 'pointer' }}>
+                              {macro.name}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }}>Sem categoria</span>
+                          )}
+                        </td>
+                        <td className="table-td" style={{ maxWidth: 200 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {item.reasons.map((r, i) => <span key={i} className="review-note" style={{ fontSize: 10.5 }}>{r}</span>)}
                           </div>
                         </td>
+                        <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                          <button onClick={() => openModal(item.tx)} style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
+                            Editar
+                          </button>
+                        </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    )
+                  })}
+                  {displayItems.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '28px 0', fontSize: 13, color: 'var(--faint)' }}>Nenhum item neste filtro.</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            </React.Fragment>
-            )}
-
-            <div style={{ paddingBottom: 8 }}>
-              <button
-                onClick={() => setActivePanel(null)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)',
-                  background: 'var(--well)', border: '1px solid var(--line)',
-                  borderRadius: 8, padding: '8px 14px', cursor: 'pointer',
-                  fontFamily: 'var(--ui)',
-                }}
-              >
-                <ArrowLeft size={13} />
-                Voltar para Revisão
-              </button>
-            </div>
-          </>
+          </div>
         )}
+
 
       </div>
 
@@ -1135,17 +722,6 @@ export function Review({ onNavigate: _onNavigate }: Props) {
               </ModalField>
 
               <div style={{ display: 'flex', gap: 12 }}>
-                <ModalField label="Classificação" style={{ flex: 1 }}>
-                  <select
-                    value={modalPatch.classificationType as string ?? ''}
-                    onChange={e => setModalPatch(p => ({ ...p, classificationType: e.target.value as ClassificationType }))}
-                    className="ledger-select"
-                    style={{ width: '100%', fontSize: 12 }}
-                  >
-                    {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </ModalField>
-
                 <ModalField label="Status" style={{ flex: 1 }}>
                   <select
                     value={modalPatch.status ?? ''}
@@ -1424,11 +1000,6 @@ function BulkActionBar({
             }}
           />
         </div>
-
-        <select className="ledger-select" style={{ fontSize: 11.5 }} value={pendingCls} onChange={e => setPendingCls(e.target.value)}>
-          <option value="">Classificação…</option>
-          {Object.entries(CLS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
 
         <button
           className="btn btn-primary btn-sm"

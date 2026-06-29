@@ -4,6 +4,7 @@ import { getReconciliationStatus } from './tools/getReconciliationStatus'
 import { getSpendingInsights } from './tools/getSpendingInsights'
 import type { AgentToolResult } from './types'
 import { formatBRL } from '../utils/currency'
+import { loadHermesConfig } from '../services/aiAdvisor.service'
 
 export type EconomistaProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'hermes'
 
@@ -166,36 +167,56 @@ export async function askEconomista(
 
   const contextText = buildContextText(ctx.month, diagnosticData)
 
-  try {
-    const res = await fetch('/api/advisor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider,
-        question,
-        month: ctx.month,
-        context: {
-          summary: contextText,
-          transactions: [],
-          budget: {},
-        },
-        systemPromptExtra: `Você é o Economista FIN — assistente financeiro pessoal integrado ao FINFVC.
+  const SYSTEM = `Você é o Economista FIN — assistente financeiro pessoal integrado ao FINFVC.
 Modo atual: Diagnóstico (somente leitura — não execute ações).
 Analise apenas os dados fornecidos. Responda em português do Brasil.
-Separe fatos observados, hipóteses e recomendações.`,
-      }),
+Separe fatos observados, hipóteses e recomendações práticas.`
+
+  // Hermes: chamada direta ao LLM local (bypass backend)
+  if (provider === 'hermes') {
+    const cfg = loadHermesConfig()
+    if (!cfg.url) {
+      return { answer: 'Hermes não configurado. Defina a URL nas configurações do Consultor IA.', toolsUsed, alerts: uniqueAlerts, diagnosticData }
+    }
+    try {
+      const res = await fetch(cfg.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: cfg.model || undefined,
+          messages: [
+            { role: 'system', content: SYSTEM },
+            { role: 'user', content: `${contextText}\n\n---\nPergunta: ${question}` },
+          ],
+          stream: false,
+        }),
+      })
+      if (!res.ok) throw new Error(`Hermes HTTP ${res.status}`)
+      const json = await res.json() as { choices?: { message?: { content?: string } }[]; message?: { content?: string } }
+      const answer = json.choices?.[0]?.message?.content ?? json.message?.content ?? 'Sem resposta do Hermes.'
+      return { answer, toolsUsed, alerts: uniqueAlerts, diagnosticData }
+    } catch (err) {
+      return { answer: `Erro ao chamar Hermes: ${String(err)}`, toolsUsed, alerts: uniqueAlerts, diagnosticData }
+    }
+  }
+
+  // Agente agentico (Claude/GPT com tool use real)
+  try {
+    const res = await fetch('/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, month: ctx.month }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const json = await res.json() as { answer?: string }
+    const json = await res.json() as { answer?: string; error?: string }
+    if (json.error) throw new Error(json.error)
+    return { answer: json.answer ?? 'Sem resposta.', toolsUsed, alerts: uniqueAlerts, diagnosticData }
+  } catch (err) {
     return {
-      answer: json.answer ?? 'Sem resposta do servidor.',
-      toolsUsed,
-      alerts: uniqueAlerts,
-      diagnosticData,
-    }
-  } catch {
-    return {
-      answer: 'Erro ao conectar com o backend. Verifique se o servidor está rodando ou use o modo Simulado.',
+      answer: `Erro ao conectar com o agente: ${String(err)}`,
       toolsUsed,
       alerts: uniqueAlerts,
       diagnosticData,

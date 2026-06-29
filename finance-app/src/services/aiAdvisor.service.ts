@@ -11,7 +11,26 @@
  * See docs/ai-advisor-integration.md for full setup guide.
  */
 
-export type AIProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter'
+export type AIProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'hermes'
+
+export interface HermesConfig {
+  url: string          // e.g. http://localhost:11434/api/chat ou qualquer endpoint compatível
+  apiKey?: string      // opcional
+  model?: string       // opcional, ex: "hermes-3", "llama3", etc.
+}
+
+const HERMES_CONFIG_KEY = 'fin_hermes_config'
+
+export function loadHermesConfig(): HermesConfig {
+  try {
+    const raw = localStorage.getItem(HERMES_CONFIG_KEY)
+    return raw ? JSON.parse(raw) : { url: '', apiKey: '', model: '' }
+  } catch { return { url: '', apiKey: '', model: '' } }
+}
+
+export function saveHermesConfig(cfg: HermesConfig) {
+  localStorage.setItem(HERMES_CONFIG_KEY, JSON.stringify(cfg))
+}
 
 export interface AdvisorContext {
   month: string
@@ -43,7 +62,11 @@ export async function askAdvisor(
     return simulatedResponse(prompt, context)
   }
 
-  // gpt / claude → secure backend; keys never in browser
+  if (provider === 'hermes') {
+    return askHermes(prompt, context)
+  }
+
+  // gpt / claude / openrouter → secure backend; keys never in browser
   let res: Response
   try {
     res = await fetch('/api/advisor', {
@@ -70,6 +93,69 @@ export async function askAdvisor(
     throw new Error(body.error ?? `Erro ${res.status} no endpoint /api/advisor`)
   }
   return { answer: body.answer ?? '', provider }
+}
+
+// ── Hermes / endpoint personalizado ─────────────────────────────────────────
+function buildSystemPrompt(ctx: AdvisorContext): string {
+  const fmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const cats = ctx.topCategories.slice(0, 8).map((c, i) => `${i + 1}. ${c.name}: R$ ${fmt(c.amount)}`).join('\n')
+  return `Você é Hermes, consultor financeiro pessoal da família. Analise os dados abaixo e responda de forma direta, em português do Brasil.
+
+DADOS DO MÊS ${ctx.month}:
+- Receita operacional: R$ ${fmt(ctx.operationalIncome)}
+- Despesas totais: R$ ${fmt(ctx.totalExpenses)}
+- Resultado: ${ctx.operationalResult >= 0 ? '+' : ''}R$ ${fmt(ctx.operationalResult)}
+- Margem familiar: ${(ctx.savingsRate * 100).toFixed(1)}%
+${ctx.pendingAmount ? `- Compromissos pendentes: R$ ${fmt(ctx.pendingAmount)}` : ''}
+
+TOP CATEGORIAS DE DESPESA:
+${cats}
+
+Seja objetivo, use dados reais acima. Formate usando markdown quando útil.`
+}
+
+async function askHermes(prompt: string, context: AdvisorContext): Promise<AdvisorResponse> {
+  const cfg = loadHermesConfig()
+  if (!cfg.url.trim()) {
+    throw new Error('URL do Hermes não configurada. Configure em Configurações > Consultor IA.')
+  }
+
+  const systemPrompt = buildSystemPrompt(context)
+
+  // Tenta formato OpenAI-compatible (funciona com Ollama, LM Studio, Hermes, OpenRouter, etc.)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`
+
+  const body = {
+    model: cfg.model || 'hermes-3',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+    stream: false,
+  }
+
+  let res: Response
+  try {
+    res = await fetch(cfg.url, { method: 'POST', headers, body: JSON.stringify(body) })
+  } catch (e) {
+    throw new Error(`Não foi possível conectar ao Hermes em ${cfg.url}. Verifique se o serviço está rodando.`)
+  }
+
+  const text = await res.text()
+  if (!text.trim()) throw new Error('Hermes retornou resposta vazia.')
+
+  let data: Record<string, unknown>
+  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do Hermes: ${text.slice(0, 200)}`) }
+
+  // Suporte a formato OpenAI (choices[0].message.content) e Ollama (message.content)
+  const answer =
+    (data as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ??
+    (data as { message?: { content?: string } }).message?.content ??
+    (data as { response?: string }).response ??
+    String(data)
+
+  return { answer, provider: 'hermes' }
 }
 
 function simulatedResponse(prompt: string, ctx: AdvisorContext): Promise<AdvisorResponse> {

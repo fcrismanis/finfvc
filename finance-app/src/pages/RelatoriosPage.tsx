@@ -24,6 +24,7 @@ export function RelatoriosPage({ selectedMonth }: Props) {
   const { transactions, budgets } = useData()
   const [refMonth, setRefMonth] = useState(selectedMonth)
   const [expandedMacros, setExpandedMacros] = useState<Set<string>>(new Set())
+  const [showAudit, setShowAudit] = useState(false)
 
   const months = useMemo(() => getLast6Months(refMonth).slice(0, 6).reverse(), [refMonth])
 
@@ -74,14 +75,16 @@ export function RelatoriosPage({ selectedMonth }: Props) {
 
       return {
         macro,
-        cols: cols.map(({ realized, planned, pct, over }) => ({ realized, planned, pct, over })),
+        cols: cols.map(({ realized, planned, pct, over, txs }) => ({ realized, planned, pct, over, count: txs.length })),
         totalRealized,
+        totalCount: cols.reduce((s, c) => s + c.txs.length, 0),
         subRows,
       }
     }).filter(Boolean) as {
       macro: (typeof expenseMacros)[0]
-      cols: { realized: number; planned: number; pct: number | null; over: boolean }[]
+      cols: { realized: number; planned: number; pct: number | null; over: boolean; count: number }[]
       totalRealized: number
+      totalCount: number
       subRows: { id: string; name: string; cols: number[] }[]
     }[]
   }, [expenseMacros, months, transactions, budgets])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -108,8 +111,8 @@ export function RelatoriosPage({ selectedMonth }: Props) {
             tx.type === 'income' && tx.classificationType !== 'neutral'
         )
       )
-      const cols = colTxs.map(txs => txs.reduce((s, tx) => s + tx.amount, 0))
-      const totalRealized = cols.reduce((s, v) => s + v, 0)
+      const cols = colTxs.map(txs => ({ value: txs.reduce((s, tx) => s + tx.amount, 0), count: txs.length }))
+      const totalRealized = cols.reduce((s, c) => s + c.value, 0)
       if (totalRealized === 0) return null
 
       const subMap = new Map<string, { name: string; cols: number[] }>()
@@ -125,19 +128,41 @@ export function RelatoriosPage({ selectedMonth }: Props) {
         .map(([id, data]) => ({ id, name: data.name, cols: data.cols }))
         .sort((a, b) => b.cols.reduce((s, v) => s + v, 0) - a.cols.reduce((s, v) => s + v, 0))
 
-      return { macro, cols, totalRealized, subRows }
+      return { macro, cols, totalRealized, totalCount: cols.reduce((s, c) => s + c.count, 0), subRows }
     }).filter(Boolean) as {
       macro: (typeof incomeMacros)[0]
-      cols: number[]
+      cols: { value: number; count: number }[]
       totalRealized: number
+      totalCount: number
       subRows: { id: string; name: string; cols: number[] }[]
     }[]
   }, [incomeMacros, months, transactions])
 
   const incomeTotals = useMemo(
-    () => months.map((_m, mi) => incomeTableData.reduce((s, row) => s + row.cols[mi], 0)),
+    () => months.map((_m, mi) => ({
+      value: incomeTableData.reduce((s, row) => s + row.cols[mi].value, 0),
+      count: incomeTableData.reduce((s, row) => s + row.cols[mi].count, 0),
+    })),
     [incomeTableData, months]
   )
+
+  // ── Auditoria: contagem total por mês ────────────────────────────────────────
+  const audit = useMemo(() => months.map(m => {
+    const monthTxs = transactions.filter(tx => txInMonth(tx, m))
+    const inReport = monthTxs.filter(tx =>
+      (tx.type === 'income' && tx.classificationType !== 'neutral') ||
+      (tx.type === 'expense' && tx.includeInBudget !== false)
+    )
+    const neutral = monthTxs.filter(tx => tx.classificationType === 'neutral' || (tx.includeInBudget === false))
+    const uncategorized = inReport.filter(tx => !tx.macroCategoryId)
+    return {
+      total: monthTxs.length,
+      inReport: inReport.length,
+      neutral: neutral.length,
+      uncategorized: uncategorized.length,
+      missing: monthTxs.length - inReport.length - neutral.length,
+    }
+  }), [months, transactions])
 
   const canGoNext = refMonth < currentYearMonth()
 
@@ -235,11 +260,14 @@ export function RelatoriosPage({ selectedMonth }: Props) {
                           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{macro.name}</span>
                         </span>
                       </td>
-                      {cols.map((v, mi) => (
+                      {cols.map((c, mi) => (
                         <td key={mi} className="table-td" style={{ textAlign: 'right' }}>
-                          {v > 0
-                            ? <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(v)}</div>
-                            : <span style={{ color: 'var(--faint)', fontSize: 11 }}>—</span>}
+                          {c.value > 0 ? (
+                            <div>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(c.value)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{c.count} txn{c.count !== 1 ? 's' : ''}</div>
+                            </div>
+                          ) : <span style={{ color: 'var(--faint)', fontSize: 11 }}>—</span>}
                         </td>
                       ))}
                     </tr>
@@ -260,9 +288,10 @@ export function RelatoriosPage({ selectedMonth }: Props) {
               })}
               <tr style={{ background: 'var(--well)', borderTop: '2px solid var(--line)' }}>
                 <td className="table-td" style={{ fontWeight: 800, fontSize: 12.5, color: 'var(--ink)' }}>Total Receitas</td>
-                {incomeTotals.map((v, mi) => (
+                {incomeTotals.map((t, mi) => (
                   <td key={mi} className="table-td" style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(v)}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(t.value)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{t.count} txns</div>
                   </td>
                 ))}
               </tr>
@@ -320,28 +349,21 @@ export function RelatoriosPage({ selectedMonth }: Props) {
                             <span style={{ color: 'var(--faint)', fontSize: 11 }}>—</span>
                           ) : (
                             <div>
-                              <div style={{
-                                fontSize: 12.5, fontWeight: 700,
-                                color: c.over ? 'var(--crit)' : 'var(--ink)',
-                                fontVariantNumeric: 'tabular-nums',
-                              }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: c.over ? 'var(--crit)' : 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatBRL(c.realized)}
                               </div>
                               {c.planned > 0 && (
                                 <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
                                   / {formatBRL(c.planned)}
                                   {c.pct !== null && (
-                                    <span style={{
-                                      marginLeft: 4, fontWeight: 700,
-                                      color: c.over ? 'var(--crit)' : c.pct > 75 ? 'var(--warn)' : 'var(--pos)',
-                                    }}>
+                                    <span style={{ marginLeft: 4, fontWeight: 700, color: c.over ? 'var(--crit)' : c.pct > 75 ? 'var(--warn)' : 'var(--pos)' }}>
                                       {c.pct.toFixed(0)}%
                                     </span>
                                   )}
                                 </div>
                               )}
-                              {c.planned === 0 && c.realized > 0 && (
-                                <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>sem plano</div>
+                              {c.count > 0 && (
+                                <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{c.count} txn{c.count !== 1 ? 's' : ''}</div>
                               )}
                             </div>
                           )}
@@ -373,25 +395,81 @@ export function RelatoriosPage({ selectedMonth }: Props) {
               {/* Totals row */}
               <tr style={{ background: 'var(--well)', borderTop: '2px solid var(--line)' }}>
                 <td className="table-td" style={{ fontWeight: 800, fontSize: 12.5, color: 'var(--ink)' }}>Total Despesas</td>
-                {totals.map((t, mi) => (
-                  <td key={mi} className="table-td" style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>
-                      {formatBRL(t.realized)}
-                    </div>
-                    {t.planned > 0 && (
-                      <div style={{ fontSize: 10.5, color: 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>
-                        / {formatBRL(t.planned)}
-                      </div>
-                    )}
-                  </td>
-                ))}
+                {totals.map((t, mi) => {
+                  const countTotal = tableData.reduce((s, row) => s + row.cols[mi].count, 0)
+                  return (
+                    <td key={mi} className="table-td" style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{formatBRL(t.realized)}</div>
+                      {t.planned > 0 && <div style={{ fontSize: 10.5, color: 'var(--faint)', fontVariantNumeric: 'tabular-nums' }}>/ {formatBRL(t.planned)}</div>}
+                      <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 1 }}>{countTotal} txns</div>
+                    </td>
+                  )
+                })}
               </tr>
             </tbody>
           </table>
         </div>
 
         <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>
-          Realizado em <strong style={{ color: 'var(--ink-2)' }}>preto</strong> · orçado abaixo em cinza · <span style={{ color: 'var(--crit)', fontWeight: 600 }}>vermelho</span> = estouro · percentual = realizado/orçado · clique na categoria para expandir subcategorias
+          Realizado em <strong style={{ color: 'var(--ink-2)' }}>preto</strong> · orçado abaixo em cinza · <span style={{ color: 'var(--crit)', fontWeight: 600 }}>vermelho</span> = estouro · clique na categoria para expandir subcategorias
+        </div>
+
+        {/* ── Auditoria de transações ── */}
+        <div className="card" style={{ padding: '14px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showAudit ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Auditoria de transações</h3>
+              <span style={{ fontSize: 11, color: 'var(--faint)' }}>— verifique se todas as transações estão contabilizadas</span>
+            </div>
+            <button onClick={() => setShowAudit(v => !v)} style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
+              {showAudit ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+
+          {showAudit && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, color: 'var(--faint)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>Grupo</th>
+                    {months.map(m => (
+                      <th key={m} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, color: 'var(--faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}>{formatMonthLabel(m)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: 'Total no mês', key: 'total' as const, color: 'var(--ink)', bold: true },
+                    { label: 'No relatório (receitas + despesas)', key: 'inReport' as const, color: 'var(--pos)', bold: false },
+                    { label: 'Neutras / fora do orçamento', key: 'neutral' as const, color: 'var(--faint)', bold: false },
+                    { label: 'Sem categoria (invisíveis no relatório)', key: 'uncategorized' as const, color: 'var(--warn)', bold: false },
+                  ].map(row => (
+                    <tr key={row.label} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '7px 8px', color: row.color, fontWeight: row.bold ? 700 : 500 }}>{row.label}</td>
+                      {audit.map((a, mi) => (
+                        <td key={mi} style={{ textAlign: 'right', padding: '7px 8px', fontVariantNumeric: 'tabular-nums', color: row.color, fontWeight: row.bold ? 700 : 400 }}>
+                          {a[row.key]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid var(--line)', background: 'var(--well)' }}>
+                    <td style={{ padding: '7px 8px', fontWeight: 700, color: 'var(--ink)', fontSize: 12 }}>
+                      Diferença (total − relatório − neutras)
+                    </td>
+                    {audit.map((a, mi) => {
+                      const diff = a.total - a.inReport - a.neutral
+                      return (
+                        <td key={mi} style={{ textAlign: 'right', padding: '7px 8px', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: diff === 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                          {diff === 0 ? '✓ 0' : diff}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* ── Cartões ── */}

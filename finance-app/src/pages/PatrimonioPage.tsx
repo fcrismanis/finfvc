@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from 'react'
-import { Home, Plus, Trash2, Car, Building2, Pencil, Eye, EyeOff } from 'lucide-react'
+import { Home, Plus, Trash2, Car, Building2, Pencil, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { getLocalConnections, fetchPluggyInvestments } from '../services/pluggy.service'
@@ -560,29 +560,45 @@ function AccountList({
   valueColor: string
   negated?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+  const total = accounts.reduce((s, a) => s + (a.balance ?? 0), 0)
+
   return (
-    <div className="card" style={{ padding: '18px 22px' }}>
-      <h3 style={{ fontSize: 13, fontWeight: 750, color: 'var(--ink)', marginBottom: 14 }}>{title}</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {accounts.map(acc => (
-          <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              {acc.connectorImageUrl && (
-                <img src={acc.connectorImageUrl} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'contain', flexShrink: 0 }} />
-              )}
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {acc.name}
-                </p>
-                <p style={{ fontSize: 11, color: 'var(--faint)' }}>{acc.connectorName}</p>
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ChevronDown size={14} color="var(--faint)" style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 180ms' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{title}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 400 }}>{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, fontVariantNumeric: 'tabular-nums' }}>
+          {negated ? '−' : ''}{formatBRL(total)}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ borderTop: '1px solid var(--line)', padding: '10px 20px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {accounts.map(acc => (
+            <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                {acc.connectorImageUrl && (
+                  <img src={acc.connectorImageUrl} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', flexShrink: 0 }} />
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.name}</p>
+                  <p style={{ fontSize: 11, color: 'var(--faint)' }}>{acc.connectorName}</p>
+                </div>
               </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                {negated ? '−' : ''}{formatBRL(acc.balance ?? 0)}
+              </span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-              {negated ? '−' : ''}{formatBRL(acc.balance ?? 0)}
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

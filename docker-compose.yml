@@ -1,0 +1,61 @@
+services:
+
+  # ── Backend: advisor + Pluggy proxy ────────────────────────────────────────
+  server:
+    build:
+      context: ./finance-app/server
+    env_file: ./finance-app/server/.env
+    volumes:
+      - server-data:/app/.data
+    ports:
+      - "8787:8787"
+    restart: unless-stopped
+
+  # ── Frontend DEV: Vite com HMR (volume mount) ───────────────────────────────
+  frontend-dev:
+    profiles: [dev]
+    build:
+      context: ./finance-app
+      target: dev
+    volumes:
+      - ./finance-app:/app
+      - /app/node_modules
+    env_file: ./finance-app/.env.local
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # ── Frontend PROD: build estático servido por Nginx ─────────────────────────
+  frontend-prod:
+    profiles: [prod]
+    build:
+      context: ./finance-app
+      target: prod
+      args:
+        VITE_DATA_PROVIDER: ${VITE_DATA_PROVIDER:-local}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # ── Economista FIN: MCP HTTP server para Open WebUI / Hermes ───────────────
+  economista-mcp:
+    build:
+      context: ./finance-app/mcp
+    environment:
+      MCP_TRANSPORT: http
+      MCP_PORT: "3010"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      FAMILY_ID: ${FAMILY_ID}
+    ports:
+      - "3010:3010"
+    restart: unless-stopped
+
+volumes:
+  server-data:

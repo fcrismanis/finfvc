@@ -4,7 +4,8 @@ import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
 import { formatBRL } from '../utils/currency'
 import { DATA_PROVIDER } from '../config/env'
-import type { Transaction } from '../types'
+import { supabase } from '../lib/supabase'
+import type { Transaction, SubCategory } from '../types'
 
 function patchImportHash(txns: Transaction[]): Transaction[] {
   return txns.map(t => ({ ...t, importHash: t.importHash ?? `local-${t.id}` }))
@@ -56,6 +57,23 @@ export function MigrationPage() {
     setStatus('migrating')
     setErrMsg(null)
     try {
+      // 1. Seed subcategories before transactions (avoids FK constraint violation)
+      const rawSubs = localStorage.getItem('finance_subcategories')
+      if (rawSubs && familyId) {
+        const localSubs: SubCategory[] = JSON.parse(rawSubs)
+        if (localSubs.length > 0) {
+          const rows = localSubs.map(s => ({
+            id: s.id,
+            family_id: familyId,
+            macro_category_id: s.macroCategoryId,
+            name: s.name,
+            essentiality: (s as { essentiality?: string }).essentiality ?? 'inherit',
+            active: true,
+          }))
+          await supabase.from('sub_categories').upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
+        }
+      }
+      // 2. Migrate transactions
       await appendTransactions(patched)
       setStatus('done')
     } catch (e) {

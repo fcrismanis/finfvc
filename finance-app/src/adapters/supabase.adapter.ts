@@ -327,7 +327,18 @@ export class SupabaseAdapter implements IDataAdapter {
       .from('transactions')
       .upsert(rows, { onConflict: 'family_id,import_hash', ignoreDuplicates: true })
 
-    if (error) throw new Error(`[SupabaseAdapter] insertTransactions: ${error.message}`)
+    if (error) {
+      // FK violation on sub_category_id: retry stripping subcategory refs
+      if (error.message.includes('sub_category_id_fkey') || error.message.includes('category_id_fkey')) {
+        const safeRows = rows.map(r => ({ ...r, sub_category_id: null, category_id: null }))
+        const { error: e2 } = await supabase
+          .from('transactions')
+          .upsert(safeRows, { onConflict: 'family_id,import_hash', ignoreDuplicates: true })
+        if (e2) throw new Error(`[SupabaseAdapter] insertTransactions: ${e2.message}`)
+      } else {
+        throw new Error(`[SupabaseAdapter] insertTransactions: ${error.message}`)
+      }
+    }
 
     // Sync cache
     this.addTransactions(txns)

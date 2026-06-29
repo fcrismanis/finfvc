@@ -724,29 +724,6 @@ function InlineEditRow({
           <option value="essential">Essencial</option>
           <option value="non_essential">Não essencial</option>
         </select>
-        {(edit.kind === 'macro' || edit.kind === 'defaultMacro') && (
-          <>
-            <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginLeft: 8, flexShrink: 0 }}>Classificação</span>
-            <select
-              value={edit.classificationType ?? ''}
-              onChange={e => upd({ classificationType: e.target.value as ClassificationType || undefined })}
-              className="ledger-select"
-              style={{ fontSize: 11.5 }}
-            >
-              <option value="">— automático —</option>
-              <option value="operational_income">Receita operacional</option>
-              <option value="extraordinary_income">Receita eventual</option>
-              <option value="operational_expense">Despesa operacional</option>
-              <option value="debt_cost">Custo de dívida</option>
-              <option value="investment">Investimento</option>
-              <option value="redemption">Resgate</option>
-              <option value="transfer">Transferência</option>
-              <option value="reimbursement">Reembolso</option>
-              <option value="neutral">Neutra</option>
-              <option value="adjustment">Ajuste</option>
-            </select>
-          </>
-        )}
         {showActive && (
           <>
             <span style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginLeft: 8 }}>Status</span>

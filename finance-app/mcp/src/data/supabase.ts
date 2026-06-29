@@ -14,6 +14,12 @@ function client() {
   return _client
 }
 
+function lastDayOf(yearMonth: string): string {
+  const [yr, mo] = yearMonth.split('-').map(Number)
+  const last = new Date(yr, mo, 0).getDate()
+  return `${yearMonth}-${String(last).padStart(2, '0')}`
+}
+
 function familyId(): string {
   const id = process.env.FAMILY_ID
   if (!id) throw new Error('FAMILY_ID não configurado')
@@ -25,19 +31,32 @@ export async function fetchTransactions(opts?: {
   periodTo?: string
   limit?: number
 }): Promise<Transaction[]> {
-  let q = client()
-    .from('transactions')
-    .select('*')
-    .eq('family_id', familyId())
-    .order('competence_date', { ascending: false })
+  const PAGE = 1000
+  const maxRows = opts?.limit ?? 10000
+  const results: DbTransaction[] = []
+  let from = 0
 
-  if (opts?.periodFrom) q = q.gte('competence_date', opts.periodFrom + '-01')
-  if (opts?.periodTo) q = q.lte('competence_date', opts.periodTo + '-31')
-  if (opts?.limit) q = q.limit(opts.limit)
+  while (results.length < maxRows) {
+    const to = Math.min(from + PAGE - 1, maxRows - 1)
+    let q = client()
+      .from('transactions')
+      .select('*')
+      .eq('family_id', familyId())
+      .order('competence_date', { ascending: false })
+      .range(from, to)
 
-  const { data, error } = await q
-  if (error) throw new Error(`fetchTransactions: ${error.message}`)
-  return (data as DbTransaction[]).map(dbToTransaction)
+    if (opts?.periodFrom) q = q.gte('competence_date', opts.periodFrom + '-01')
+    if (opts?.periodTo) q = q.lte('competence_date', lastDayOf(opts.periodTo))
+
+    const { data, error } = await q
+    if (error) throw new Error(`fetchTransactions: ${error.message}`)
+    if (!data || data.length === 0) break
+    results.push(...(data as DbTransaction[]))
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  return results.map(dbToTransaction)
 }
 
 export async function fetchBudgets(month?: string): Promise<Budget[]> {

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, ChevronRight } from 'lucide-react'
 import { askEconomista, type EconomistaProvider, type EconomistaResponse } from '../agent/economista.service'
-import { loadHermesConfig } from '../services/aiAdvisor.service'
+
 import { formatBRL } from '../utils/currency'
 import type { GetTransactionsOutput } from '../agent/tools/getTransactions'
 import type { GetBudgetAnalysisOutput } from '../agent/tools/getBudgetAnalysis'
@@ -114,10 +114,7 @@ export function EconomistaPage({ selectedMonth }: Props) {
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const provider: EconomistaProvider = (() => {
-    const cfg = loadHermesConfig()
-    return cfg.url ? 'hermes' : 'simulated'
-  })()
+  const provider: EconomistaProvider = 'gpt'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -167,9 +164,9 @@ export function EconomistaPage({ selectedMonth }: Props) {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: provider === 'simulated' ? 'var(--warn)' : 'var(--pos)', display: 'inline-block' }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--pos)', display: 'inline-block' }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)' }}>
-              {provider === 'simulated' ? 'Simulado' : 'Hermes'}
+              {provider === 'gpt' ? 'GPT' : provider === 'simulated' ? 'Simulado' : 'Hermes'}
             </span>
           </div>
         </div>
@@ -299,11 +296,6 @@ export function EconomistaPage({ selectedMonth }: Props) {
           </button>
         </div>
 
-        {provider === 'simulated' && (
-          <p style={{ fontSize: 11, color: 'var(--faint)', textAlign: 'center' }}>
-            Configure um endpoint Hermes no Consultor IA para análise real com LLM.
-          </p>
-        )}
       </div>
     </main>
   )

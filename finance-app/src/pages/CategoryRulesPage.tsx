@@ -1,30 +1,24 @@
 import { useState, useMemo } from 'react'
-import { Trash2, Plus, ToggleLeft, ToggleRight, FlaskConical } from 'lucide-react'
-import { MACRO_CATEGORIES } from '../config/categories'
+import { Trash2, Plus, ToggleLeft, ToggleRight, FlaskConical, Play } from 'lucide-react'
 import { useData } from '../context/DataContext'
+import { CategorySelector } from '../components/CategorySelector'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import {
-  loadRules, deleteRule, toggleRule, updateRule, upsertRule, testRule,
+  loadRules, deleteRule, toggleRule, updateRule, upsertRule, testRule, suggestFromRules,
   type CategoryRule,
 } from '../services/categoryRules.service'
 
-const ORIGIN_LABEL: Record<CategoryRule['origin'], string> = {
-  manual: 'Manual', pluggy: 'Pluggy', csv: 'CSV', ai: 'IA', command: 'Comando',
-}
-
-const ORIGIN_COLOR: Record<CategoryRule['origin'], string> = {
-  manual: 'var(--ink-2)', pluggy: 'var(--pos)', csv: 'var(--ink-2)', ai: 'var(--accent)', command: 'var(--accent)',
-}
-
-const CONFIDENCE_COLOR: Record<NonNullable<CategoryRule['confidence']>, string> = {
-  high: 'var(--pos)', medium: 'var(--warn)', low: 'var(--faint)',
-}
-
 export function CategoryRulesPage() {
-  const { subCategories, transactions } = useData()
+  const { subCategories, transactions, updateTransactions } = useData()
+  const allMacros = useMemo(() => getAllMacroCategories(), [])
+
   const [rules, setRules] = useState<CategoryRule[]>(() => loadRules())
   const [newPattern, setNewPattern] = useState('')
-  const [newMacro, setNewMacro] = useState('')
+  const [newMacro, setNewMacro] = useState<string | undefined>(undefined)
+  const [newSub, setNewSub] = useState<string | undefined>(undefined)
   const [testResults, setTestResults] = useState<Record<string, number>>({})
+  const [applyStatus, setApplyStatus] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
 
   function refresh() { setRules(loadRules()) }
 
@@ -35,8 +29,8 @@ export function CategoryRulesPage() {
 
   function handleAdd() {
     if (!newPattern.trim() || !newMacro) return
-    upsertRule({ pattern: newPattern, macroCategoryId: newMacro, origin: 'manual' })
-    setNewPattern(''); setNewMacro(''); refresh()
+    upsertRule({ pattern: newPattern, macroCategoryId: newMacro, subCategoryId: newSub, origin: 'manual' })
+    setNewPattern(''); setNewMacro(undefined); setNewSub(undefined); refresh()
   }
 
   function handleDelete(id: string) {
@@ -49,16 +43,69 @@ export function CategoryRulesPage() {
     setTestResults(prev => ({ ...prev, [rule.id]: matched.length }))
   }
 
+  async function handleApplyAll() {
+    const activeRules = sorted.filter(r => r.active)
+    const uncategorized = transactions.filter(t =>
+      !t.macroCategoryId && !t.manualCategoryOverride && t.status !== 'cancelled'
+    )
+    const patches = uncategorized.flatMap(tx => {
+      const match = suggestFromRules(tx, activeRules)
+      if (!match) return []
+      const macro = allMacros.find(m => m.id === match.macroCategoryId)
+      return [{ id: tx.id, patch: {
+        macroCategoryId: match.macroCategoryId,
+        subCategoryId: match.subCategoryId,
+        classificationType: macro?.classificationType ?? tx.classificationType,
+        includeInOperationalResult: macro ? macro.displayInResult : tx.includeInOperationalResult,
+        includeInCashflow: macro ? macro.displayInCashflow : tx.includeInCashflow,
+        includeInBudget: macro ? macro.displayInBudget : tx.includeInBudget,
+        categorySuggestionSource: 'rule' as const,
+        categoryConfidence: match.confidence,
+        needsReview: false,
+      } as Parameters<typeof updateTransactions>[0][0]['patch'] }]
+    })
+    if (patches.length === 0) { setApplyStatus('Nenhuma transação sem categoria encontrada.'); return }
+    if (!confirm(`Aplicar regras a ${patches.length} lançamento(s) sem categoria?`)) return
+    setApplying(true)
+    setApplyStatus(null)
+    try {
+      await updateTransactions(patches, { markManual: false })
+      setApplyStatus(`✓ ${patches.length} lançamento(s) classificados pelas regras.`)
+    } catch (e) {
+      setApplyStatus(`Erro: ${(e as Error).message}`)
+    } finally {
+      setApplying(false)
+    }
+  }
+
   return (
     <main className="page-shell">
-      <div style={{ margin: '0 auto', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ margin: '0 auto', maxWidth: 960, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        <div>
-          <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Regras de categoria</h1>
-          <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
-            Quando você corrige uma categoria ou a IA sugere uma, o FIN aprende. Próximas importações parecidas já vêm classificadas.
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Regras de categoria</h1>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              Quando você corrige uma categoria, o FIN aprende. Próximas importações parecidas já vêm classificadas.
+            </div>
           </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleApplyAll}
+            disabled={applying}
+            title="Aplica todas as regras ativas a lançamentos sem categoria"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            <Play size={14} />
+            {applying ? 'Executando…' : 'Executar todas'}
+          </button>
         </div>
+
+        {applyStatus && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: applyStatus.startsWith('✓') ? 'var(--pos)' : 'var(--crit)', padding: '8px 14px', borderRadius: 8, background: applyStatus.startsWith('✓') ? 'var(--pos-soft)' : 'var(--crit-soft)' }}>
+            {applyStatus}
+          </div>
+        )}
 
         {/* Add rule */}
         <div className="card" style={{ padding: '14px 18px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -70,10 +117,16 @@ export function CategoryRulesPage() {
             className="login-field"
             style={{ fontSize: 12.5, flex: '1 1 200px' }}
           />
-          <select value={newMacro} onChange={e => setNewMacro(e.target.value)} className="ledger-select" style={{ fontSize: 12 }}>
-            <option value="">Categoria…</option>
-            {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <div style={{ minWidth: 200 }}>
+            <CategorySelector
+              macroCategoryId={newMacro}
+              subCategoryId={newSub}
+              allMacros={allMacros}
+              subCategories={subCategories}
+              placeholder="Categoria…"
+              onChange={(macroId, subId) => { setNewMacro(macroId); setNewSub(subId) }}
+            />
+          </div>
           <button className="btn btn-primary btn-sm" disabled={!newPattern.trim() || !newMacro} onClick={handleAdd}>
             <Plus size={13} /> Adicionar regra
           </button>
@@ -84,7 +137,6 @@ export function CategoryRulesPage() {
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--faint)' }}>
             <span><b style={{ color: 'var(--ink)' }}>{sorted.length}</b> regras</span>
             <span><b style={{ color: 'var(--pos)' }}>{sorted.filter(r => r.active).length}</b> ativas</span>
-            <span><b style={{ color: 'var(--accent)' }}>{sorted.filter(r => r.origin === 'ai').length}</b> criadas por IA</span>
             <span><b style={{ color: 'var(--ink)' }}>{sorted.reduce((s, r) => s + r.useCount, 0)}</b> aplicações totais</span>
           </div>
         )}
@@ -95,29 +147,27 @@ export function CategoryRulesPage() {
             <div className="empty-state" style={{ padding: '40px 0' }}>
               <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma regra aprendida ainda</h4>
               <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 320, textAlign: 'center' }}>
-                Corrija a categoria de um lançamento, use o botão "Categorizar com IA" na Revisão, ou adicione uma regra manual acima.
+                Corrija a categoria de um lançamento ou adicione uma regra manual acima.
               </p>
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
                 <thead>
                   <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
-                    <th className="table-th">Padrão</th>
-                    <th className="table-th">Receptor/Pagador</th>
-                    <th className="table-th">Categoria</th>
-                    <th className="table-th">Subcategoria</th>
-                    <th className="table-th">Origem</th>
-                    <th className="table-th table-th-right">Usos</th>
-                    <th className="table-th">Confiança</th>
-                    <th className="table-th">Ativa</th>
-                    <th className="table-th">Atualizado</th>
-                    <th style={{ width: 60 }} />
+                    <th className="table-th" style={{ minWidth: 140 }}>Padrão</th>
+                    <th className="table-th" style={{ minWidth: 120 }}>Receptor/Pagador</th>
+                    <th className="table-th" style={{ minWidth: 160 }}>Categoria</th>
+                    <th className="table-th" style={{ minWidth: 120 }}>Subcategoria</th>
+                    <th className="table-th table-th-right" style={{ width: 56 }}>Usos</th>
+                    <th className="table-th" style={{ width: 64 }}>Ativa</th>
+                    <th className="table-th" style={{ width: 60 }}>Atualizado</th>
+                    <th style={{ width: 72 }} />
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.map(rule => {
-                    const macro = MACRO_CATEGORIES.find(m => m.id === rule.macroCategoryId)
+                    const macro = allMacros.find(m => m.id === rule.macroCategoryId)
                     const subOptions = subCategories.filter(s => s.macroCategoryId === rule.macroCategoryId && s.active)
                     const testCount = testResults[rule.id]
                     const updatedDate = rule.updatedAt
@@ -137,59 +187,44 @@ export function CategoryRulesPage() {
                             <span style={{ fontSize: 11, color: 'var(--faint)', fontStyle: 'italic' }}>—</span>
                           )}
                           {rule.pluggyCategoryId && (
-                            <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>
-                              Pluggy ID: {rule.pluggyCategoryId}
-                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>Pluggy: {rule.pluggyCategoryId}</div>
                           )}
                         </td>
 
                         {/* Receiver / Payer */}
                         <td className="table-td" style={{ fontSize: 10.5, color: 'var(--ink-2)', maxWidth: 140 }}>
-                          {rule.receiverName && (
-                            <div title="Receptor">→ {rule.receiverName}</div>
-                          )}
-                          {rule.payerName && (
-                            <div title="Pagador">← {rule.payerName}</div>
-                          )}
-                          {!rule.receiverName && !rule.payerName && (
-                            <span style={{ color: 'var(--faint)' }}>—</span>
-                          )}
+                          {rule.receiverName && <div title="Receptor">→ {rule.receiverName}</div>}
+                          {rule.payerName && <div title="Pagador">← {rule.payerName}</div>}
+                          {!rule.receiverName && !rule.payerName && <span style={{ color: 'var(--faint)' }}>—</span>}
                         </td>
 
-                        {/* Macro category */}
-                        <td className="table-td">
-                          <select
-                            value={rule.macroCategoryId}
-                            onChange={e => { updateRule(rule.id, { macroCategoryId: e.target.value, subCategoryId: undefined }); refresh() }}
-                            className="ledger-select"
-                            style={{ fontSize: 11, minWidth: 120 }}
-                          >
-                            {MACRO_CATEGORIES.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                          </select>
+                        {/* Macro category — inline CategorySelector */}
+                        <td className="table-td" style={{ minWidth: 160 }}>
+                          <CategorySelector
+                            macroCategoryId={rule.macroCategoryId}
+                            subCategoryId={rule.subCategoryId}
+                            allMacros={allMacros}
+                            subCategories={subCategories}
+                            placeholder="—"
+                            onChange={(macroId, subId) => { updateRule(rule.id, { macroCategoryId: macroId ?? rule.macroCategoryId, subCategoryId: subId }); refresh() }}
+                          />
                         </td>
 
                         {/* Sub category */}
-                        <td className="table-td">
+                        <td className="table-td" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
                           {subOptions.length > 0 ? (
                             <select
                               value={rule.subCategoryId ?? ''}
                               onChange={e => { updateRule(rule.id, { subCategoryId: e.target.value || undefined }); refresh() }}
                               className="ledger-select"
-                              style={{ fontSize: 11, minWidth: 110 }}
+                              style={{ fontSize: 11, minWidth: 100 }}
                             >
                               <option value="">—</option>
                               {subOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           ) : (
-                            <span style={{ fontSize: 11, color: 'var(--faint)' }}>{macro ? '—' : 'sem macro'}</span>
+                            <span style={{ color: 'var(--faint)' }}>{macro ? '—' : 'sem macro'}</span>
                           )}
-                        </td>
-
-                        {/* Origin */}
-                        <td className="table-td">
-                          <span style={{ fontSize: 10, fontWeight: 700, color: ORIGIN_COLOR[rule.origin] }}>
-                            {ORIGIN_LABEL[rule.origin]}
-                          </span>
                         </td>
 
                         {/* Use count */}
@@ -197,21 +232,11 @@ export function CategoryRulesPage() {
                           {rule.useCount}
                         </td>
 
-                        {/* Confidence */}
-                        <td className="table-td">
-                          {rule.confidence ? (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: CONFIDENCE_COLOR[rule.confidence] }}>
-                              {rule.confidence === 'high' ? 'alta' : rule.confidence === 'medium' ? 'média' : 'baixa'}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>
-                          )}
-                        </td>
-
                         {/* Active toggle */}
                         <td className="table-td">
                           <button
                             onClick={() => { toggleRule(rule.id, !rule.active); refresh() }}
+                            title={rule.active ? 'Clique para desativar esta regra' : 'Clique para ativar esta regra'}
                             aria-label={rule.active ? 'Desativar' : 'Ativar'}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: rule.active ? 'var(--pos)' : 'var(--faint)', display: 'flex', padding: 0 }}
                           >
@@ -226,22 +251,21 @@ export function CategoryRulesPage() {
 
                         {/* Actions */}
                         <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                             <button
                               onClick={() => handleTest(rule)}
-                              title="Testar esta regra contra lançamentos atuais"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4 }}
+                              title={testCount !== undefined ? `Encontrou ${testCount} lançamento(s) correspondentes` : 'Testar esta regra contra os lançamentos atuais'}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: testCount !== undefined ? (testCount > 0 ? 'var(--pos)' : 'var(--faint)') : 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3, padding: 4 }}
                               aria-label="Testar regra"
                             >
                               <FlaskConical size={13} />
+                              {testCount !== undefined && (
+                                <span style={{ fontSize: 10, fontWeight: 700 }}>{testCount}</span>
+                              )}
                             </button>
-                            {testCount !== undefined && (
-                              <span style={{ fontSize: 10, color: testCount > 0 ? 'var(--pos)' : 'var(--faint)', fontWeight: 700 }}>
-                                {testCount}
-                              </span>
-                            )}
                             <button
                               onClick={() => handleDelete(rule.id)}
+                              title="Remover esta regra permanentemente"
                               aria-label="Remover"
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--crit)', display: 'flex', padding: 4 }}
                             >

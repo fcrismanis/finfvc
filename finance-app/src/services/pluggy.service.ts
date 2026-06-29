@@ -134,7 +134,14 @@ export async function fetchPluggyTransactions(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = await res.json() as { ok: boolean; transactions?: PluggyRawTransaction[]; error?: string }
+  // 404 / 502 / empty = backend API não está rodando em dev
+  if (res.status === 404 || res.status === 502 || res.status === 503) {
+    throw new Error('API backend não disponível. Em desenvolvimento, execute o servidor Pluggy (ex: npm run server).')
+  }
+  const text = await res.text()
+  if (!text.trim()) throw new Error('API backend não está respondendo. Em desenvolvimento, certifique-se de que o servidor Pluggy está rodando.')
+  let data: { ok: boolean; transactions?: PluggyRawTransaction[]; error?: string }
+  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do servidor: ${text.slice(0, 120)}`) }
   if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao buscar transações Pluggy')
   return data.transactions ?? []
 }

@@ -1,21 +1,19 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Send, Bot, User, Copy, CheckCheck, ChevronDown, ChevronUp } from 'lucide-react'
+import { Send, Bot, User, Copy, CheckCheck, Settings2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getMonthSummary, getMacroCategoryTotals } from '../engine/calculate'
 import { formatBRL, formatPct } from '../utils/currency'
-import { currentYearMonth } from '../utils/date'
-import { askAdvisor, SUGGESTED_PROMPTS } from '../services/aiAdvisor.service'
 import { MACRO_CATEGORIES } from '../config/categories'
-import type { AIProvider, AdvisorMessage } from '../services/aiAdvisor.service'
+import { currentYearMonth } from '../utils/date'
+import { askAdvisor, SUGGESTED_PROMPTS, loadHermesConfig, saveHermesConfig } from '../services/aiAdvisor.service'
+import type { AIProvider, AdvisorMessage, HermesConfig } from '../services/aiAdvisor.service'
 
 interface Props {
   selectedMonth: string
   onNavigate: (route: string) => void
 }
 
-interface ProviderStatus { mock: boolean; gpt: boolean; claude: boolean; openrouter: boolean }
-
-type UiMode = 'simulated' | 'copy' | 'api'
+type UiMode = 'gpt' | 'hermes' | 'simulated' | 'copy'
 
 // ── Build clipboard context ──────────────────────────────────────────────────
 function buildCopyContext(
@@ -93,15 +91,14 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
   const { transactions, budgets } = useData()
   const month = selectedMonth ?? currentYearMonth()
 
-  const [uiMode, setUiMode] = useState<UiMode>('simulated')
-  const [provider, setProvider] = useState<AIProvider>('simulated')
+  const [uiMode, setUiMode] = useState<UiMode>('gpt')
   const [messages, setMessages] = useState<AdvisorMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [showApiSection, setShowApiSection] = useState(false)
-  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null)
+  const [showHermesConfig, setShowHermesConfig] = useState(false)
+  const [hermesConfig, setHermesConfig] = useState<HermesConfig>(() => loadHermesConfig())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const summary = useMemo(
@@ -152,12 +149,10 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  useEffect(() => {
-    fetch('/api/advisor')
-      .then(r => r.ok ? r.json() as Promise<ProviderStatus> : null)
-      .then(s => { if (s) setProviderStatus(s) })
-      .catch(() => { /* backend offline — not required */ })
-  }, [])
+  function saveHermes(cfg: HermesConfig) {
+    setHermesConfig(cfg)
+    saveHermesConfig(cfg)
+  }
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return
@@ -167,7 +162,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
     setError(null)
     setLoading(true)
     try {
-      const activeProvider: AIProvider = uiMode === 'simulated' ? 'simulated' : provider
+      const activeProvider: AIProvider = uiMode === 'hermes' ? 'hermes' : uiMode === 'gpt' ? 'gpt' : 'simulated'
       const response = await askAdvisor(text.trim(), context, activeProvider)
       const assistantMsg: AdvisorMessage = { role: 'assistant', content: response.answer, timestamp: new Date().toISOString() }
       setMessages(m => [...m, assistantMsg])
@@ -192,40 +187,85 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
       <div style={{ margin: '0 auto', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* ── Header ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Consultor IA</h1>
-            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>Análise contextual — {month}</div>
+            <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
+              {uiMode === 'gpt' ? `GPT conectado — ${month}` : uiMode === 'hermes' ? `Hermes conectado — ${month}` : `Análise contextual — ${month}`}
+            </div>
           </div>
-
-          {/* Mode selector */}
-          <div style={{ display: 'flex', gap: 4, background: 'var(--well)', borderRadius: 10, padding: 4, border: '1px solid var(--line)' }}>
-            {([
-              { key: 'simulated', label: 'Simulado' },
-              { key: 'copy',      label: 'Copiar para IA' },
-            ] as { key: UiMode; label: string }[]).map(m => (
-              <button
-                key={m.key}
-                onClick={() => setUiMode(m.key)}
-                style={{
-                  fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 7,
-                  border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)',
-                  background: uiMode === m.key ? 'var(--card-bg)' : 'transparent',
-                  color: uiMode === m.key ? 'var(--ink)' : 'var(--faint)',
-                  boxShadow: uiMode === m.key ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                  transition: 'all .12s',
-                }}
-              >
-                {m.label}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {/* Mode tabs */}
+            <div style={{ display: 'flex', gap: 4, background: 'var(--well)', borderRadius: 10, padding: 4, border: '1px solid var(--line)' }}>
+              {([
+                { key: 'gpt',       label: '✦ GPT' },
+                { key: 'hermes',    label: 'Hermes' },
+                { key: 'simulated', label: 'Simulado' },
+                { key: 'copy',      label: 'Copiar contexto' },
+              ] as { key: UiMode; label: string }[]).map(m => (
+                <button key={m.key} onClick={() => setUiMode(m.key)} style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)', background: uiMode === m.key ? 'var(--card-bg)' : 'transparent', color: uiMode === m.key ? 'var(--ink)' : 'var(--faint)', boxShadow: uiMode === m.key ? '0 1px 3px rgba(0,0,0,.08)' : 'none', transition: 'all .12s' }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            {/* Hermes config button */}
+            {uiMode === 'hermes' && (
+              <button onClick={() => setShowHermesConfig(v => !v)} title="Configurar endpoint Hermes" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${showHermesConfig ? 'var(--accent)' : 'var(--line)'}`, background: showHermesConfig ? 'var(--accent-soft)' : 'var(--well)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: showHermesConfig ? 'var(--accent)' : 'var(--ink-2)', fontFamily: 'var(--ui)' }}>
+                <Settings2 size={13} /> Config
               </button>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* ── Info banner ── */}
-        <div style={{ padding: '10px 14px', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 9, fontSize: 12, color: 'var(--faint)', lineHeight: 1.6 }}>
-          IA externa via API é opcional e exige cobrança separada. Você pode usar o <strong style={{ color: 'var(--ink-2)' }}>modo simulado</strong> ou <strong style={{ color: 'var(--ink-2)' }}>copiar o contexto</strong> para usar no seu ChatGPT / Claude atual.
-        </div>
+        {/* ── Hermes config panel ── */}
+        {uiMode === 'hermes' && showHermesConfig && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>✦ Configuração do Hermes</p>
+            <p style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.6 }}>
+              Conecte qualquer endpoint compatível com a API OpenAI (Ollama, LM Studio, OpenRouter, seu servidor Hermes, etc.)
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>URL do endpoint *</label>
+                <input
+                  value={hermesConfig.url}
+                  onChange={e => saveHermes({ ...hermesConfig, url: e.target.value })}
+                  placeholder="http://localhost:11434/v1/chat/completions"
+                  className="login-field"
+                  style={{ fontSize: 12.5, width: '100%' }}
+                />
+                <p style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 3 }}>Ollama: /v1/chat/completions · LM Studio: mesmo · OpenRouter: https://openrouter.ai/api/v1/chat/completions</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Modelo</label>
+                  <input
+                    value={hermesConfig.model ?? ''}
+                    onChange={e => saveHermes({ ...hermesConfig, model: e.target.value })}
+                    placeholder="hermes-3, llama3, mixtral…"
+                    className="login-field"
+                    style={{ fontSize: 12.5, width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>API Key (opcional)</label>
+                  <input
+                    type="password"
+                    value={hermesConfig.apiKey ?? ''}
+                    onChange={e => saveHermes({ ...hermesConfig, apiKey: e.target.value })}
+                    placeholder="sk-… ou deixe vazio"
+                    className="login-field"
+                    style={{ fontSize: 12.5, width: '100%' }}
+                  />
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--faint)', padding: '8px 12px', background: 'var(--well)', borderRadius: 7, lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--ink-2)' }}>Status:</strong>{' '}
+                {hermesConfig.url ? <span style={{ color: 'var(--pos)' }}>✓ URL configurada — {hermesConfig.model || 'modelo padrão'}</span> : <span style={{ color: 'var(--warn)' }}>URL não configurada</span>}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
@@ -279,7 +319,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
               </div>
             )}
 
-            {/* ── SIMULATED / API CHAT ── */}
+            {/* ── HERMES / SIMULATED CHAT ── */}
             {uiMode !== 'copy' && (
               <>
                 {/* Messages */}
@@ -293,12 +333,14 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                         <Bot size={20} color="var(--ink-2)" />
                       </div>
                       <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>
-                        {uiMode === 'simulated' ? 'Modo Simulado' : 'Consultor IA'}
+                        {uiMode === 'hermes' ? '✦ Hermes' : 'Modo Simulado'}
                       </p>
                       <p style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6, maxWidth: 320 }}>
-                        {uiMode === 'simulated'
-                          ? `Respostas automáticas baseadas nos seus dados de ${month}. Sem API externa.`
-                          : `Usando ${provider === 'gpt' ? 'GPT' : provider === 'openrouter' ? 'OpenRouter' : 'Claude'} via backend. Contexto de ${month} carregado.`}
+                        {uiMode === 'hermes'
+                          ? hermesConfig.url
+                            ? `Conectado a ${hermesConfig.url.replace(/https?:\/\//, '').split('/')[0]} · modelo ${hermesConfig.model || 'padrão'}. Contexto de ${month} carregado.`
+                            : 'Configure o endpoint Hermes clicando em "Config" acima.'
+                          : `Respostas automáticas baseadas nos seus dados de ${month}. Sem API externa.`}
                       </p>
                     </div>
                   ) : (
@@ -323,7 +365,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                   {error && (
                     <div style={{ padding: '10px 12px', background: 'var(--crit-soft)', border: '1px solid var(--crit)', borderRadius: 8, fontSize: 12, color: 'var(--crit)' }}>
                       {error}
-                      {uiMode === 'api' && (
+                      {uiMode === 'hermes' && (
                         <span style={{ marginLeft: 8, color: 'var(--ink-2)', fontWeight: 400 }}>
                           — tente o <button onClick={() => setUiMode('copy')} style={{ fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--ui)', fontSize: 12 }}>modo Copiar</button> como alternativa.
                         </span>
@@ -395,65 +437,6 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
               </>
             )}
 
-            {/* ── API EXTERNA (collapsible) ── */}
-            <div>
-              <button
-                onClick={() => setShowApiSection(s => !s)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                  padding: '8px 12px', background: 'var(--well)', border: '1px solid var(--line)',
-                  borderRadius: 8, cursor: 'pointer', fontSize: 11.5, fontWeight: 600,
-                  color: 'var(--faint)', fontFamily: 'var(--ui)', textAlign: 'left',
-                }}
-              >
-                {showApiSection ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                Integração via API externa (opcional, requer billing separado)
-              </button>
-
-              {showApiSection && (
-                <div style={{ marginTop: 8, padding: '14px 16px', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <p style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-                    Para usar GPT ou Claude diretamente no app, configure o backend com chaves de API pagas. Ver <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>docs/advisor-endpoint.md</code>.
-                  </p>
-                  {providerStatus === null && (
-                    <p style={{ fontSize: 11.5, color: 'var(--faint)' }}>Backend offline — inicie com <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>cd finance-app/server && npm run dev</code></p>
-                  )}
-                  {providerStatus !== null && (
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11.5 }}>
-                      <span style={{ color: providerStatus.openrouter ? 'var(--pos)' : 'var(--faint)' }}>
-                        {providerStatus.openrouter ? '✓' : '✗'} OpenRouter
-                      </span>
-                      <span style={{ color: providerStatus.gpt ? 'var(--pos)' : 'var(--faint)' }}>
-                        {providerStatus.gpt ? '✓' : '✗'} GPT
-                      </span>
-                      <span style={{ color: providerStatus.claude ? 'var(--pos)' : 'var(--faint)' }}>
-                        {providerStatus.claude ? '✓' : '✗'} Claude
-                      </span>
-                    </div>
-                  )}
-                  {providerStatus !== null && (providerStatus.openrouter || providerStatus.gpt || providerStatus.claude) && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <select
-                        value={provider}
-                        onChange={e => { setProvider(e.target.value as AIProvider); setUiMode('api') }}
-                        className="ledger-select"
-                        style={{ fontSize: 12 }}
-                      >
-                        <option value="openrouter" disabled={!providerStatus.openrouter}>OpenRouter {providerStatus.openrouter ? '✓' : '(sem chave)'}</option>
-                        <option value="gpt" disabled={!providerStatus.gpt}>GPT {providerStatus.gpt ? '✓' : '(sem chave)'}</option>
-                        <option value="claude" disabled={!providerStatus.claude}>Claude {providerStatus.claude ? '✓' : '(sem chave)'}</option>
-                      </select>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => setUiMode('api')}
-                      >
-                        Usar API
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
 
           </div>
 

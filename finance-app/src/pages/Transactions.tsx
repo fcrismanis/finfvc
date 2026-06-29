@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useRouteScroll } from '../hooks/useRouteScroll'
-import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Download, Trash2, CheckSquare, Eye } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, FlaskConical, X, ArrowLeft, Pencil, Download, Trash2, Eye, SlidersHorizontal } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { CATEGORIES } from '../config/categories'
@@ -100,8 +100,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [filterInstitution, setFilterInstitution] = useState(savedFilters.filterInstitution ?? '')
   const [filterPluggy, setFilterPluggy] = useState(savedFilters.filterPluggy ?? false)
   const [filterManual, setFilterManual] = useState(savedFilters.filterManual ?? false)
-  const [showStatusPicker, setShowStatusPicker] = useState(false)
-  const statusPickerRef = useRef<HTMLDivElement>(null)
   const [sortField, setSortField] = useState<SortField>('competenceDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [showStatusBadges, setShowStatusBadges] = useState<boolean>(() => localStorage.getItem('fin_show_status_badges') !== 'false')
@@ -121,6 +119,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [bulkCatSub, setBulkCatSub] = useState<string | undefined>(undefined)
   const [bulkPayOpen, setBulkPayOpen] = useState(false)
   const [bulkPayMethod, setBulkPayMethod] = useState<string>('')
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
@@ -218,17 +217,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   useEffect(() => {
     if (inlineDescEdit && inlineDescRef.current) inlineDescRef.current.focus()
   }, [inlineDescEdit])
-
-  useEffect(() => {
-    if (!showStatusPicker) return
-    function handler(e: MouseEvent) {
-      if (statusPickerRef.current && !statusPickerRef.current.contains(e.target as Node)) {
-        setShowStatusPicker(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showStatusPicker])
 
   const allMonths = useMemo(() => {
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
@@ -652,7 +640,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     return Array.from(set).sort()
   }, [transactions, pluggyAccountMap])
 
-  const hasFilters = !!(search || filterType || filterStatus || filterMacro || filterSub || filterTag || filterInstitution || quickFilter || filterPluggy || filterManual)
+
 
   return (
     <main ref={mainRef} className="page-shell">
@@ -672,36 +660,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <ArrowLeft size={13} />
             Voltar para {navFilter?.sourceLabel ?? 'tela anterior'}
           </button>
-        )}
-
-        {/* ── Barra de ações em lote (Artha-style) ── */}
-        {selectedIds.size > 0 && (
-          <div style={{
-            position: 'sticky', top: 0, zIndex: 90,
-            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-            padding: '10px 18px', background: 'var(--card-bg)',
-            border: '1px solid var(--line)', borderRadius: 12,
-            boxShadow: '0 4px 16px rgba(0,0,0,.1)',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>
-              {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
-            </span>
-            <button className="btn btn-secondary btn-sm" onClick={bulkMarkConferido} style={{ display:'flex',alignItems:'center',gap:5 }}>
-              <Eye size={13} /> Marcar como conferidos ({selectedIds.size})
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setBulkCatOpen(true); setBulkCatMacro(undefined); setBulkCatSub(undefined) }}>
-              Alterar Categoria
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setBulkPayOpen(true)}>
-              Alterar Forma de Pagamento
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={bulkDelete} style={{ color: 'var(--crit)' }}>
-              <Trash2 size={13} /> Excluir
-            </button>
-            <button onClick={() => setSelectedIds(new Set())} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--faint)',padding:4,display:'flex' }}>
-              <X size={16} />
-            </button>
-          </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -808,217 +766,120 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
           </div>
         )}
 
-        {!isReviewMode && (
-          <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        {!isReviewMode && (() => {
+          const secondaryCount = [filterStatus, filterMacro, filterSub, filterTag, filterInstitution].filter(Boolean).length + (filterPluggy ? 1 : 0) + (filterManual ? 1 : 0)
+          const monthIdx = filterMonth ? allMonths.indexOf(filterMonth) : -1
+          const hasPrev = monthIdx > 0
+          const hasNext = filterMonth ? monthIdx < allMonths.length - 1 : false
+          const btnBase: React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, border:'1px solid var(--line)', borderRadius:7, background:'var(--card-bg)', cursor:'pointer', color:'var(--ink-2)', fontSize:15, padding:0 }
+          const reviewCount = reviewItems.filter(i => i.tags.includes('no_category')).length
+          return (
+            <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
 
-            {/* Period selector with arrows */}
-            {(() => {
-              const monthIdx = filterMonth ? allMonths.indexOf(filterMonth) : -1
-              const hasPrev = monthIdx > 0
-              const hasNext = filterMonth ? monthIdx < allMonths.length - 1 : false
-              const btnBase: React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, border:'1px solid var(--line)', borderRadius:7, background:'var(--card-bg)', cursor:'pointer', color:'var(--ink-2)', fontSize:15, padding:0 }
-              const reviewCount = reviewItems.filter(i => i.tags.includes('no_category')).length
-              return (
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button aria-label="Mês anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
-                    onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
-                    <ChevronLeft size={14} />
-                  </button>
+              {/* Period selector */}
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <button aria-label="Mês anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
+                  onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 12px', border:'1px solid var(--line)', borderRadius:8, background:'var(--card-bg)', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--ink)', fontFamily:'var(--ui)' }}
+                  onClick={() => {
+                    const cur = filterMonth || allMonths[0] || ''
+                    const idx = allMonths.indexOf(cur)
+                    if (idx >= 0) { const next = idx >= allMonths.length - 1 ? '' : allMonths[idx + 1]; setFilterMonth(next); setPage(0) }
+                  }}
+                  aria-label="Período atual"
+                >
+                  {fmtMonthLabel(filterMonth)}
+                </button>
+                <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext || !filterMonth ? 1 : 0.3, cursor: (hasNext || !filterMonth) ? 'pointer' : 'default'}}
+                  onClick={() => {
+                    if (!filterMonth && allMonths.length > 0) { setFilterMonth(allMonths[allMonths.length - 1]); setPage(0); return }
+                    if (hasNext) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) }
+                  }}>
+                  <ChevronRight size={14} />
+                </button>
+                {reviewCount > 0 && (
                   <button
-                    style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 12px', border:'1px solid var(--line)', borderRadius:8, background:'var(--card-bg)', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--ink)', fontFamily:'var(--ui)' }}
-                    onClick={() => {
-                      const cur = filterMonth || allMonths[0] || ''
-                      const idx = allMonths.indexOf(cur)
-                      if (idx >= 0) {
-                        // cycle through months or reset to 'all'
-                        const next = idx >= allMonths.length - 1 ? '' : allMonths[idx + 1]
-                        setFilterMonth(next); setPage(0)
-                      }
-                    }}
-                    aria-label="Período atual"
+                    onClick={() => { setQuickFilter('no_category'); setPage(0) }}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:20, border:'none', background:'var(--accent-soft)', color:'var(--accent)', fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:'var(--ui)' }}
+                    title="Lançamentos sem categoria"
                   >
-                    {fmtMonthLabel(filterMonth)}
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
+                    A classificar {reviewCount}
                   </button>
-                  <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext || !filterMonth ? 1 : 0.3, cursor: (hasNext || !filterMonth) ? 'pointer' : 'default'}}
-                    onClick={() => {
-                      if (!filterMonth && allMonths.length > 0) { setFilterMonth(allMonths[allMonths.length - 1]); setPage(0); return }
-                      if (hasNext) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) }
-                    }}>
-                    <ChevronRight size={14} />
+                )}
+              </div>
+
+              {/* Tipo filter */}
+              <div style={{ display:'flex', gap:4 }}>
+                {[{v:'', l:'Todos'},{v:'income', l:'Receitas'},{v:'expense', l:'Despesas'},{v:'neutral', l:'Neutros'}].map(opt => (
+                  <button key={opt.v} onClick={() => { setFilterType(opt.v); setPage(0) }}
+                    style={{ padding:'4px 10px', borderRadius:20, border:'1px solid var(--line)', background: filterType===opt.v ? 'var(--ink)' : 'transparent', color: filterType===opt.v ? 'var(--card-bg)' : 'var(--ink-2)', fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}>
+                    {opt.l}
                   </button>
-                  {reviewCount > 0 && (
-                    <button
-                      onClick={() => { setQuickFilter('no_category'); setPage(0) }}
-                      style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:20, border:'none', background:'var(--accent-soft)', color:'var(--accent)', fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:'var(--ui)' }}
-                      title="Lançamentos sem categoria"
-                    >
-                      <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
-                      A classificar {reviewCount}
-                    </button>
-                  )}
-                </div>
-              )
-            })()}
+                ))}
+              </div>
 
-            {/* Tipo filter — compact */}
-            <div style={{ display:'flex', gap:4 }}>
-              {[{v:'', l:'Todos'},{v:'income', l:'Receitas'},{v:'expense', l:'Despesas'},{v:'neutral', l:'Neutros'}].map(opt => (
-                <button key={opt.v} onClick={() => { setFilterType(opt.v); setPage(0) }}
-                  style={{ padding:'4px 10px', borderRadius:20, border:'1px solid var(--line)', background: filterType===opt.v ? 'var(--ink)' : 'transparent', color: filterType===opt.v ? 'var(--card-bg)' : 'var(--ink-2)', fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}>
-                  {opt.l}
-                </button>
-              ))}
-            </div>
+              {/* Search */}
+              <div style={{ display:'flex', alignItems:'center', gap:6, flex:'1 1 160px', border:'1px solid var(--line)', borderRadius:8, padding:'5px 10px', background:'var(--paper)' }}>
+                <Search size={12} color="var(--faint)" />
+                <input
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(0) }}
+                  placeholder="Buscar por descrição…"
+                  style={{ flex:1, fontSize:12, outline:'none', background:'transparent', color:'var(--ink)', border:'none', fontFamily:'var(--ui)' }}
+                />
+                {search && (
+                  <button onClick={() => { setSearch(''); setPage(0) }} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:0, display:'flex' }}>
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
 
-            {/* Search */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              flex: '1 1 160px', border: '1px solid var(--line)', borderRadius: 8,
-              padding: '5px 10px', background: 'var(--paper)',
-            }}>
-              <Search size={12} color="var(--faint)" />
-              <input
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(0) }}
-                placeholder="Buscar por descrição…"
-                style={{ flex: 1, fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--ink)', border: 'none', fontFamily: 'var(--ui)' }}
-              />
-              {search && (
-                <button onClick={() => { setSearch(''); setPage(0) }} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:0, display:'flex' }}>
-                  <X size={11} />
-                </button>
-              )}
-            </div>
-
-            {/* Hidden but kept for compat: original Mês select removed, tipo moved above */}
-
-            {/* Status filter — icon button + popover */}
-            <div ref={statusPickerRef} style={{ position: 'relative' }}>
+              {/* Filtros button */}
               <button
-                onClick={() => setShowStatusPicker(v => !v)}
-                aria-label="Status"
-                title={filterStatus ? `Status: ${filterStatus === 'paid' ? 'Pago' : filterStatus === 'pending' ? 'Pendente' : 'Cancelado'}` : 'Status'}
+                onClick={() => setShowFilterPanel(v => !v)}
+                title="Filtros avançados"
                 style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: 30, height: 30, borderRadius: 7, cursor: 'pointer', border: 'none',
-                  color: filterStatus ? 'var(--accent)' : 'var(--ink-2)',
-                  background: filterStatus ? 'var(--accent-soft)' : 'var(--well)',
-                  outline: filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  display:'inline-flex', alignItems:'center', gap:5,
+                  padding:'5px 11px', borderRadius:7, cursor:'pointer', fontFamily:'var(--ui)',
+                  fontSize:12, fontWeight:600,
+                  border: secondaryCount > 0 ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  color: secondaryCount > 0 ? 'var(--accent)' : 'var(--ink-2)',
+                  background: secondaryCount > 0 ? 'var(--accent-soft)' : 'var(--well)',
                 }}
               >
-                <CheckSquare size={13} />
+                <SlidersHorizontal size={13} />
+                Filtros
+                {secondaryCount > 0 && (
+                  <span style={{ fontSize:10, fontWeight:700, background:'var(--accent)', color:'#fff', borderRadius:10, padding:'1px 6px', lineHeight:1.4 }}>
+                    {secondaryCount}
+                  </span>
+                )}
               </button>
-              {showStatusPicker && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500,
-                  background: 'var(--paper, #fff)', border: '1px solid var(--line)',
-                  borderRadius: 9, boxShadow: '0 6px 20px rgba(0,0,0,.12)', padding: '4px 0', minWidth: 130,
-                }}>
-                  {[
-                    { value: '', label: 'Todos' },
-                    { value: 'paid', label: 'Pago' },
-                    { value: 'pending', label: 'Pendente' },
-                    { value: 'cancelled', label: 'Cancelado' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => { setFilterStatus(opt.value); setPage(0); setShowStatusPicker(false) }}
-                      style={{
-                        display: 'block', width: '100%', padding: '7px 14px', textAlign: 'left',
-                        fontSize: 12, background: filterStatus === opt.value ? 'var(--accent-soft)' : 'transparent',
-                        color: filterStatus === opt.value ? 'var(--accent)' : 'var(--ink)',
-                        border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)',
-                        fontWeight: filterStatus === opt.value ? 700 : 400,
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div style={{ minWidth: 160 }}>
-              <CategorySelector
-                macroCategoryId={filterMacro || undefined}
-                subCategoryId={filterSub || undefined}
-                allMacros={allMacros}
-                subCategories={subCategories}
-                placeholder="Todas categorias"
-                onChange={(macroId, subId) => {
-                  setFilterMacro(macroId ?? '')
-                  setFilterSub(subId ?? '')
-                  setPage(0)
-                }}
-              />
-            </div>
-
-            {allTags.length > 0 && (
-              <select className="ledger-select" value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }} aria-label="Tag">
-                <option value="">Todas as tags</option>
-                {allTags.map(tag => <option key={tag} value={tag}>#{tag}</option>)}
-              </select>
-            )}
-
-            {allInstitutions.length > 0 && (
-              <select className="ledger-select" value={filterInstitution} onChange={e => { setFilterInstitution(e.target.value); setPage(0) }} aria-label="Instituição">
-                <option value="">Todas instituições</option>
-                {allInstitutions.map(inst => <option key={inst} value={inst}>{inst}</option>)}
-              </select>
-            )}
-
-            {/* Pluggy / Manual compact checkboxes */}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11.5, color: filterPluggy ? 'var(--accent)' : 'var(--ink-2)', fontWeight: 600, userSelect: 'none' as const }}>
-              <input
-                type="checkbox"
-                checked={filterPluggy}
-                onChange={e => { setFilterPluggy(e.target.checked); setPage(0) }}
-                style={{ accentColor: 'var(--accent)', width: 13, height: 13 }}
-              />
-              Pluggy
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11.5, color: filterManual ? 'var(--accent)' : 'var(--ink-2)', fontWeight: 600, userSelect: 'none' as const }}>
-              <input
-                type="checkbox"
-                checked={filterManual}
-                onChange={e => { setFilterManual(e.target.checked); setPage(0) }}
-                style={{ accentColor: 'var(--accent)', width: 13, height: 13 }}
-              />
-              Manual
-            </label>
-
-            {hasFilters && (
+              {/* Badge visibility toggle */}
               <button
-                onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); setFilterMacro(''); setFilterSub(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setQuickFilter(''); onClearFilter?.(); setPage(0) }}
-                style={{ fontSize: 11, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: '0 4px', fontFamily: 'var(--ui)' }}
+                onClick={() => { const next = !showStatusBadges; setShowStatusBadges(next); localStorage.setItem('fin_show_status_badges', String(next)) }}
+                aria-label={showStatusBadges ? 'Ocultar badges' : 'Mostrar badges'}
+                title={showStatusBadges ? 'Ocultar badges de status' : 'Mostrar badges de status'}
+                style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:7, border:'none', cursor:'pointer', color: showStatusBadges ? 'var(--accent)' : 'var(--ink-2)', background: showStatusBadges ? 'var(--accent-soft)' : 'var(--well)', outline: showStatusBadges ? '1.5px solid var(--accent)' : '1px solid var(--line)' }}
               >
-                Limpar
+                <Eye size={13} />
               </button>
-            )}
-
-            {/* Badge visibility toggle — icon only */}
-            <button
-              onClick={() => {
-                const next = !showStatusBadges
-                setShowStatusBadges(next)
-                localStorage.setItem('fin_show_status_badges', String(next))
-              }}
-              aria-label={showStatusBadges ? 'Ocultar badges de status' : 'Mostrar badges de status'}
-              title={showStatusBadges ? 'Ocultar badges de status' : 'Mostrar badges de status'}
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, border: 'none', cursor: 'pointer', color: showStatusBadges ? 'var(--accent)' : 'var(--ink-2)', background: showStatusBadges ? 'var(--accent-soft)' : 'var(--well)', outline: showStatusBadges ? '1.5px solid var(--accent)' : '1px solid var(--line)' }}
-            >
-              <Eye size={13} />
-            </button>
-            <button
-              onClick={exportCsv}
-              disabled={filtered.length === 0}
-              title="Exportar lançamentos do filtro atual em CSV"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-2)', background: 'var(--well)', border: '1px solid var(--line)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'var(--ui)', marginLeft: 'auto' }}
-            >
-              <Download size={12} /> CSV
-            </button>
-          </div>
-        )}
+              <button
+                onClick={exportCsv}
+                disabled={filtered.length === 0}
+                title="Exportar CSV"
+                style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, color:'var(--ink-2)', background:'var(--well)', border:'1px solid var(--line)', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontWeight:600, fontFamily:'var(--ui)', marginLeft:'auto' }}
+              >
+                <Download size={12} /> CSV
+              </button>
+            </div>
+          )
+        })()}
 
         {/* ── Quick filter pills ── */}
         {!isReviewMode && (
@@ -1032,6 +893,35 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 {QUICK_FILTER_LABELS[key]}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* ── Barra de ações em lote — acima da lista (Artha-style) ── */}
+        {selectedIds.size > 0 && (
+          <div style={{
+            display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+            padding:'10px 16px', background:'var(--card-bg)',
+            border:'1px solid var(--accent)40', borderRadius:10,
+            boxShadow:'0 2px 8px rgba(0,0,0,.07)',
+          }}>
+            <span style={{ fontSize:13, fontWeight:700, color:'var(--ink)', flex:1 }}>
+              {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={bulkMarkConferido} style={{ display:'flex',alignItems:'center',gap:5 }}>
+              <Eye size={13} /> Marcar como conferidos ({selectedIds.size})
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setBulkCatOpen(true); setBulkCatMacro(undefined); setBulkCatSub(undefined) }}>
+              Alterar Categoria
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setBulkPayOpen(true)}>
+              Alterar Forma de Pagamento
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={bulkDelete} style={{ color:'var(--crit)' }}>
+              <Trash2 size={13} /> Excluir
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--faint)',padding:4,display:'flex' }}>
+              <X size={16} />
+            </button>
           </div>
         )}
 
@@ -1399,6 +1289,125 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         )}
 
       </div>
+
+      {/* ── Filter drawer (Artha-style) ── */}
+      {showFilterPanel && (
+        <div
+          style={{ position:'fixed', inset:0, zIndex:200 }}
+          onClick={() => setShowFilterPanel(false)}
+        >
+          <div
+            style={{
+              position:'absolute', right:0, top:0, bottom:0, width:340,
+              background:'var(--card-bg)', boxShadow:'-4px 0 24px rgba(0,0,0,.14)',
+              display:'flex', flexDirection:'column', overflow:'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px 14px', borderBottom:'1px solid var(--line)', flexShrink:0 }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:800, color:'var(--ink)' }}>Filtros Avançados</div>
+                <div style={{ fontSize:11.5, color:'var(--faint)', marginTop:2 }}>Configure filtros para refinar a lista</div>
+              </div>
+              <button onClick={() => setShowFilterPanel(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--faint)', padding:4, display:'flex' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:20 }}>
+
+              {/* Status */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Status</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {[{v:'',l:'Todos'},{v:'paid',l:'Pago'},{v:'pending',l:'Pendente'},{v:'cancelled',l:'Cancelado'}].map(opt => (
+                    <button key={opt.v} onClick={() => { setFilterStatus(opt.v); setPage(0) }}
+                      style={{ padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)', cursor:'pointer', fontFamily:'var(--ui)', fontSize:12, fontWeight:600,
+                        background: filterStatus===opt.v ? 'var(--ink)' : 'transparent',
+                        color: filterStatus===opt.v ? 'var(--card-bg)' : 'var(--ink-2)' }}>
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categoria */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Categoria</div>
+                <CategorySelector
+                  macroCategoryId={filterMacro || undefined}
+                  subCategoryId={filterSub || undefined}
+                  allMacros={allMacros}
+                  subCategories={subCategories}
+                  placeholder="Todas categorias"
+                  onChange={(macroId, subId) => { setFilterMacro(macroId ?? ''); setFilterSub(subId ?? ''); setPage(0) }}
+                />
+              </div>
+
+              {/* Conta / Instituição */}
+              {allInstitutions.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Conta Bancária</div>
+                  <select className="ledger-select" value={filterInstitution} onChange={e => { setFilterInstitution(e.target.value); setPage(0) }} style={{ width:'100%' }}>
+                    <option value="">Todas as contas</option>
+                    {allInstitutions.map(inst => <option key={inst} value={inst}>{inst}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Tags */}
+              {allTags.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Tags</div>
+                  <select className="ledger-select" value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }} style={{ width:'100%' }}>
+                    <option value="">Todas as tags</option>
+                    {allTags.map(tag => <option key={tag} value={tag}>#{tag}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Origem */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Origem do Lançamento</div>
+                <div style={{ display:'flex', gap:6 }}>
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12.5, color: filterPluggy ? 'var(--accent)' : 'var(--ink-2)', fontWeight:600, userSelect:'none' as const,
+                    padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)',
+                    background: filterPluggy ? 'var(--accent-soft)' : 'transparent' }}>
+                    <input type="checkbox" checked={filterPluggy} onChange={e => { setFilterPluggy(e.target.checked); setPage(0) }} style={{ accentColor:'var(--accent)', width:13, height:13 }} />
+                    Pluggy
+                  </label>
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12.5, color: filterManual ? 'var(--accent)' : 'var(--ink-2)', fontWeight:600, userSelect:'none' as const,
+                    padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)',
+                    background: filterManual ? 'var(--accent-soft)' : 'transparent' }}>
+                    <input type="checkbox" checked={filterManual} onChange={e => { setFilterManual(e.target.checked); setPage(0) }} style={{ accentColor:'var(--accent)', width:13, height:13 }} />
+                    Manual
+                  </label>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding:'14px 20px', borderTop:'1px solid var(--line)', display:'flex', gap:8, flexShrink:0 }}>
+              <button
+                onClick={() => { setFilterStatus(''); setFilterMacro(''); setFilterSub(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setPage(0) }}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:'1px solid var(--line)', background:'transparent', color:'var(--ink-2)', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}
+              >
+                Limpar
+              </button>
+              <button
+                onClick={() => setShowFilterPanel(false)}
+                className="btn btn-primary"
+                style={{ flex:2, borderRadius:8 }}
+              >
+                Aplicar Filtros
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit modal ── */}
       {modalTx && (
