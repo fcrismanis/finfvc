@@ -3,6 +3,9 @@ import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
 import { useAuth } from './AuthContext'
 import { createDataProvider } from '../adapters/adapter.factory'
 import { dedupeIncomingBatch } from '../utils/transactionDedupe'
+import { loadRules, suggestFromRules, canAutoCategorize } from '../services/categoryRules.service'
+import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { loadEngineConfigAsync, setEngineFamily, invalidateEngineCache } from '../services/financeEngine.service'
 
 interface DataContextValue {
   transactions: Transaction[]
@@ -59,8 +62,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [provider])
 
-  // Re-load whenever provider changes (covers initial mount + familyId resolution)
-  useEffect(() => { void loadData() }, [loadData])
+  // Re-load whenever provider + familyId change. Also bootstraps engine config from Supabase.
+  useEffect(() => {
+    void loadData()
+    if (familyId) {
+      setEngineFamily(familyId)
+      invalidateEngineCache()
+      void loadEngineConfigAsync(familyId)
+    }
+  }, [loadData, familyId])
 
   const reload = useCallback(() => { void loadData() }, [loadData])
 
@@ -86,8 +96,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const appendTransactions = useCallback(async (txns: Transaction[]) => {
     const { unique } = dedupeIncomingBatch(txns, transactions)
-    await provider.appendTransactions(unique)
-    await loadData(false)  // silent reload — don't unmount the migration page mid-flight
+    // Auto-apply category rules to incoming transactions that are not manually classified
+    const activeRules = loadRules().filter(r => r.active)
+    const allMacros = getAllMacroCategories()
+    const withRules = unique.map(tx => {
+      if (!canAutoCategorize(tx) || tx.manualCategoryOverride) return tx
+      const match = suggestFromRules(tx, activeRules)
+      if (!match) return tx
+      const macro = allMacros.find(m => m.id === match.macroCategoryId)
+      return {
+        ...tx,
+        macroCategoryId: match.macroCategoryId,
+        subCategoryId: match.subCategoryId ?? tx.subCategoryId,
+        classificationType: macro?.classificationType ?? tx.classificationType,
+        includeInOperationalResult: macro ? macro.displayInResult : tx.includeInOperationalResult,
+        includeInCashflow: macro ? macro.displayInCashflow : tx.includeInCashflow,
+        includeInBudget: macro ? macro.displayInBudget : tx.includeInBudget,
+        categorySuggestionSource: 'rule' as const,
+        categoryConfidence: match.confidence,
+        needsReview: false,
+      }
+    })
+    await provider.appendTransactions(withRules)
+    await loadData(false)
   }, [provider, loadData, transactions])
 
   const saveSubCategory = useCallback(async (sub: SubCategory) => {

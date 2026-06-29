@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Settings2, RotateCcw, Check, Clock } from 'lucide-react'
+import { Settings2, RotateCcw, Check, Clock, Database } from 'lucide-react'
 import {
-  loadEngineConfig, updateEngineConfig, resetEngineConfig, invalidateEngineCache,
-  buildDefaultConfig, patchScopeRule, loadAuditLog,
+  loadEngineConfigAsync, loadEngineConfigSync, updateEngineConfig, resetEngineConfig,
+  invalidateEngineCache, buildDefaultConfig, patchScopeRule, loadAuditLog,
   DEFAULT_FLAGS,
-  type EngineConfig, type ScopeOverride,
-  type FlagName, type AuditEntry,
+  type EngineConfig, type ScopeOverride, type FlagName, type AuditEntry,
 } from '../services/financeEngine.service'
+import { useAuth } from '../context/AuthContext'
 import { getAllCategories } from '../services/financeCategories.service'
 import { loadSubCategories } from '../services/subcategory.service'
 import type { Category, SubCategory } from '../types'
@@ -374,9 +374,20 @@ function TabAudit() {
 type Tab = 'classifications' | 'categories' | 'subcategories' | 'audit'
 
 export function FinanceEnginePage() {
+  const { familyId } = useAuth()
   const [tab, setTab] = useState<Tab>('classifications')
-  const [config, setConfig] = useState<EngineConfig>(() => loadEngineConfig())
+  const [config, setConfig] = useState<EngineConfig>(() => loadEngineConfigSync())
   const [saved, setSaved] = useState(false)
+  const [source, setSource] = useState<'supabase' | 'local' | 'loading'>('loading')
+
+  // Carrega do Supabase ao montar
+  useEffect(() => {
+    if (!familyId) { setSource('local'); return }
+    loadEngineConfigAsync(familyId).then(cfg => {
+      setConfig(cfg)
+      setSource('supabase')
+    }).catch(() => setSource('local'))
+  }, [familyId])
 
   const handleUpdate = useCallback((next: EngineConfig) => {
     updateEngineConfig(next)
@@ -386,8 +397,8 @@ export function FinanceEnginePage() {
     setTimeout(() => setSaved(false), 1500)
   }, [])
 
-  function handleReset() {
-    resetEngineConfig()
+  async function handleReset() {
+    await resetEngineConfig()
     invalidateEngineCache()
     setConfig(buildDefaultConfig())
     setSaved(true)
@@ -417,12 +428,18 @@ export function FinanceEnginePage() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
+              <Database size={12} style={{ color: source === 'supabase' ? 'var(--pos)' : source === 'loading' ? 'var(--warn)' : 'var(--faint)' }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)' }}>
+                {source === 'supabase' ? 'Supabase' : source === 'loading' ? 'Carregando…' : 'Local (offline)'}
+              </span>
+            </div>
             {saved && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--pos)', fontWeight: 600 }}>
                 <Check size={13} /> Salvo
               </span>
             )}
-            <button onClick={handleReset} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--well)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--faint)', fontFamily: 'var(--ui)' }}>
+            <button onClick={() => void handleReset()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--well)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--faint)', fontFamily: 'var(--ui)' }}>
               <RotateCcw size={13} /> Restaurar padrões
             </button>
           </div>
