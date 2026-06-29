@@ -5,6 +5,7 @@ import type {
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
 import { getCompetenceMonth, formatMonthLabel, getLast6Months } from '../utils/date'
 import { formatBRL } from '../utils/currency'
+import { getEngineConfig, includesInResult, includesInBudget, type EngineConfig } from '../services/financeEngine.service'
 
 function getMacroById(id: string): MacroCategory | undefined {
   return getAllMacroCategories().find(m => m.id === id)
@@ -18,15 +19,17 @@ function txActive(tx: Transaction): boolean {
   return !tx.isAdjustment || tx.status !== 'cancelled'
 }
 
-export function getOperationalIncome(txns: Transaction[], month: string): number {
+export function getOperationalIncome(txns: Transaction[], month: string, config?: EngineConfig): number {
+  const cfg = config ?? getEngineConfig()
   return txns
-    .filter(tx => txInMonth(tx, month) && txActive(tx) && tx.includeInOperationalResult && tx.type === 'income')
+    .filter(tx => txInMonth(tx, month) && txActive(tx) && includesInResult(tx, cfg) && tx.type === 'income')
     .reduce((sum, tx) => sum + tx.amount, 0)
 }
 
-export function getTotalExpenses(txns: Transaction[], month: string): number {
+export function getTotalExpenses(txns: Transaction[], month: string, config?: EngineConfig): number {
+  const cfg = config ?? getEngineConfig()
   return txns
-    .filter(tx => txInMonth(tx, month) && txActive(tx) && tx.includeInOperationalResult && tx.type === 'expense')
+    .filter(tx => txInMonth(tx, month) && txActive(tx) && includesInResult(tx, cfg) && tx.type === 'expense')
     .reduce((sum, tx) => sum + tx.amount, 0)
 }
 
@@ -83,13 +86,14 @@ function getAvgIncome(txns: Transaction[], refMonth: string, nMonths: number): n
   return totals.length > 0 ? totals.reduce((a, b) => a + b, 0) / totals.length : 0
 }
 
-export function getMacroCategoryTotals(txns: Transaction[], month: string): MacroCategoryTotal[] {
+export function getMacroCategoryTotals(txns: Transaction[], month: string, config?: EngineConfig): MacroCategoryTotal[] {
+  const cfg = config ?? getEngineConfig()
   const expenseMacros = getAllMacroCategories().filter(m =>
     ['operational_expense', 'debt_cost'].includes(m.classificationType)
   )
 
   const monthTxns = txns.filter(tx =>
-    txInMonth(tx, month) && txActive(tx) && tx.includeInOperationalResult && tx.type === 'expense'
+    txInMonth(tx, month) && txActive(tx) && includesInResult(tx, cfg) && tx.type === 'expense'
   )
   const totalExpenses = monthTxns.reduce((s, tx) => s + tx.amount, 0)
 
@@ -149,13 +153,15 @@ function getAvgMacroExpense(txns: Transaction[], refMonth: string, macroId: stri
 export function getBudgetComparison(
   txns: Transaction[],
   month: string,
-  budgets: Budget[]
+  budgets: Budget[],
+  config?: EngineConfig,
 ): BudgetComparison[] {
+  const cfg = config ?? getEngineConfig()
   const monthBudgets = budgets
     .filter(b => b.referenceMonth.startsWith(month) && b.macroCategoryId && b.macroCategoryId !== 'mac_receita_op')
 
   const monthTxns = txns.filter(tx =>
-    txInMonth(tx, month) && txActive(tx) && tx.includeInBudget && tx.type === 'expense'
+    txInMonth(tx, month) && txActive(tx) && includesInBudget(tx, cfg) && tx.type === 'expense'
   )
 
   return monthBudgets.map(budget => {
@@ -163,6 +169,7 @@ export function getBudgetComparison(
     const realized = monthTxns
       .filter(tx => tx.macroCategoryId === budget.macroCategoryId)
       .reduce((s, tx) => s + tx.amount, 0)
+
     const deviationRs = realized - budget.plannedAmount
     const deviationPct = budget.plannedAmount > 0 ? (deviationRs / budget.plannedAmount) * 100 : 0
 

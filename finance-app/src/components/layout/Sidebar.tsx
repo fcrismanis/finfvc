@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck,
   Calendar, TrendingUp, Bell, Landmark, CreditCard,
-  Tag, Link2, Bot, Settings,
+  Tag, Link2, Bot, Settings, Settings2,
   LogOut, X, Wand2, FileBarChart, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -45,6 +45,7 @@ const CADASTROS: NavEntry[] = [
 
 const SISTEMA: NavEntry[] = [
   { route: '/configuracoes', label: 'Configurações', icon: Settings },
+  { route: '/engine', label: 'Engine Financeira', icon: Settings2 },
   { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
   { route: '/pluggy', label: 'Importação & Pluggy', icon: Link2 },
   { route: '/economista', label: 'Economista FIN', icon: Bot },

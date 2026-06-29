@@ -41,6 +41,7 @@ const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ d
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
 const EconomistaPage    = lazy(() => import('./pages/EconomistaPage').then(m => ({ default: m.EconomistaPage })))
+const FinanceEnginePage = lazy(() => import('./pages/FinanceEnginePage').then(m => ({ default: m.FinanceEnginePage })))
 
 const MIGRATION_BANNER_DISMISSED_KEY = 'finance_migration_banner_dismissed'
 
@@ -145,6 +146,7 @@ function AppShell() {
       case '/migrar':        return <MigrationPage />
       case '/consultor':     return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/economista':    return <EconomistaPage selectedMonth={selectedMonth} />
+      case '/engine':        return <FinanceEnginePage />
       case '/assistente':    { navigate('/consultor'); return null }
       case '/configuracoes': return <Settings onNavigate={navigate} />
       case '/categorias':    return <CategoriesPage onNavigate={navigate} />
