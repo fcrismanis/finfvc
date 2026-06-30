@@ -235,7 +235,7 @@ export interface SubCategory {
   icon?: string
 }
 
-export type ProvisionRecurrence = 'annual' | 'semiannual' | 'quarterly'
+export type ProvisionRecurrence = 'annual' | 'semiannual' | 'quarterly' | 'monthly'
 
 /** Provisionamento de despesas não-mensais (IPVA, IPTU, seguros, matrícula). */
 export interface Provision {
@@ -247,6 +247,8 @@ export interface Provision {
   recurrence: ProvisionRecurrence
   /** Mês-âncora de vencimento (1-12). */
   dueMonth: number
+  /** Ano de vencimento (e.g. 2026). Se não definido, recorre todo ano. */
+  dueYear?: number
   active: boolean
   notes?: string
   createdAt: string

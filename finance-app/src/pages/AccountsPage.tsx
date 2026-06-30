@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Pencil, Check, X } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Pencil, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import {
   getLocalConnections,
@@ -16,6 +16,8 @@ import { SyncModal, type SyncSession, type PeriodPreset } from '../components/pl
 import type { PluggyLocalConnection, PluggyLocalAccount } from '../services/pluggy.service'
 import type { Transaction } from '../types'
 import { formatBRL } from '../utils/currency'
+import { MACRO_CATEGORIES } from '../config/categories'
+import { ITAU_ANCHOR } from '../config/bankTruth'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -28,6 +30,8 @@ export function AccountsPage({ onNavigate }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const editRef = useRef<HTMLInputElement>(null)
+  const [catAccordionOpen, setCatAccordionOpen] = useState(false)
+  const [histAccordionOpen, setHistAccordionOpen] = useState(false)
 
   useEffect(() => {
     setConnections(getLocalConnections())
@@ -53,6 +57,44 @@ export function AccountsPage({ onNavigate }: Props) {
     )
 
   const totalBalance = bankAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
+
+  const currentYearMonth = new Date().toISOString().slice(0, 7) // e.g. "2026-06"
+  const currentMonthLabel = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+  const categorySpending = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const tx of transactions) {
+      if (tx.type !== 'expense') continue
+      if (!tx.competenceDate.startsWith(currentYearMonth)) continue
+      const key = tx.macroCategoryId ?? '__sem_categoria__'
+      map.set(key, (map.get(key) ?? 0) + tx.amount)
+    }
+    return [...map.entries()]
+      .map(([id, total]) => ({
+        id,
+        name: id === '__sem_categoria__' ? 'Sem categoria' : (MACRO_CATEGORIES.find(m => m.id === id)?.name ?? id),
+        total,
+      }))
+      .sort((a, b) => b.total - a.total)
+  }, [transactions, currentYearMonth])
+
+  // Histórico de saldo — série mês a mês do extrato Itaú (verdade ancorada).
+  const balanceHistory = useMemo(() => {
+    const pts = ITAU_ANCHOR.checkpoints
+    if (pts.length === 0) return null
+    const W = 640, H = 160, PADX = 12, PADY = 16
+    const vals = pts.map(p => p.balance)
+    const min = Math.min(...vals, 0)
+    const max = Math.max(...vals, 0)
+    const span = max - min || 1
+    const x = (i: number) => PADX + (i / (pts.length - 1)) * (W - 2 * PADX)
+    const y = (v: number) => PADY + (1 - (v - min) / span) * (H - 2 * PADY)
+    const yZero = y(0)
+    const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.balance).toFixed(1)}`).join(' ')
+    const last = pts[pts.length - 1]
+    const first = pts[0]
+    return { pts, W, H, x, y, yZero, line, last, first, min, max }
+  }, [])
 
   function startSync(itemId: string, accountId: string, accountName: string) {
     const today = currentFinancialDate()
@@ -255,8 +297,68 @@ export function AccountsPage({ onNavigate }: Props) {
           )}
         </div>
 
-        <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)', fontSize: 12, color: 'var(--faint)', lineHeight: 1.6 }}>
-          <strong style={{ color: 'var(--ink-2)' }}>Fase 2:</strong> Visualização de histórico de saldo e reconciliação automática com lançamentos estarão disponíveis após a sincronização completa via Open Finance.
+        {/* Histórico de saldo — accordion */}
+        {balanceHistory && (
+          <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+            <button
+              onClick={() => setHistAccordionOpen(o => !o)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--well)', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--ink)', textAlign: 'left' }}
+            >
+              <span>Histórico de saldo — Itaú (extrato)</span>
+              {histAccordionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {histAccordionOpen && (() => {
+              const b = balanceHistory
+              return (
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontSize: 12, color: 'var(--faint)' }}>
+                    <span>{b.first.date} · {formatBRL(b.first.balance)}</span>
+                    <span style={{ fontWeight: 700, color: b.last.balance >= 0 ? 'var(--pos)' : 'var(--crit)' }}>
+                      {b.last.date} · {formatBRL(b.last.balance)}
+                    </span>
+                  </div>
+                  <svg viewBox={`0 0 ${b.W} ${b.H}`} style={{ width: '100%', height: 'auto', display: 'block' }} preserveAspectRatio="none">
+                    <line x1={0} y1={b.yZero} x2={b.W} y2={b.yZero} stroke="var(--line)" strokeWidth={1} strokeDasharray="3 3" />
+                    <path d={b.line} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                    {b.pts.map((p, i) => (
+                      <circle key={p.date} cx={b.x(i)} cy={b.y(p.balance)} r={2.5} fill={p.balance >= 0 ? 'var(--pos)' : 'var(--crit)'} />
+                    ))}
+                  </svg>
+                  <div style={{ marginTop: 10, maxHeight: 200, overflowY: 'auto' }}>
+                    {[...b.pts].reverse().map(p => (
+                      <div key={p.date} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
+                        <span style={{ color: 'var(--ink-2)' }}>{p.date}</span>
+                        <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: p.balance >= 0 ? 'var(--pos)' : 'var(--crit)' }}>{formatBRL(p.balance)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {/* Gastos por categoria — accordion */}
+        <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+          <button
+            onClick={() => setCatAccordionOpen(o => !o)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--well)', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--ink)', textAlign: 'left' }}
+          >
+            <span>Gastos por categoria — {currentMonthLabel}</span>
+            {catAccordionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {catAccordionOpen && (
+            <div style={{ padding: '8px 0' }}>
+              {categorySpending.length === 0 ? (
+                <div style={{ padding: '12px 16px', color: 'var(--faint)', fontSize: 13 }}>Nenhum gasto registrado no mês.</div>
+              ) : categorySpending.map(cat => (
+                <div key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{cat.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--crit)' }}>{formatBRL(cat.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

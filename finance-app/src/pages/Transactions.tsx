@@ -120,6 +120,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   const [bulkPayOpen, setBulkPayOpen] = useState(false)
   const [bulkPayMethod, setBulkPayMethod] = useState<string>('')
   const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false)
   const [inlineCatEdit, setInlineCatEdit] = useState<{ id: string; catId: string } | null>(null)
   const [inlineDescEdit, setInlineDescEdit] = useState<{ id: string; value: string } | null>(null)
   const inlineDescRef = useRef<HTMLInputElement>(null)
@@ -803,17 +804,32 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                   onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) } }}>
                   <ChevronLeft size={14} />
                 </button>
-                <button
-                  style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 12px', border:'1px solid var(--line)', borderRadius:8, background:'var(--card-bg)', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--ink)', fontFamily:'var(--ui)' }}
-                  onClick={() => {
-                    const cur = filterMonth || allMonths[0] || ''
-                    const idx = allMonths.indexOf(cur)
-                    if (idx >= 0) { const next = idx >= allMonths.length - 1 ? '' : allMonths[idx + 1]; setFilterMonth(next); setPage(0) }
-                  }}
-                  aria-label="Período atual"
-                >
-                  {fmtMonthLabel(filterMonth)}
-                </button>
+                <div style={{ position:'relative' }}>
+                  <button
+                    style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 12px', border:'1px solid var(--line)', borderRadius:8, background:'var(--card-bg)', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--ink)', fontFamily:'var(--ui)' }}
+                    onClick={() => setMonthPickerOpen(o => !o)}
+                    aria-label="Período atual"
+                  >
+                    {fmtMonthLabel(filterMonth)}
+                  </button>
+                  {monthPickerOpen && (
+                    <>
+                      <div style={{ position:'fixed', inset:0, zIndex:299 }} onClick={() => setMonthPickerOpen(false)} />
+                      <div style={{ position:'absolute', top:'calc(100% + 4px)', left:'50%', transform:'translateX(-50%)', zIndex:300, background:'var(--card-bg)', border:'1px solid var(--line)', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.12)', maxHeight:280, overflowY:'auto', minWidth:140 }}>
+                        {allMonths.map(m => (
+                          <button key={m} onClick={() => { setFilterMonth(m); setPage(0); setMonthPickerOpen(false) }}
+                            style={{ display:'block', width:'100%', padding:'7px 16px', textAlign:'left', background: filterMonth===m ? 'var(--ink)' : 'transparent', color: filterMonth===m ? 'var(--card-bg)' : 'var(--ink)', border:'none', cursor:'pointer', fontSize:13, fontFamily:'var(--ui)', fontWeight: filterMonth===m ? 700 : 400 }}>
+                            {fmtMonthLabel(m)}
+                          </button>
+                        ))}
+                        <button onClick={() => { setFilterMonth(''); setPage(0); setMonthPickerOpen(false) }}
+                          style={{ display:'block', width:'100%', padding:'7px 16px', textAlign:'left', background: filterMonth==='' ? 'var(--ink)' : 'transparent', color: filterMonth==='' ? 'var(--card-bg)' : 'var(--faint)', border:'none', borderTop:'1px solid var(--line)', cursor:'pointer', fontSize:13, fontFamily:'var(--ui)', fontWeight: filterMonth==='' ? 700 : 400 }}>
+                          Todos os meses
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default'}}
                   onClick={() => { if (hasNext) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
                   <ChevronRight size={14} />
@@ -1320,7 +1336,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
               <div>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Atalhos</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {(['no_category', 'neutral', 'high_value'] as QuickFilterKey[]).map(key => (
+                  {(['no_category', 'neutral', 'high_value', 'needs_review', 'pending'] as QuickFilterKey[]).map(key => (
                     <button key={key} onClick={() => { setQuickFilter(q => q === key ? '' : key); setPage(0) }}
                       style={{ padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)', cursor:'pointer', fontFamily:'var(--ui)', fontSize:12, fontWeight:600,
                         background: quickFilter===key ? 'var(--ink)' : 'transparent',

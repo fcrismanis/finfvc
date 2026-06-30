@@ -19,7 +19,7 @@ export function getReviewItems(transactions: Transaction[]): ReviewItem[] {
     const reasons: string[] = []
     const tags = new Set<ReviewReason>()
 
-    if (tx.source === 'pluggy' || tx.needsReview) { reasons.push('Importada via Pluggy — revisar categoria'); tags.add('pluggy_import') }
+    if ((tx.source === 'pluggy' || tx.needsReview) && tx.needsReview !== false) { reasons.push('Importada via Pluggy — revisar categoria'); tags.add('pluggy_import') }
     if (tx.classificationType === 'transfer')   { reasons.push('Transferência — confirme se não duplica compra'); tags.add('transfer') }
     if (tx.classificationType === 'redemption') { reasons.push('Resgate — não é receita operacional'); tags.add('needs_review') }
     if (tx.classificationType === 'investment') { reasons.push('Investimento/Aporte — excluído do resultado'); tags.add('needs_review') }

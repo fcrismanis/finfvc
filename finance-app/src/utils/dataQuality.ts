@@ -66,6 +66,7 @@ export function findDuplicateCandidateIds(transactions: Transaction[]): Set<stri
 export type QuickFilterKey =
   | 'no_category' | 'pluggy' | 'csv' | 'manual' | 'auto' | 'neutral'
   | 'pending' | 'high_value' | 'with_tags' | 'no_tags' | 'duplicates' | 'edited'
+  | 'needs_review'
 
 export interface QuickFilterCtx {
   threshold: number
@@ -83,8 +84,9 @@ export const QUICK_FILTER_LABELS: Record<QuickFilterKey, string> = {
   high_value:  'Alto valor',
   with_tags:   'Com tags',
   no_tags:     'Sem tags',
-  duplicates:  'Possíveis duplicados',
-  edited:      'Descrição editada',
+  duplicates:   'Possíveis duplicados',
+  edited:       'Descrição editada',
+  needs_review: 'A conferir',
 }
 
 export function matchesQuickFilter(tx: Transaction, key: QuickFilterKey, ctx: QuickFilterCtx): boolean {
@@ -100,7 +102,8 @@ export function matchesQuickFilter(tx: Transaction, key: QuickFilterKey, ctx: Qu
     case 'with_tags':   return !!tx.tags && tx.tags.length > 0
     case 'no_tags':     return !tx.tags || tx.tags.length === 0
     case 'duplicates':  return ctx.duplicateIds.has(tx.id)
-    case 'edited':      return !!tx.manualTextOverride
+    case 'edited':        return !!tx.manualTextOverride
+    case 'needs_review':  return tx.needsReview === true
   }
 }
 

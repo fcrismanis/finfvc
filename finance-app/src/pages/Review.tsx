@@ -370,7 +370,7 @@ export function Review({ onNavigate: _onNavigate }: Props) {
 
   function saveModal() {
     if (!modalTx) return
-    updateTransaction(modalTx.id, modalPatch)
+    updateTransaction(modalTx.id, { ...modalPatch, needsReview: false })
     if (applyToSimilar && modalPatch.macroCategoryId) {
       const norm = modalTx.description.trim().toLowerCase()
       const similar = transactions.filter(t => t.id !== modalTx.id && t.description.trim().toLowerCase() === norm)
