@@ -106,6 +106,7 @@ export class SupabaseDataProvider implements IDataProvider {
     if (patch.subCategoryId !== undefined)       dbPatch.sub_category_id = patch.subCategoryId ?? null
     if (patch.macroCategoryId !== undefined)     dbPatch.macro_category_id = patch.macroCategoryId ?? null
     if (patch.classificationType !== undefined)  dbPatch.classification_type = patch.classificationType
+    if (patch.type !== undefined)                dbPatch.transaction_type = patch.type
     if (patch.status !== undefined)              dbPatch.status = patch.status
     if (patch.isRecurring !== undefined)         dbPatch.is_recurring = patch.isRecurring
     if (patch.notes !== undefined)               dbPatch.notes = patch.notes ?? null
