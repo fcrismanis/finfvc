@@ -19,6 +19,8 @@ export function CategoryRulesPage() {
   const [testResults, setTestResults] = useState<Record<string, number>>({})
   const [applyStatus, setApplyStatus] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
+  // Acordeon por categoria — padrão fechado (Set vazio = todos colapsados)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   function refresh() { setRules(loadRules()) }
 
@@ -26,6 +28,35 @@ export function CategoryRulesPage() {
     () => [...rules].sort((a, b) => b.useCount - a.useCount || a.pattern.localeCompare(b.pattern)),
     [rules]
   )
+
+  // Agrupa regras por macro categoria, ordenado por nome ('__none__' = sem categoria, por último)
+  const groups = useMemo(() => {
+    const byMacro = new Map<string, CategoryRule[]>()
+    for (const r of sorted) {
+      const key = r.macroCategoryId || '__none__'
+      const arr = byMacro.get(key)
+      if (arr) arr.push(r); else byMacro.set(key, [r])
+    }
+    return Array.from(byMacro.entries())
+      .map(([macroId, items]) => ({
+        macroId,
+        macro: allMacros.find(m => m.id === macroId),
+        items,
+      }))
+      .sort((a, b) => {
+        if (a.macroId === '__none__') return 1
+        if (b.macroId === '__none__') return -1
+        return (a.macro?.name ?? a.macroId).localeCompare(b.macro?.name ?? b.macroId, 'pt-BR')
+      })
+  }, [sorted, allMacros])
+
+  function toggleGroup(macroId: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(macroId)) next.delete(macroId); else next.add(macroId)
+      return next
+    })
+  }
 
   function handleAdd() {
     if (!newPattern.trim() || !newMacro) return
@@ -141,18 +172,48 @@ export function CategoryRulesPage() {
           </div>
         )}
 
-        {/* Rules list */}
-        <div className="card" style={{ overflow: 'hidden' }}>
-          {sorted.length === 0 ? (
+        {/* Rules list — acordeon por categoria (padrão fechado) */}
+        {sorted.length === 0 ? (
+          <div className="card" style={{ overflow: 'hidden' }}>
             <div className="empty-state" style={{ padding: '40px 0' }}>
               <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhuma regra aprendida ainda</h4>
               <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 320, textAlign: 'center' }}>
                 Corrija a categoria de um lançamento ou adicione uma regra manual acima.
               </p>
             </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {groups.map(({ macroId, macro, items }) => {
+              const isOpen = expanded.has(macroId)
+              const activeCount = items.filter(r => r.active).length
+              const groupName = macro?.name ?? (macroId === '__none__' ? 'Sem categoria' : macroId)
+              const accent = macro?.color ?? 'var(--faint)'
+              return (
+                <div key={macroId} className="card" style={{ overflow: 'hidden' }}>
+                  {/* Group header */}
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(macroId)}
+                    aria-expanded={isOpen}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '12px 16px', background: isOpen ? 'var(--well)' : 'transparent',
+                      border: 'none', borderBottom: isOpen ? '1px solid var(--line)' : 'none',
+                      cursor: 'pointer', fontFamily: 'var(--ui)', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{groupName}</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 600 }}>
+                      {items.length} regra{items.length !== 1 ? 's' : ''} · {activeCount} ativa{activeCount !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--faint)' }}>{isOpen ? '▲' : '▼'}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
                 <thead>
                   <tr style={{ background: 'var(--well)', borderBottom: '1px solid var(--line)' }}>
                     <th className="table-th" style={{ minWidth: 140 }}>Padrão</th>
@@ -166,7 +227,7 @@ export function CategoryRulesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map(rule => {
+                  {items.map(rule => {
                     const macro = allMacros.find(m => m.id === rule.macroCategoryId)
                     const subOptions = subCategories.filter(s => s.macroCategoryId === rule.macroCategoryId && s.active)
                     const testCount = testResults[rule.id]
@@ -278,9 +339,13 @@ export function CategoryRulesPage() {
                   })}
                 </tbody>
               </table>
-            </div>
-          )}
-        </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
       </div>
     </main>
