@@ -3,6 +3,7 @@ import { lookupPluggyCategory, inferCategoryFromText } from './pluggyCategoryMap
 import { suggestFromRules } from './categoryRules.service'
 import { findCrossSourceDuplicate } from '../utils/transactionDedupe'
 import { currentFinancialDate, normalizeFinancialDate } from '../utils/date'
+import { ITAU_ANCHOR, ITAU_ANCHOR_ID } from '../config/bankTruth'
 
 /**
  * Pluggy Open Finance service.
@@ -252,6 +253,70 @@ export function getLocalConnections(): PluggyLocalConnection[] {
     backupConnectionsToServer(conns)
   }
   return conns
+}
+
+/**
+ * Returns the Itaú extrato anchor as a synthetic connection — the master saldo
+ * for the real Itaú (ag 1145 / conta 023475-1) while it isn't connected via
+ * Open Finance. Display-only: it never hits Pluggy (see ITAU_ANCHOR_ID guards).
+ * Disabled by setting ITAU_ANCHOR.enabled = false in config/bankTruth.ts.
+ */
+export function itauAnchorConnection(): PluggyLocalConnection | null {
+  if (!ITAU_ANCHOR.enabled) return null
+  const account: PluggyLocalAccount = {
+    id: ITAU_ANCHOR_ID,
+    itemId: ITAU_ANCHOR_ID,
+    name: `Conta Corrente Itaú · ${ITAU_ANCHOR.accountNumber}`,
+    displayName: `Conta Corrente Itaú · ${ITAU_ANCHOR.accountNumber}`,
+    type: 'BANK',
+    subtype: 'CHECKING_ACCOUNT',
+    balance: ITAU_ANCHOR.balance,
+    availableBalance: ITAU_ANCHOR.balance,
+    currencyCode: 'BRL',
+    limit: null,
+    availableLimit: null,
+    closeDate: null,
+    dueDate: null,
+    lastUpdatedAt: ITAU_ANCHOR.asOf,
+    selectedForDailySync: false,
+  }
+  return {
+    itemId: ITAU_ANCHOR_ID,
+    connectorName: 'Itaú (extrato · master)',
+    displayName: 'Itaú (extrato · master)',
+    connectorImageUrl: null,
+    status: 'MANUAL',
+    createdAt: ITAU_ANCHOR.asOf,
+    lastUpdatedAt: ITAU_ANCHOR.asOf,
+    savedAt: ITAU_ANCHOR.asOf,
+    accounts: [account],
+  }
+}
+
+/**
+ * Appends the Itaú extrato anchor to a connections list for display/reconciliation.
+ * No-op when the anchor is disabled or the real Itaú is already connected.
+ */
+export function withItauAnchor(conns: PluggyLocalConnection[]): PluggyLocalConnection[] {
+  const anchor = itauAnchorConnection()
+  if (!anchor) return conns
+  // Suppress the anchor when a real Itaú *checking* account is already connected
+  // (e.g. "ITAU - Uniclass"), matched by the account number or by an Itaú
+  // checking account that isn't a savings/poupança. Poupança alone never
+  // suppresses it — the anchor is the conta-corrente master.
+  const itauNumber = ITAU_ANCHOR.accountNumber.replace(/^0+/, '') // '23475-1'
+  const alreadyConnected = conns.some(c =>
+    c.accounts.some(a => {
+      if (a.type !== 'BANK') return false
+      const hay = `${c.connectorName} ${c.displayName ?? ''} ${a.name} ${a.displayName ?? ''}`.toLowerCase()
+      if (hay.includes(itauNumber) || hay.includes(ITAU_ANCHOR.accountNumber)) return true
+      const isItau = hay.includes('ita')
+      const isSavings = (a.subtype ?? '').toUpperCase().includes('SAVINGS') || /poupan/.test(hay)
+      return isItau && !isSavings
+    }),
+  )
+  if (alreadyConnected) return conns
+  return [...conns, anchor]
 }
 
 export function saveLocalConnection(conn: PluggyLocalConnection): void {

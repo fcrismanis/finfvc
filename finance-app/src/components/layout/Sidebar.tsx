@@ -156,7 +156,7 @@ export function Sidebar({ activeRoute, onNavigate, onClose }: SidebarProps) {
 
               <div style={{
                 overflow: 'hidden',
-                maxHeight: isOpen ? `${group.items.length * 36}px` : '0px',
+                maxHeight: isOpen ? `${group.items.length * 48}px` : '0px',
                 transition: 'max-height 200ms ease',
               }}>
                 {group.items.map(item => (

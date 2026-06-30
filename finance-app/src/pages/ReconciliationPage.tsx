@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, Landmark, RefreshCw, AlertTriangle, CheckCir
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
 import { formatMonthLabel, prevMonth, nextMonth, formatFinancialDateBR } from '../utils/date'
-import { getLocalConnections, fetchPluggyTransactions } from '../services/pluggy.service'
+import { getLocalConnections, withItauAnchor, fetchPluggyTransactions } from '../services/pluggy.service'
+import { ITAU_ANCHOR, ITAU_ANCHOR_ID } from '../config/bankTruth'
 import type { Transaction } from '../types'
 import {
   reconcileAccount,
@@ -64,7 +65,7 @@ export function ReconciliationPage({ selectedMonth }: Props) {
   const period = useMemo(() => monthToPeriod(month), [month])
 
   const accounts = useMemo<FlatAccount[]>(() => {
-    return getLocalConnections().flatMap(conn =>
+    return withItauAnchor(getLocalConnections()).flatMap(conn =>
       conn.accounts.map(a => ({
         id: a.id,
         itemId: a.itemId,
@@ -88,6 +89,14 @@ export function ReconciliationPage({ selectedMonth }: Props) {
     if (expanded === acc.id) { setExpanded(null); return }
     setExpanded(acc.id)
     if (reports[acc.id]) return
+    // Anchor = extrato master; no per-transaction bank feed to reconcile against.
+    if (acc.id === ITAU_ANCHOR_ID) {
+      setErrors(e => ({
+        ...e,
+        [acc.id]: `Saldo master do extrato Itaú: ${ITAU_ANCHOR.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (${ITAU_ANCHOR.asOf}). Conecte o Itaú real via Open Finance para reconciliar lançamento a lançamento.`,
+      }))
+      return
+    }
     setBusy(acc.id)
     setErrors(e => { const n = { ...e }; delete n[acc.id]; return n })
     try {

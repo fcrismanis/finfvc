@@ -2,7 +2,8 @@ import { useMemo, useEffect, useState } from 'react'
 import { Home, Plus, Trash2, Car, Building2, Pencil, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { formatBRL } from '../utils/currency'
-import { getLocalConnections, fetchPluggyInvestments } from '../services/pluggy.service'
+import { getLocalConnections, withItauAnchor, fetchPluggyInvestments } from '../services/pluggy.service'
+import { ITAU_ANCHOR_ID } from '../config/bankTruth'
 import { loadExcludedInvestments } from '../services/investmentPrefs'
 import type { PluggyLocalConnection, PluggyLocalAccount, PluggyInvestment } from '../services/pluggy.service'
 import {
@@ -64,7 +65,7 @@ export function PatrimonioPage() {
 
   useEffect(() => {
     setBens(getBens())
-    const conns = getLocalConnections()
+    const conns = withItauAnchor(getLocalConnections())
     setConnections(conns)
     if (conns.length > 0) loadInvestments(conns)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,7 +75,9 @@ export function PatrimonioPage() {
     setLoadingInvest(true)
     setInvestError(null)
     try {
-      const results = await Promise.all(conns.map(c => fetchPluggyInvestments(c.itemId)))
+      const results = await Promise.all(
+        conns.filter(c => c.itemId !== ITAU_ANCHOR_ID).map(c => fetchPluggyInvestments(c.itemId)),
+      )
       setInvestments(results.flat())
     } catch (err) {
       setInvestError(err instanceof Error ? err.message : 'Erro ao buscar investimentos')

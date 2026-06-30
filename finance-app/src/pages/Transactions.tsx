@@ -285,7 +285,26 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     if (quickFilter) result = result.filter(t => matchesQuickFilter(t, quickFilter, dqCtx))
     if (search.trim()) {
       const q = search.trim().toUpperCase()
-      result = result.filter(t => t.description.toUpperCase().includes(q) || t.originalDescription.toUpperCase().includes(q))
+      // Normaliza valor: aceita "1234,56", "1.234,56", "1234.56" → dígitos puros
+      const qDigits = q.replace(/[^0-9]/g, '')
+      const macroById = new Map(allMacros.map(m => [m.id, m.name.toUpperCase()]))
+      const subById = new Map(subCategories.map(s => [s.id, s.name.toUpperCase()]))
+      result = result.filter(t => {
+        if (t.description.toUpperCase().includes(q)) return true
+        if (t.originalDescription.toUpperCase().includes(q)) return true
+        // Categoria (macro › sub)
+        const macroName = t.macroCategoryId ? macroById.get(t.macroCategoryId) ?? '' : ''
+        const subName = t.subCategoryId ? subById.get(t.subCategoryId) ?? '' : ''
+        if (macroName.includes(q) || subName.includes(q)) return true
+        // Valor: compara dígitos (ex.: "123456" casa "1.234,56")
+        if (qDigits && Math.round(t.amount * 100).toString().includes(qDigits)) return true
+        // Data: ISO (yyyy-mm-dd) e BR (dd/mm/yyyy)
+        const iso = (t.competenceDate || t.transactionDate || '')
+        if (iso.includes(q)) return true
+        const [y, m, d] = iso.split('-')
+        if (y && d && `${d}/${m}/${y}`.includes(q)) return true
+        return false
+      })
     }
     return [...result].sort((a, b) => {
       let cmp = 0
@@ -295,7 +314,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap, neutralMacroIds])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap, neutralMacroIds, allMacros, subCategories])
 
   const summary = useMemo(() => {
     // Resultado ignores neutras: they are neither income nor expense.
@@ -767,19 +786,21 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
         )}
 
         {!isReviewMode && (() => {
-          const secondaryCount = [filterStatus, filterMacro, filterSub, filterTag, filterInstitution].filter(Boolean).length + (filterPluggy ? 1 : 0) + (filterManual ? 1 : 0)
+          const secondaryCount = [filterType, filterStatus, filterMacro, filterSub, filterTag, filterInstitution].filter(Boolean).length + (filterPluggy ? 1 : 0) + (filterManual ? 1 : 0) + (quickFilter ? 1 : 0)
           const monthIdx = filterMonth ? allMonths.indexOf(filterMonth) : -1
-          const hasPrev = monthIdx > 0
-          const hasNext = filterMonth ? monthIdx < allMonths.length - 1 : false
+          // allMonths is sorted descending (index 0 = mês mais recente).
+          // "anterior" (esquerda) = mês mais antigo = monthIdx + 1.
+          // "próximo" (direita) = mês mais recente = monthIdx - 1.
+          const hasPrev = monthIdx >= 0 && monthIdx < allMonths.length - 1
+          const hasNext = monthIdx > 0
           const btnBase: React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, border:'1px solid var(--line)', borderRadius:7, background:'var(--card-bg)', cursor:'pointer', color:'var(--ink-2)', fontSize:15, padding:0 }
-          const reviewCount = reviewItems.filter(i => i.tags.includes('no_category')).length
           return (
             <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
 
               {/* Period selector */}
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <button aria-label="Mês anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
-                  onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
+                  onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) } }}>
                   <ChevronLeft size={14} />
                 </button>
                 <button
@@ -793,33 +814,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 >
                   {fmtMonthLabel(filterMonth)}
                 </button>
-                <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext || !filterMonth ? 1 : 0.3, cursor: (hasNext || !filterMonth) ? 'pointer' : 'default'}}
-                  onClick={() => {
-                    if (!filterMonth && allMonths.length > 0) { setFilterMonth(allMonths[allMonths.length - 1]); setPage(0); return }
-                    if (hasNext) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) }
-                  }}>
+                <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default'}}
+                  onClick={() => { if (hasNext) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
                   <ChevronRight size={14} />
                 </button>
-                {reviewCount > 0 && (
-                  <button
-                    onClick={() => { setQuickFilter('no_category'); setPage(0) }}
-                    style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:20, border:'none', background:'var(--accent-soft)', color:'var(--accent)', fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:'var(--ui)' }}
-                    title="Lançamentos sem categoria"
-                  >
-                    <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
-                    A classificar {reviewCount}
-                  </button>
-                )}
-              </div>
-
-              {/* Tipo filter */}
-              <div style={{ display:'flex', gap:4 }}>
-                {[{v:'', l:'Todos'},{v:'income', l:'Receitas'},{v:'expense', l:'Despesas'},{v:'neutral', l:'Neutros'}].map(opt => (
-                  <button key={opt.v} onClick={() => { setFilterType(opt.v); setPage(0) }}
-                    style={{ padding:'4px 10px', borderRadius:20, border:'1px solid var(--line)', background: filterType===opt.v ? 'var(--ink)' : 'transparent', color: filterType===opt.v ? 'var(--card-bg)' : 'var(--ink-2)', fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}>
-                    {opt.l}
-                  </button>
-                ))}
               </div>
 
               {/* Search */}
@@ -828,7 +826,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                 <input
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(0) }}
-                  placeholder="Buscar por descrição…"
+                  placeholder="Buscar: descrição, valor, categoria ou data…"
                   style={{ flex:1, fontSize:12, outline:'none', background:'transparent', color:'var(--ink)', border:'none', fontFamily:'var(--ui)' }}
                 />
                 {search && (
@@ -880,21 +878,6 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             </div>
           )
         })()}
-
-        {/* ── Quick filter pills ── */}
-        {!isReviewMode && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {(['no_category', 'neutral', 'high_value'] as QuickFilterKey[]).map(key => (
-              <button
-                key={key}
-                onClick={() => { setQuickFilter(q => q === key ? '' : key); setPage(0) }}
-                className={`filter-pill${quickFilter === key ? ' active' : ''}`}
-              >
-                {QUICK_FILTER_LABELS[key]}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* ── Barra de ações em lote — acima da lista (Artha-style) ── */}
         {selectedIds.size > 0 && (
@@ -1318,6 +1301,36 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             {/* Body */}
             <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:20 }}>
 
+              {/* Tipo */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Tipo</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {[{v:'', l:'Todos'},{v:'income', l:'Receitas'},{v:'expense', l:'Despesas'},{v:'neutral', l:'Neutros'}].map(opt => (
+                    <button key={opt.v} onClick={() => { setFilterType(opt.v); setPage(0) }}
+                      style={{ padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)', cursor:'pointer', fontFamily:'var(--ui)', fontSize:12, fontWeight:600,
+                        background: filterType===opt.v ? 'var(--ink)' : 'transparent',
+                        color: filterType===opt.v ? 'var(--card-bg)' : 'var(--ink-2)' }}>
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Atalhos */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Atalhos</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {(['no_category', 'neutral', 'high_value'] as QuickFilterKey[]).map(key => (
+                    <button key={key} onClick={() => { setQuickFilter(q => q === key ? '' : key); setPage(0) }}
+                      style={{ padding:'5px 12px', borderRadius:20, border:'1px solid var(--line)', cursor:'pointer', fontFamily:'var(--ui)', fontSize:12, fontWeight:600,
+                        background: quickFilter===key ? 'var(--ink)' : 'transparent',
+                        color: quickFilter===key ? 'var(--card-bg)' : 'var(--ink-2)' }}>
+                      {QUICK_FILTER_LABELS[key]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Status */}
               <div>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--faint)', letterSpacing:'.06em', textTransform:'uppercase', marginBottom:8 }}>Status</div>
@@ -1392,7 +1405,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             {/* Footer */}
             <div style={{ padding:'14px 20px', borderTop:'1px solid var(--line)', display:'flex', gap:8, flexShrink:0 }}>
               <button
-                onClick={() => { setFilterStatus(''); setFilterMacro(''); setFilterSub(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setPage(0) }}
+                onClick={() => { setFilterType(''); setQuickFilter(''); setFilterStatus(''); setFilterMacro(''); setFilterSub(''); setFilterTag(''); setFilterInstitution(''); setFilterPluggy(false); setFilterManual(false); setPage(0) }}
                 style={{ flex:1, padding:'9px 0', borderRadius:8, border:'1px solid var(--line)', background:'transparent', color:'var(--ink-2)', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--ui)' }}
               >
                 Limpar
