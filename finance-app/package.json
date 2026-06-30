@@ -8,6 +8,10 @@
     "server": "cd server && node index.js",
     "server:dev": "cd server && node --watch index.js",
     "build": "tsc -b && vite build",
+    "build:prod": "VITE_DATA_PROVIDER=local npm run build",
+    "deploy:prod": "../scripts/deploy-prod.sh",
+    "release": "../scripts/release.sh",
+    "rollback": "../scripts/rollback.sh",
     "lint": "eslint .",
     "preview": "vite preview"
   },
