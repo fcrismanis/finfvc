@@ -234,3 +234,20 @@ export interface SubCategory {
   keywords?: string[]
   icon?: string
 }
+
+export type ProvisionRecurrence = 'annual' | 'semiannual' | 'quarterly'
+
+/** Provisionamento de despesas não-mensais (IPVA, IPTU, seguros, matrícula). */
+export interface Provision {
+  id: string
+  label: string
+  macroCategoryId?: string
+  /** Valor total no ano. Reserva mensal = annualAmount / 12. */
+  annualAmount: number
+  recurrence: ProvisionRecurrence
+  /** Mês-âncora de vencimento (1-12). */
+  dueMonth: number
+  active: boolean
+  notes?: string
+  createdAt: string
+}

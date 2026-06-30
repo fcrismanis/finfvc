@@ -39,6 +39,7 @@ const RelatoriosPage   = lazy(() => import('./pages/RelatoriosPage').then(m => (
 const PatrimonioInvestimentosPage = lazy(() => import('./pages/PatrimonioInvestimentosPage').then(m => ({ default: m.PatrimonioInvestimentosPage })))
 const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
+const FuturoPage       = lazy(() => import('./pages/FuturoPage').then(m => ({ default: m.FuturoPage })))
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
 const EconomistaPage    = lazy(() => import('./pages/EconomistaPage').then(m => ({ default: m.EconomistaPage })))
 const FinanceEnginePage = lazy(() => import('./pages/FinanceEnginePage').then(m => ({ default: m.FinanceEnginePage })))
@@ -159,7 +160,7 @@ function AppShell() {
       case '/zona-perigo':   { navigate('/configuracoes'); return null }
       // Phase 2 placeholders
       case '/clareza':       return <Placeholder title="Clareza Financeira" description="Visualização avançada do fluxo financeiro da família." />
-      case '/futuro':        return <Placeholder title="Futuro" description="Projeção de fluxo de caixa e planejamento de metas." />
+      case '/futuro':        return <FuturoPage />
       case '/investimentos': return <PatrimonioInvestimentosPage initialTab="investimentos" />
       case '/patrimonio':    return <PatrimonioInvestimentosPage initialTab="patrimonio" />
       case '/dividas':       return <DividasPage />

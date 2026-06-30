@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
-import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory, Provision } from '../types'
 import { useAuth } from './AuthContext'
 import { createDataProvider } from '../adapters/adapter.factory'
 import { dedupeIncomingBatch } from '../utils/transactionDedupe'
@@ -12,6 +12,7 @@ interface DataContextValue {
   budgets: Budget[]
   closings: MonthClosing[]
   subCategories: SubCategory[]
+  provisions: Provision[]
   isDemo: boolean
   loading: boolean
   error: string | null
@@ -23,6 +24,8 @@ interface DataContextValue {
   appendTransactions: (txns: Transaction[]) => Promise<void>
   saveSubCategory: (sub: SubCategory) => Promise<void>
   deleteSubCategory: (id: string) => Promise<void>
+  saveProvision: (prov: Provision) => Promise<void>
+  deleteProvision: (id: string) => Promise<void>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -37,6 +40,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [closings, setClosings] = useState<MonthClosing[]>([])
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
+  const [provisions, setProvisions] = useState<Provision[]>([])
   const [isDemo, setIsDemo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,12 +53,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTransactions(result.transactions)
       setBudgets(result.budgets)
       setIsDemo(result.isDemo)
-      const [cl, subs] = await Promise.all([
+      const [cl, subs, provs] = await Promise.all([
         provider.getMonthlyClosings(),
         provider.loadSubCategories(),
+        provider.loadProvisions(),
       ])
       setClosings(cl)
       setSubCategories(subs)
+      setProvisions(provs)
     } catch (e) {
       setError((e as Error).message ?? 'Erro ao carregar dados')
     } finally {
@@ -133,11 +139,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSubCategories(updated)
   }, [provider])
 
+  const saveProvision = useCallback(async (prov: Provision) => {
+    await provider.saveProvision(prov)
+    setProvisions(await provider.loadProvisions())
+  }, [provider])
+
+  const deleteProvision = useCallback(async (id: string) => {
+    await provider.deleteProvision(id)
+    setProvisions(await provider.loadProvisions())
+  }, [provider])
+
   return (
     <DataContext.Provider value={{
-      transactions, budgets, closings, subCategories, isDemo, loading, error,
+      transactions, budgets, closings, subCategories, provisions, isDemo, loading, error,
       reload, updateTransaction, updateTransactions, saveBudget, saveClosing, appendTransactions,
-      saveSubCategory, deleteSubCategory,
+      saveSubCategory, deleteSubCategory, saveProvision, deleteProvision,
     }}>
       {children}
     </DataContext.Provider>

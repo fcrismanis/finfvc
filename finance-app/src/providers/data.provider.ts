@@ -1,4 +1,4 @@
-import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory, Provision } from '../types'
 
 export interface LoadResult {
   transactions: Transaction[]
@@ -27,4 +27,10 @@ export interface IDataProvider {
   saveSubCategory(sub: SubCategory): Promise<void>
   /** Delete a subcategory by id. */
   deleteSubCategory(id: string): Promise<void>
+  /** Load all provisions for this family. */
+  loadProvisions(): Promise<Provision[]>
+  /** Upsert a provision. */
+  saveProvision(prov: Provision): Promise<void>
+  /** Delete a provision by id. */
+  deleteProvision(id: string): Promise<void>
 }

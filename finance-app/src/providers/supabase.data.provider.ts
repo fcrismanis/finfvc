@@ -1,4 +1,4 @@
-import type { Transaction, Budget, MonthClosing, SubCategory } from '../types'
+import type { Transaction, Budget, MonthClosing, SubCategory, Provision } from '../types'
 import type { IDataProvider, LoadResult } from './data.provider'
 import { SupabaseAdapter } from '../adapters/supabase.adapter'
 import { supabase } from '../lib/supabase'
@@ -260,6 +260,63 @@ export class SupabaseDataProvider implements IDataProvider {
       .eq('id', id)
       .eq('family_id', this.familyId)
     if (error) throw new Error(`[SupabaseDataProvider] deleteSubCategory: ${error.message}`)
+  }
+
+  async loadProvisions(): Promise<Provision[]> {
+    if (!this.familyId) return []
+    const { data, error } = await supabase
+      .from('provisions')
+      .select('*')
+      .eq('family_id', this.familyId)
+      .order('due_month', { ascending: true })
+    if (error) {
+      console.warn('[SupabaseDataProvider] loadProvisions:', error.message)
+      return []
+    }
+    return (data as Array<{
+      id: string; family_id: string; label: string; macro_category_id: string | null;
+      annual_amount: number; recurrence: string; due_month: number; active: boolean;
+      notes: string | null; created_at: string
+    }>).map(r => ({
+      id: r.id,
+      label: r.label,
+      macroCategoryId: r.macro_category_id ?? undefined,
+      annualAmount: Number(r.annual_amount),
+      recurrence: r.recurrence as Provision['recurrence'],
+      dueMonth: r.due_month,
+      active: r.active,
+      notes: r.notes ?? undefined,
+      createdAt: r.created_at,
+    }))
+  }
+
+  async saveProvision(prov: Provision): Promise<void> {
+    if (!this.familyId) return
+    const { error } = await supabase
+      .from('provisions')
+      .upsert({
+        id: prov.id,
+        family_id: this.familyId,
+        label: prov.label,
+        macro_category_id: prov.macroCategoryId ?? null,
+        annual_amount: prov.annualAmount,
+        recurrence: prov.recurrence,
+        due_month: prov.dueMonth,
+        active: prov.active,
+        notes: prov.notes ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+    if (error) throw new Error(`[SupabaseDataProvider] saveProvision: ${error.message}`)
+  }
+
+  async deleteProvision(id: string): Promise<void> {
+    if (!this.familyId) return
+    const { error } = await supabase
+      .from('provisions')
+      .delete()
+      .eq('id', id)
+      .eq('family_id', this.familyId)
+    if (error) throw new Error(`[SupabaseDataProvider] deleteProvision: ${error.message}`)
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
