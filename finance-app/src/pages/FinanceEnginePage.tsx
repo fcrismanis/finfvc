@@ -14,16 +14,17 @@ import { getAllMacroCategories } from '../services/financeParentCategories.servi
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const FLAG_COLS: { key: FlagName; short: string; label: string }[] = [
-  { key: 'includeInOperationalResult', short: 'Resultado', label: 'Resultado Operacional' },
-  { key: 'includeInCashflow',          short: 'Caixa',     label: 'Fluxo de Caixa' },
-  { key: 'includeInBudget',            short: 'Orçam.',    label: 'Orçamento' },
+const FLAG_COLS_ALL: { key: FlagName; short: string; label: string; essential?: boolean }[] = [
+  { key: 'includeInOperationalResult', short: 'Resultado', label: 'Resultado Operacional', essential: true },
+  { key: 'includeInCashflow',          short: 'Caixa',     label: 'Fluxo de Caixa', essential: true },
+  { key: 'includeInBudget',            short: 'Orçam.',    label: 'Orçamento', essential: true },
   { key: 'includeInPatrimony',         short: 'Patrim.',   label: 'Patrimônio' },
   { key: 'includeInDashboard',         short: 'Dash',      label: 'Dashboard' },
   { key: 'includeInAI',               short: 'IA',         label: 'IA / Hermes' },
   { key: 'includeInReports',           short: 'Relat.',    label: 'Relatórios' },
   { key: 'hideInDashboard',            short: 'Ocultar',   label: 'Ocultar no Dashboard' },
 ]
+const FLAG_COLS_ESSENTIAL = FLAG_COLS_ALL.filter(c => c.essential)
 
 const CLASS_COLORS: Record<string, string> = {
   operational_income: '#16A34A', extraordinary_income: '#65A30D',
@@ -43,7 +44,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ── Aba Classificações ────────────────────────────────────────────────────────
 
-function TabClassifications({ config, onUpdate }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void }) {
+function TabClassifications({ config, onUpdate, flagCols }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void; flagCols: typeof FLAG_COLS_ALL }) {
   function toggle(classificationType: string, flag: FlagName, newVal: boolean) {
     const old = config.classifications.find(c => c.classificationType === classificationType)
     const oldVal = old?.[flag]
@@ -63,7 +64,7 @@ function TabClassifications({ config, onUpdate }: { config: EngineConfig; onUpda
         <thead>
           <tr style={{ borderBottom: '2px solid var(--line)' }}>
             <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--faint)', minWidth: 200 }}>Classificação</th>
-            {FLAG_COLS.map(c => (
+            {flagCols.map(c => (
               <th key={c.key} title={c.label} style={{ textAlign: 'center', padding: '12px 8px', fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--faint)', minWidth: 68 }}>{c.short}</th>
             ))}
           </tr>
@@ -80,7 +81,7 @@ function TabClassifications({ config, onUpdate }: { config: EngineConfig; onUpda
                   </div>
                 </div>
               </td>
-              {FLAG_COLS.map(col => (
+              {flagCols.map(col => (
                 <td key={col.key} style={{ textAlign: 'center', padding: '10px 8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <Toggle value={rule[col.key] as boolean} onChange={v => toggle(rule.classificationType, col.key, v)} />
@@ -97,7 +98,7 @@ function TabClassifications({ config, onUpdate }: { config: EngineConfig; onUpda
 
 // ── Aba Categorias ────────────────────────────────────────────────────────────
 
-function TabCategories({ config, onUpdate }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void }) {
+function TabCategories({ config, onUpdate, flagCols }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void; flagCols: typeof FLAG_COLS_ALL }) {
   const macros = getAllMacroCategories()
   const categories = getAllCategories()
 
@@ -154,7 +155,7 @@ function TabCategories({ config, onUpdate }: { config: EngineConfig; onUpdate: (
               <tr style={{ borderBottom: '1px solid var(--line)' }}>
                 <th style={{ textAlign: 'left', padding: '8px 16px', fontWeight: 600, fontSize: 10.5, color: 'var(--faint)', minWidth: 160 }}>Categoria</th>
                 <th style={{ padding: '8px 10px', fontWeight: 600, fontSize: 10.5, color: 'var(--faint)', width: 130 }}>Herança</th>
-                {FLAG_COLS.map(c => (
+                {flagCols.map(c => (
                   <th key={c.key} title={c.label} style={{ textAlign: 'center', padding: '8px 6px', fontWeight: 600, fontSize: 10, color: 'var(--faint)', minWidth: 60 }}>{c.short}</th>
                 ))}
               </tr>
@@ -172,7 +173,7 @@ function TabCategories({ config, onUpdate }: { config: EngineConfig; onUpdate: (
                         <button onClick={() => setInherit(cat, 'custom')} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: `1px solid ${isCustom ? 'var(--accent)' : 'var(--line)'}`, background: isCustom ? 'var(--accent-soft)' : 'transparent', color: isCustom ? 'var(--accent)' : 'var(--faint)', cursor: 'pointer', fontFamily: 'var(--ui)', fontWeight: 600 }}>Custom</button>
                       </div>
                     </td>
-                    {FLAG_COLS.map(col => (
+                    {flagCols.map(col => (
                       <td key={col.key} style={{ textAlign: 'center', padding: '8px 6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', opacity: !isCustom ? 0.4 : 1 }}>
                           <Toggle value={getEffectiveFlag(cat, col.key)} onChange={v => toggleFlag(cat, col.key, v)} />
@@ -192,7 +193,7 @@ function TabCategories({ config, onUpdate }: { config: EngineConfig; onUpdate: (
 
 // ── Aba Subcategorias ─────────────────────────────────────────────────────────
 
-function TabSubcategories({ config, onUpdate }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void }) {
+function TabSubcategories({ config, onUpdate, flagCols }: { config: EngineConfig; onUpdate: (c: EngineConfig) => void; flagCols: typeof FLAG_COLS_ALL }) {
   const [subcats, setSubcats] = useState<SubCategory[]>([])
   const categories = getAllCategories()
 
@@ -270,7 +271,7 @@ function TabSubcategories({ config, onUpdate }: { config: EngineConfig; onUpdate
               <tr style={{ borderBottom: '1px solid var(--line)' }}>
                 <th style={{ textAlign: 'left', padding: '8px 16px', fontWeight: 600, fontSize: 10.5, color: 'var(--faint)', minWidth: 160 }}>Subcategoria</th>
                 <th style={{ padding: '8px 10px', fontWeight: 600, fontSize: 10.5, color: 'var(--faint)', width: 200 }}>Herança</th>
-                {FLAG_COLS.map(c => (
+                {flagCols.map(c => (
                   <th key={c.key} title={c.label} style={{ textAlign: 'center', padding: '8px 6px', fontWeight: 600, fontSize: 10, color: 'var(--faint)', minWidth: 60 }}>{c.short}</th>
                 ))}
               </tr>
@@ -291,7 +292,7 @@ function TabSubcategories({ config, onUpdate }: { config: EngineConfig; onUpdate
                         ))}
                       </div>
                     </td>
-                    {FLAG_COLS.map(col => (
+                    {flagCols.map(col => (
                       <td key={col.key} style={{ textAlign: 'center', padding: '8px 6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', opacity: !isCustom ? 0.35 : 1 }}>
                           <Toggle value={getEffectiveFlag(sub, col.key)} onChange={v => toggleFlag(sub, col.key, v)} />
@@ -377,6 +378,8 @@ export function FinanceEnginePage() {
   const { familyId } = useAuth()
   const [tab, setTab] = useState<Tab>('classifications')
   const [config, setConfig] = useState<EngineConfig>(() => loadEngineConfigSync())
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const flagCols = showAdvanced ? FLAG_COLS_ALL : FLAG_COLS_ESSENTIAL
   const [saved, setSaved] = useState(false)
   const [source, setSource] = useState<'supabase' | 'local' | 'loading'>('loading')
 
@@ -424,7 +427,8 @@ export function FinanceEnginePage() {
               Engine Financeira
             </h1>
             <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>
-              Fonte única de verdade · Hierarquia: Subcategoria → Categoria → Classificação → Sistema
+              Define onde cada lançamento entra: Resultado, Caixa e Orçamento. Regras específicas
+              herdam de cima (Subcategoria → Categoria → Classificação).
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -446,18 +450,25 @@ export function FinanceEnginePage() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 2, background: 'var(--well)', borderRadius: 10, padding: 4, border: '1px solid var(--line)', alignSelf: 'flex-start' }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{ fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)', background: tab === t.key ? 'var(--card-bg)' : 'transparent', color: tab === t.key ? 'var(--ink)' : 'var(--faint)', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,.08)' : 'none', transition: 'all .12s' }}>
-              {t.label}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--well)', borderRadius: 10, padding: 4, border: '1px solid var(--line)' }}>
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{ fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)', background: tab === t.key ? 'var(--card-bg)' : 'transparent', color: tab === t.key ? 'var(--ink)' : 'var(--faint)', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,.08)' : 'none', transition: 'all .12s' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {tab !== 'audit' && (
+            <button onClick={() => setShowAdvanced(v => !v)} style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: `1px solid ${showAdvanced ? 'var(--accent)' : 'var(--line)'}`, background: showAdvanced ? 'var(--accent-soft)' : 'var(--well)', color: showAdvanced ? 'var(--accent)' : 'var(--faint)', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
+              {showAdvanced ? 'Ocultar avançado' : `+ ${FLAG_COLS_ALL.length - FLAG_COLS_ESSENTIAL.length} escopos avançados`}
             </button>
-          ))}
+          )}
         </div>
 
         {/* Content */}
-        {tab === 'classifications' && <TabClassifications config={config} onUpdate={handleUpdate} />}
-        {tab === 'categories'      && <TabCategories config={config} onUpdate={handleUpdate} />}
-        {tab === 'subcategories'   && <TabSubcategories config={config} onUpdate={handleUpdate} />}
+        {tab === 'classifications' && <TabClassifications config={config} onUpdate={handleUpdate} flagCols={flagCols} />}
+        {tab === 'categories'      && <TabCategories config={config} onUpdate={handleUpdate} flagCols={flagCols} />}
+        {tab === 'subcategories'   && <TabSubcategories config={config} onUpdate={handleUpdate} flagCols={flagCols} />}
         {tab === 'audit'           && <TabAudit />}
 
       </div>

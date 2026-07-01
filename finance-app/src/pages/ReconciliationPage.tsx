@@ -129,7 +129,7 @@ export function ReconciliationPage({ selectedMonth }: Props) {
             Reconciliação Bancária
           </h1>
           <p style={{ fontSize: 13, color: 'var(--ink-soft, #667085)', marginTop: 2 }}>
-            Banco = FIN · Entradas Banco = Entradas FIN · Saídas Banco = Saídas FIN
+            Compara saldo do banco × saldo do FIN. Clique em Detalhar para ver entradas, saídas e faltantes.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -177,8 +177,6 @@ export function ReconciliationPage({ selectedMonth }: Props) {
                   </div>
                 </div>
 
-                <Metric label="Entradas" value={summary.entradasFIN} />
-                <Metric label="Saídas" value={summary.saidasFIN} />
                 <Metric label="Saldo banco" value={summary.saldoBanco} />
                 <Metric label="Saldo FIN" value={summary.saldoFIN} />
                 <Metric label="Diferença" value={summary.diferenca} highlight />
