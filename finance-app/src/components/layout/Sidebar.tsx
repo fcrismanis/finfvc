@@ -30,7 +30,7 @@ const GESTAO: NavEntry[] = [
   { route: '/lancamentos', label: 'Lançamentos', icon: List },
   { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/relatorios', label: 'Relatórios', icon: FileBarChart },
-  { route: '/revisao', label: 'Revisão & Reconciliação', icon: ClipboardCheck },
+  { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
   { route: '/patrimonio', label: 'Patrimônio & Invest.', icon: TrendingUp },
   { route: '/dividas', label: 'Financiamentos / Dívidas', icon: CreditCard },
   { route: '/lembretes', label: 'Lembretes', icon: Bell },

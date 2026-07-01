@@ -27,7 +27,7 @@ import { useDailyPluggySync } from './hooks/useDailyPluggySync'
 const Dashboard        = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
 const Transactions     = lazy(() => import('./pages/Transactions').then(m => ({ default: m.Transactions })))
 const Budget           = lazy(() => import('./pages/Budget').then(m => ({ default: m.Budget })))
-const RevisaoReconciliacaoPage = lazy(() => import('./pages/RevisaoReconciliacaoPage').then(m => ({ default: m.RevisaoReconciliacaoPage })))
+const Review           = lazy(() => import('./pages/Review').then(m => ({ default: m.Review })))
 const Advisor          = lazy(() => import('./pages/Advisor').then(m => ({ default: m.Advisor })))
 const Settings         = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const CategoriesPage   = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })))
@@ -40,7 +40,6 @@ const PatrimonioInvestimentosPage = lazy(() => import('./pages/PatrimonioInvesti
 const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
 const FuturoPage       = lazy(() => import('./pages/FuturoPage').then(m => ({ default: m.FuturoPage })))
-const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
 const EconomistaPage    = lazy(() => import('./pages/EconomistaPage').then(m => ({ default: m.EconomistaPage })))
 const FinanceEnginePage = lazy(() => import('./pages/FinanceEnginePage').then(m => ({ default: m.FinanceEnginePage })))
 
@@ -141,7 +140,7 @@ function AppShell() {
       case '/conectar':      { navigate('/pluggy'); return null }
       case '/lancamentos':   return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
       case '/orcamento':     return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
-      case '/revisao':       return <RevisaoReconciliacaoPage selectedMonth={selectedMonth} onNavigate={navigate} />
+      case '/revisao':       return <Review onNavigate={navigate} />
       case '/reconciliacao': { navigate('/revisao'); return null }
       case '/fechamento':    { navigate('/'); return null }
       case '/migrar':        return <MigrationPage />
@@ -166,7 +165,6 @@ function AppShell() {
       case '/dividas':       return <DividasPage />
       case '/lembretes':     return <LembretesPage />
       case '/relatorios':    return <RelatoriosPage selectedMonth={selectedMonth} />
-      case '/reconciliacao': return <ReconciliationPage selectedMonth={selectedMonth} />
       default:               return null
     }
   }
