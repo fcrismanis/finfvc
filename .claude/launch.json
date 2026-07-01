@@ -9,6 +9,13 @@
       "cwd": "finance-app"
     },
     {
+      "name": "finance-local (no auth)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "VITE_DATA_PROVIDER=local npx vite --port ${PORT:-5176}"],
+      "autoPort": true,
+      "cwd": "finance-app"
+    },
+    {
       "name": "finance-app (preview prod)",
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "npx vite preview --port ${PORT:-4173}"],

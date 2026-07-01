@@ -35,6 +35,16 @@ interface Props {
 
 type ActivePanel = ReviewReason | 'all' | 'import_api' | null
 
+// Compact colored chips for the "Atenção" column — replaces verbose repeated sentences.
+const REASON_CHIP: Record<ReviewReason, { label: string; color: string }> = {
+  high_value:    { label: 'Alto valor',     color: 'var(--crit)' },
+  needs_review:  { label: 'Revisar',        color: 'var(--warn)' },
+  no_category:   { label: 'Sem categoria',  color: 'var(--warn)' },
+  pending:       { label: 'Pendente',       color: 'var(--faint)' },
+  transfer:      { label: 'Transferência',  color: 'var(--accent)' },
+  pluggy_import: { label: 'Pluggy',         color: 'var(--accent)' },
+}
+
 
 export function Review({ onNavigate: _onNavigate }: Props) {
   const { transactions, updateTransaction, updateTransactions, subCategories, saveSubCategory } = useData()
@@ -387,9 +397,9 @@ export function Review({ onNavigate: _onNavigate }: Props) {
   // ── Computed display items (replaces activePanel navigation) ─────────────────
   const displayItems = useMemo(() => {
     const base = (() => {
-      if (!activePanel || activePanel === 'all') return reviewItems.map(i => ({ tx: i.tx, reasons: i.reasons }))
-      if (activePanel === 'import_api') return pluggyItems.map(tx => ({ tx, reasons: [] as string[] }))
-      return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason)).map(i => ({ tx: i.tx, reasons: i.reasons }))
+      if (!activePanel || activePanel === 'all') return reviewItems.map(i => ({ tx: i.tx, reasons: i.reasons, tags: i.tags }))
+      if (activePanel === 'import_api') return pluggyItems.map(tx => ({ tx, reasons: [] as string[], tags: [] as ReviewReason[] }))
+      return reviewItems.filter(i => i.tags.includes(activePanel as ReviewReason)).map(i => ({ tx: i.tx, reasons: i.reasons, tags: i.tags }))
     })()
     const q = panelSearch.trim().toLowerCase()
     if (!q) return base
@@ -540,8 +550,16 @@ export function Review({ onNavigate: _onNavigate }: Props) {
                           )}
                         </td>
                         <td className="table-td" style={{ maxWidth: 200 }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            {item.reasons.map((r, i) => <span key={i} className="review-note" style={{ fontSize: 10.5 }}>{r}</span>)}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }} title={item.reasons.join('\n')}>
+                            {item.tags.map(tag => {
+                              const chip = REASON_CHIP[tag]
+                              if (!chip) return null
+                              return (
+                                <span key={tag} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, color: chip.color, background: `color-mix(in srgb, ${chip.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${chip.color} 35%, transparent)`, whiteSpace: 'nowrap' }}>
+                                  {chip.label}
+                                </span>
+                              )
+                            })}
                           </div>
                         </td>
                         <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
@@ -977,7 +995,7 @@ function BulkActionBar({
 
   return (
     <div style={{
-      position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 120,
+      position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 120,
       background: 'var(--card-bg)', border: '1px solid var(--line)', borderRadius: 12,
       boxShadow: '0 8px 30px rgba(0,0,0,.18)', padding: '12px 16px',
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: 'min(960px, 94vw)',
@@ -1027,7 +1045,6 @@ function BulkActionBar({
       <button className="btn btn-secondary btn-sm" onClick={onApplySuggestedTags} title="Aplica as tags sugeridas a cada selecionado">Tags sugeridas</button>
 
       <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed}>Marcar revisado</button>
-      <button className="btn btn-secondary btn-sm" onClick={onMarkReviewed} title="Dispensa a sugestão sem alterar a categoria">Ignorar sugestão</button>
       <button className="btn btn-secondary btn-sm" onClick={onMarkNeutral}>Marcar neutro</button>
       <button onClick={onClear} aria-label="Limpar seleção" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', display: 'flex', padding: 4 }}>
         <X size={15} />
