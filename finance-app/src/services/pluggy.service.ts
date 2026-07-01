@@ -130,20 +130,29 @@ export interface PluggyRawTransaction {
 export async function fetchPluggyTransactions(
   params: { accountId: string; from: string; to: string } | { itemId: string; from: string; to: string }
 ): Promise<PluggyRawTransaction[]> {
-  const res = await fetch('/api/pluggy/transactions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  // 404 / 502 / empty = backend API não está rodando em dev
-  if (res.status === 404 || res.status === 502 || res.status === 503) {
-    throw new Error('API backend não disponível. Em desenvolvimento, execute o servidor Pluggy (ex: npm run server).')
+  const url = '/api/pluggy/transactions'
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+  } catch (e) {
+    // DEBUG TEMP: fetch em si falhou (rede/CORS/DNS)
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+    console.error('[pluggy DEBUG] fetch throw', { url, error: msg })
+    throw new Error(`Fetch failed:\nurl=${url}\nexception=${msg}`)
   }
   const text = await res.text()
-  if (!text.trim()) throw new Error('API backend não está respondendo. Em desenvolvimento, certifique-se de que o servidor Pluggy está rodando.')
+  // DEBUG TEMP: sempre logar resposta crua do backend
+  console.error('[pluggy DEBUG] backend response', { url, status: res.status, ok: res.ok, body: text })
+  if (res.status === 404 || res.status === 502 || res.status === 503 || !text.trim()) {
+    throw new Error(`Backend error:\nurl=${url}\nstatus=${res.status}\nbody=${text.slice(0, 500)}`)
+  }
   let data: { ok: boolean; transactions?: PluggyRawTransaction[]; error?: string }
-  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do servidor: ${text.slice(0, 120)}`) }
-  if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao buscar transações Pluggy')
+  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida (status=${res.status}):\n${text.slice(0, 500)}`) }
+  if (!res.ok || !data.ok) throw new Error(`Backend error:\nurl=${url}\nstatus=${res.status}\nerror=${data.error ?? '(sem campo error)'}\nbody=${text.slice(0, 500)}`)
   return data.transactions ?? []
 }
 

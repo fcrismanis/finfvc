@@ -40,6 +40,7 @@ const PatrimonioInvestimentosPage = lazy(() => import('./pages/PatrimonioInvesti
 const DividasPage      = lazy(() => import('./pages/DividasPage').then(m => ({ default: m.DividasPage })))
 const LembretesPage    = lazy(() => import('./pages/LembretesPage').then(m => ({ default: m.LembretesPage })))
 const FuturoPage       = lazy(() => import('./pages/FuturoPage').then(m => ({ default: m.FuturoPage })))
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })))
 const EconomistaPage    = lazy(() => import('./pages/EconomistaPage').then(m => ({ default: m.EconomistaPage })))
 const FinanceEnginePage = lazy(() => import('./pages/FinanceEnginePage').then(m => ({ default: m.FinanceEnginePage })))
 
@@ -141,7 +142,7 @@ function AppShell() {
       case '/lancamentos':   return <Transactions selectedMonth={selectedMonth} onNavigate={navigate} navFilter={navFilter} onClearFilter={() => setNavFilter(null)} />
       case '/orcamento':     return <Budget selectedMonth={selectedMonth} onNavigate={navigate} />
       case '/revisao':       return <Review onNavigate={navigate} />
-      case '/reconciliacao': { navigate('/revisao'); return null }
+      case '/reconciliacao': return <ReconciliationPage selectedMonth={selectedMonth} />
       case '/fechamento':    { navigate('/'); return null }
       case '/migrar':        return <MigrationPage />
       case '/consultor':     return <Advisor selectedMonth={selectedMonth} onNavigate={navigate} />

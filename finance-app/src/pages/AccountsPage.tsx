@@ -18,6 +18,7 @@ import type { Transaction } from '../types'
 import { formatBRL } from '../utils/currency'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { ITAU_ANCHOR } from '../config/bankTruth'
+import { craveCurrentBalanceIfMonthEnd } from '../services/openingBalance.service'
 
 interface Props {
   onNavigate: (route: string) => void
@@ -147,6 +148,9 @@ export function AccountsPage({ onNavigate }: Props) {
         dateConfidenceCounts: result.dateConfidenceCounts,
       })
       setConnections(getLocalConnections())
+      // Crava saldo de abertura se hoje for fim de mês (fonte: Pluggy).
+      const acc = getLocalConnections().flatMap(c => c.accounts).find(a => a.id === accountId)
+      craveCurrentBalanceIfMonthEnd(accountId, acc?.balance ?? null, currentFinancialDate())
       setSync(s => s ? { ...s, phase: 'done' } : s)
     } catch (err) {
       setSync(s => s ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erro ao importar' } : s)

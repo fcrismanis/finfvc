@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, BarChart2, List, Target, ClipboardCheck,
   Calendar, TrendingUp, Bell, Landmark, CreditCard,
-  Tag, Link2, Bot, Settings, Settings2,
+  Tag, Link2, Bot, Settings, Settings2, Scale,
   LogOut, X, Wand2, FileBarChart, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -31,6 +31,7 @@ const GESTAO: NavEntry[] = [
   { route: '/orcamento', label: 'Orçamento', icon: Target },
   { route: '/relatorios', label: 'Relatórios', icon: FileBarChart },
   { route: '/revisao', label: 'Revisão', icon: ClipboardCheck },
+  { route: '/reconciliacao', label: 'Reconciliação', icon: Scale },
   { route: '/patrimonio', label: 'Patrimônio & Invest.', icon: TrendingUp },
   { route: '/dividas', label: 'Financiamentos / Dívidas', icon: CreditCard },
   { route: '/lembretes', label: 'Lembretes', icon: Bell },
