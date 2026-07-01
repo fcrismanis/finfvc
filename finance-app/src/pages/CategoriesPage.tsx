@@ -163,7 +163,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     setInlineEdit({
       id: macro.id,
       kind: macro.isDefault ? 'defaultMacro' : 'macro',
-      nameReadOnly: macro.isDefault ?? false,
+      nameReadOnly: false,
       name: macro.name,
       icon: macro.icon ?? 'circle',
       kwText: (macro.keywords ?? []).join(', '),
@@ -207,6 +207,7 @@ export function CategoriesPage({ onNavigate: _onNavigate }: Props) {
     switch (e.kind) {
       case 'defaultMacro': {
         const saved = overrideDefaultMacro(e.id, {
+          name: e.name.trim() || undefined,
           keywords: kws, budgetClassification: e.budgetClassification, icon: e.icon,
           ...(e.classificationType ? { classificationType: e.classificationType } : {}),
         })

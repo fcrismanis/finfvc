@@ -23,6 +23,7 @@ export function getAllMacroCategories(): MacroCategory[] {
 }
 
 export function overrideDefaultMacro(baseId: string, patch: {
+  name?: string
   keywords?: string[]
   budgetClassification?: BudgetClassification
   group?: 'personal' | 'business'
@@ -34,6 +35,7 @@ export function overrideDefaultMacro(baseId: string, patch: {
   const existing = customs.find(m => m.id === baseId)
   const next: MacroCategory = {
     ...(existing ?? base),
+    name: patch.name?.trim() || existing?.name || base.name,
     keywords: patch.keywords ?? existing?.keywords ?? base.keywords ?? [],
     budgetClassification: patch.budgetClassification ?? existing?.budgetClassification ?? 'none',
     group: patch.group ?? existing?.group ?? base.group ?? 'personal',
