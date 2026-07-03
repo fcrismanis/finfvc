@@ -18,10 +18,10 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { Sidebar } from './components/layout/Sidebar'
 import { LoadingState, ErrorState } from './components/ui/LoadingState'
 import { Login } from './pages/Login'
-import { Placeholder } from './pages/Placeholder'
 import { currentYearMonth } from './utils/date'
 import { DATA_PROVIDER } from './config/env'
 import { useDailyPluggySync } from './hooks/useDailyPluggySync'
+import { popAndRunUndo } from './services/undoStack'
 
 // Lazy-loaded routes — each page is a separate chunk
 const Dashboard        = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -107,7 +107,7 @@ function AppShell() {
     const known = ['/', '/conectar', '/lancamentos', '/orcamento', '/revisao', '/fechamento',
       '/migrar', '/consultor', '/assistente', '/configuracoes', '/categorias', '/regras',
       '/contas', '/cartoes', '/pluggy', '/backup', '/zona-perigo',
-      '/clareza', '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes',
+      '/futuro', '/investimentos', '/patrimonio', '/dividas', '/lembretes',
       '/relatorios', '/reconciliacao']
     return known.includes(r) ? r : '/'
   })
@@ -116,7 +116,41 @@ function AppShell() {
   const [navFilter, setNavFilter] = useState<NavFilter | null>(null)
   const { loading, error, reload, transactions } = useData()
   const didInitMonth = useRef(false)
+  const [undoToast, setUndoToast] = useState<string | null>(null)
+  const routeHistoryRef = useRef<Array<{ route: string; filter: NavFilter | null }>>([])
   useDailyPluggySync(loading)
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      const isEditable = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (isEditable) return
+
+      const isUndoShortcut = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z'
+      if (isUndoShortcut) {
+        e.preventDefault()
+        void popAndRunUndo().then(label => {
+          if (!label) return
+          setUndoToast(`Desfeito: ${label}`)
+          setTimeout(() => setUndoToast(null), 3000)
+        })
+        return
+      }
+
+      const isBackShortcut = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b'
+      if (isBackShortcut) {
+        e.preventDefault()
+        const prev = routeHistoryRef.current.pop()
+        if (!prev) return
+        sessionStorage.setItem('fin_route', prev.route)
+        setActiveRoute(prev.route)
+        setNavFilter(prev.filter)
+        setSidebarOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => {
     if (didInitMonth.current || transactions.length === 0) return
@@ -129,6 +163,10 @@ function AppShell() {
   }, [transactions, selectedMonth])
 
   function navigate(route: string, filter?: NavFilter) {
+    if (route !== activeRoute) {
+      routeHistoryRef.current.push({ route: activeRoute, filter: navFilter })
+      if (routeHistoryRef.current.length > 30) routeHistoryRef.current.shift()
+    }
     sessionStorage.setItem('fin_route', route)
     setActiveRoute(route)
     setNavFilter(filter ?? null)
@@ -159,7 +197,6 @@ function AppShell() {
       case '/backup':        { navigate('/configuracoes'); return null }
       case '/zona-perigo':   { navigate('/configuracoes'); return null }
       // Phase 2 placeholders
-      case '/clareza':       return <Placeholder title="Clareza Financeira" description="Visualização avançada do fluxo financeiro da família." />
       case '/futuro':        return <FuturoPage />
       case '/investimentos': return <PatrimonioInvestimentosPage initialTab="investimentos" />
       case '/patrimonio':    return <PatrimonioInvestimentosPage initialTab="patrimonio" />
@@ -211,6 +248,16 @@ function AppShell() {
           }
         </Suspense>
       </div>
+
+      {undoToast && (
+        <div style={{
+          position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--ink)', color: '#fff', padding: '9px 16px', borderRadius: 8,
+          fontSize: 12.5, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.25)', zIndex: 10000,
+        }}>
+          {undoToast}
+        </div>
+      )}
     </div>
   )
 }

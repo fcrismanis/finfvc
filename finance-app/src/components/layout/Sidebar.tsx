@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  LayoutDashboard, BarChart2, List, Target, ClipboardCheck,
+  LayoutDashboard, List, Target, ClipboardCheck,
   Calendar, TrendingUp, Bell, Landmark, CreditCard,
   Tag, Link2, Bot, Settings, Settings2, Scale,
   LogOut, X, Wand2, FileBarChart, ChevronDown,
@@ -23,7 +23,6 @@ type NavEntry = {
 
 const PRINCIPAL: NavEntry[] = [
   { route: '/', label: 'Visão Geral', icon: LayoutDashboard },
-  { route: '/clareza', label: 'Clareza Financeira', icon: BarChart2, phase2: true },
 ]
 
 const GESTAO: NavEntry[] = [

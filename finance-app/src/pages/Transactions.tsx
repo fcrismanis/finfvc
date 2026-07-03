@@ -6,7 +6,7 @@ import { getAllMacroCategories } from '../services/financeParentCategories.servi
 import { CATEGORIES } from '../config/categories'
 import { CategorySelector, TxCatIcon } from '../components/CategorySelector'
 import { formatBRL } from '../utils/currency'
-import { getCompetenceMonth, currentFinancialDate } from '../utils/date'
+import { getCompetenceMonth, currentFinancialDate, currentYearMonth, prevMonth } from '../utils/date'
 import { getReviewItems } from '../utils/reviewItems'
 import { getLocalConnections } from '../services/pluggy.service'
 import {
@@ -80,6 +80,35 @@ function fmtMonthLabel(ym: string): string {
   return `${MONTHS_PT[m - 1]} ${y}`
 }
 
+type PeriodFilter =
+  | { kind: 'all' }
+  | { kind: 'month'; month: string }
+  | { kind: 'year'; year: string }
+  | { kind: 'range'; from: string; to: string }
+
+function fmtPeriodLabel(period: PeriodFilter): string {
+  switch (period.kind) {
+    case 'all':   return 'Todos os meses'
+    case 'month': return fmtMonthLabel(period.month)
+    case 'year':  return `Ano ${period.year}`
+    case 'range': return `${fmtDateBR(period.from)} – ${fmtDateBR(period.to)}`
+  }
+}
+
+function fmtDateBR(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function periodMatches(competenceDate: string, period: PeriodFilter): boolean {
+  switch (period.kind) {
+    case 'all':   return true
+    case 'month': return getCompetenceMonth(competenceDate) === period.month
+    case 'year':  return competenceDate.slice(0, 4) === period.year
+    case 'range': return competenceDate >= period.from && competenceDate <= period.to
+  }
+}
+
 // A transaction is neutral if its own classification is neutral OR its macro is a Neutra macro.
 // Neutras are excluded from Receita, Despesa and Resultado even when the amount is positive/negative.
 function txIsNeutral(t: Transaction, neutralMacroIds: Set<string>): boolean {
@@ -91,7 +120,10 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
   const savedFilters = useMemo(() => loadSavedFilters(), [])
   const [search, setSearch] = useState('')
-  const [filterMonth, setFilterMonth] = useState(selectedMonth)
+  const [period, setPeriod] = useState<PeriodFilter>({ kind: 'month', month: selectedMonth })
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [showCustomRange, setShowCustomRange] = useState(false)
   const [filterType, setFilterType] = useState(savedFilters.filterType ?? '')
   const [filterMacro, setFilterMacro] = useState(savedFilters.filterMacro ?? '')
   const [filterSub, setFilterSub] = useState(savedFilters.filterSub ?? '')
@@ -193,7 +225,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   useEffect(() => {
     setPage(0)
     setReviewPill('all')
-    if (navFilter && 'monthOverride' in navFilter) setFilterMonth(navFilter.monthOverride ?? '')
+    if (navFilter && 'monthOverride' in navFilter) {
+      setPeriod(navFilter.monthOverride ? { kind: 'month', month: navFilter.monthOverride } : { kind: 'all' })
+    }
     if (navFilter?.quickFilter) setQuickFilter(navFilter.quickFilter as QuickFilterKey)
   }, [navFilter])
 
@@ -223,6 +257,11 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const set = new Set(transactions.map(t => getCompetenceMonth(t.competenceDate)).filter(Boolean))
     return Array.from(set).sort().reverse()
   }, [transactions])
+
+  const allYears = useMemo(() => {
+    const set = new Set(allMonths.map(m => m.slice(0, 4)))
+    return Array.from(set).sort().reverse()
+  }, [allMonths])
 
   // Runtime lookup for Pluggy institution info (fallback for transactions imported without connInfo)
   const pluggyAccountMap = useMemo(() => {
@@ -261,7 +300,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     }
 
     let result = transactions
-    if (filterMonth) result = result.filter(t => getCompetenceMonth(t.competenceDate) === filterMonth)
+    if (period.kind !== 'all') result = result.filter(t => periodMatches(t.competenceDate, period))
     if (filterType === 'neutral') result = result.filter(t => txIsNeutral(t, neutralMacroIds))
     else if (filterType) result = result.filter(t => t.type === filterType && !txIsNeutral(t, neutralMacroIds))
     if (filterMacro) result = result.filter(t => t.macroCategoryId === filterMacro)
@@ -315,7 +354,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       else if (sortField === 'category') cmp = (a.macroCategoryId ?? '').localeCompare(b.macroCategoryId ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [transactions, isReviewMode, reviewItems, reviewPill, filterMonth, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap, neutralMacroIds, allMacros, subCategories])
+  }, [transactions, isReviewMode, reviewItems, reviewPill, period, filterType, filterMacro, filterSub, filterStatus, filterInstitution, filterTag, filterPluggy, filterManual, quickFilter, dqCtx, navFilter, search, sortField, sortDir, pluggyAccountMap, neutralMacroIds, allMacros, subCategories])
 
   const summary = useMemo(() => {
     // Resultado ignores neutras: they are neither income nor expense.
@@ -456,6 +495,9 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       }
     }
     updateTransaction(modalTx.id, patch)
+    if ((catChanged || subChanged) && patch.macroCategoryId) {
+      learnRuleFromTransaction({ ...modalTx, ...patch } as Transaction, 'manual')
+    }
     setModalTx(null)
   }
 
@@ -503,7 +545,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       includeInCashflow: macro ? macro.displayInCashflow : tx.includeInCashflow,
       includeInBudget: macro ? macro.displayInBudget : tx.includeInBudget,
     })
-    if (macroId && macroId !== (tx.macroCategoryId ?? '')) {
+    if (macroId && (macroId !== (tx.macroCategoryId ?? '') || subId !== tx.subCategoryId)) {
       const updatedTx: Transaction = {
         ...tx, macroCategoryId: macroId, subCategoryId: subId,
         classificationType: macro?.classificationType ?? tx.classificationType,
@@ -561,22 +603,24 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
   async function bulkApplyCategory() {
     if (!bulkCatMacro || selectedIds.size === 0) return
     const macro = allMacros.find(m => m.id === bulkCatMacro)
-    const patches = Array.from(selectedIds).map(id => ({
-      id,
-      patch: {
-        macroCategoryId: bulkCatMacro,
-        subCategoryId: bulkCatSub,
-        classificationType: macro?.classificationType,
-        includeInOperationalResult: macro ? macro.displayInResult : true,
-        includeInCashflow: macro ? macro.displayInCashflow : true,
-        includeInBudget: macro ? macro.displayInBudget : true,
-        manualCategoryOverride: true,
-        manualEditedAt: new Date().toISOString(),
-        categorySuggestionSource: 'manual' as const,
-        needsReview: false,
-      } as Partial<Transaction>,
-    }))
+    const patch: Partial<Transaction> = {
+      macroCategoryId: bulkCatMacro,
+      subCategoryId: bulkCatSub,
+      classificationType: macro?.classificationType,
+      includeInOperationalResult: macro ? macro.displayInResult : true,
+      includeInCashflow: macro ? macro.displayInCashflow : true,
+      includeInBudget: macro ? macro.displayInBudget : true,
+      manualCategoryOverride: true,
+      manualEditedAt: new Date().toISOString(),
+      categorySuggestionSource: 'manual' as const,
+      needsReview: false,
+    }
+    const patches = Array.from(selectedIds).map(id => ({ id, patch }))
     await updateTransactions(patches, { markManual: true })
+    for (const id of selectedIds) {
+      const tx = transactions.find(t => t.id === id)
+      if (tx) learnRuleFromTransaction({ ...tx, ...patch } as Transaction, 'manual')
+    }
     setBulkCatOpen(false)
     setBulkCatMacro(undefined)
     setBulkCatSub(undefined)
@@ -638,7 +682,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `lancamentos_${filterMonth || 'todos'}.csv`
+    a.download = `lancamentos_${period.kind === "month" ? period.month : period.kind === "year" ? period.year : period.kind === "range" ? `${period.from}_a_${period.to}` : "todos"}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -788,20 +832,35 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
 
         {!isReviewMode && (() => {
           const secondaryCount = [filterType, filterStatus, filterMacro, filterSub, filterTag, filterInstitution].filter(Boolean).length + (filterPluggy ? 1 : 0) + (filterManual ? 1 : 0) + (quickFilter ? 1 : 0)
-          const monthIdx = filterMonth ? allMonths.indexOf(filterMonth) : -1
-          // allMonths is sorted descending (index 0 = mês mais recente).
-          // "anterior" (esquerda) = mês mais antigo = monthIdx + 1.
-          // "próximo" (direita) = mês mais recente = monthIdx - 1.
-          const hasPrev = monthIdx >= 0 && monthIdx < allMonths.length - 1
-          const hasNext = monthIdx > 0
+          const monthIdx = period.kind === 'month' ? allMonths.indexOf(period.month) : -1
+          const yearIdx = period.kind === 'year' ? allYears.indexOf(period.year) : -1
+          // allMonths/allYears are sorted descending (index 0 = mais recente).
+          // "anterior" (esquerda) = mais antigo = idx + 1. "próximo" (direita) = mais recente = idx - 1.
+          const hasPrev = period.kind === 'month' ? (monthIdx >= 0 && monthIdx < allMonths.length - 1)
+            : period.kind === 'year' ? (yearIdx >= 0 && yearIdx < allYears.length - 1)
+            : false
+          const hasNext = period.kind === 'month' ? monthIdx > 0
+            : period.kind === 'year' ? yearIdx > 0
+            : false
           const btnBase: React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, border:'1px solid var(--line)', borderRadius:7, background:'var(--card-bg)', cursor:'pointer', color:'var(--ink-2)', fontSize:15, padding:0 }
+          const optBtnStyle = (active: boolean): React.CSSProperties => ({
+            display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', padding:'7px 16px', textAlign:'left',
+            background: active ? 'var(--ink)' : 'transparent', color: active ? 'var(--card-bg)' : 'var(--ink)',
+            border:'none', cursor:'pointer', fontSize:13, fontFamily:'var(--ui)', fontWeight: active ? 700 : 400,
+          })
+          const closePicker = () => { setMonthPickerOpen(false); setShowCustomRange(false) }
           return (
             <div className="card" style={{ padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
 
               {/* Period selector */}
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <button aria-label="Mês anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
-                  onClick={() => { if (hasPrev) { setFilterMonth(allMonths[monthIdx + 1]); setPage(0) } }}>
+                <button aria-label="Período anterior" style={{...btnBase, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default'}}
+                  onClick={() => {
+                    if (!hasPrev) return
+                    if (period.kind === 'month') setPeriod({ kind: 'month', month: allMonths[monthIdx + 1] })
+                    else if (period.kind === 'year') setPeriod({ kind: 'year', year: allYears[yearIdx + 1] })
+                    setPage(0)
+                  }}>
                   <ChevronLeft size={14} />
                 </button>
                 <div style={{ position:'relative' }}>
@@ -810,28 +869,76 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
                     onClick={() => setMonthPickerOpen(o => !o)}
                     aria-label="Período atual"
                   >
-                    {fmtMonthLabel(filterMonth)}
+                    {fmtPeriodLabel(period)}
                   </button>
                   {monthPickerOpen && (
                     <>
-                      <div style={{ position:'fixed', inset:0, zIndex:299 }} onClick={() => setMonthPickerOpen(false)} />
-                      <div style={{ position:'absolute', top:'calc(100% + 4px)', left:'50%', transform:'translateX(-50%)', zIndex:300, background:'var(--card-bg)', border:'1px solid var(--line)', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.12)', maxHeight:280, overflowY:'auto', minWidth:140 }}>
-                        {allMonths.map(m => (
-                          <button key={m} onClick={() => { setFilterMonth(m); setPage(0); setMonthPickerOpen(false) }}
-                            style={{ display:'block', width:'100%', padding:'7px 16px', textAlign:'left', background: filterMonth===m ? 'var(--ink)' : 'transparent', color: filterMonth===m ? 'var(--card-bg)' : 'var(--ink)', border:'none', cursor:'pointer', fontSize:13, fontFamily:'var(--ui)', fontWeight: filterMonth===m ? 700 : 400 }}>
-                            {fmtMonthLabel(m)}
-                          </button>
-                        ))}
-                        <button onClick={() => { setFilterMonth(''); setPage(0); setMonthPickerOpen(false) }}
-                          style={{ display:'block', width:'100%', padding:'7px 16px', textAlign:'left', background: filterMonth==='' ? 'var(--ink)' : 'transparent', color: filterMonth==='' ? 'var(--card-bg)' : 'var(--faint)', border:'none', borderTop:'1px solid var(--line)', cursor:'pointer', fontSize:13, fontFamily:'var(--ui)', fontWeight: filterMonth==='' ? 700 : 400 }}>
-                          Todos os meses
-                        </button>
+                      <div style={{ position:'fixed', inset:0, zIndex:299 }} onClick={closePicker} />
+                      <div style={{ position:'absolute', top:'calc(100% + 4px)', left:'50%', transform:'translateX(-50%)', zIndex:300, background:'var(--card-bg)', border:'1px solid var(--line)', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.12)', maxHeight:340, overflowY:'auto', minWidth:190 }}>
+                        {/* Atalhos rápidos */}
+                        {(() => {
+                          const thisMonth = currentYearMonth()
+                          const lastMonth = prevMonth(thisMonth)
+                          const thisYear = thisMonth.slice(0, 4)
+                          return (
+                            <>
+                              <button onClick={() => { setPeriod({ kind: 'month', month: thisMonth }); setPage(0); closePicker() }}
+                                style={optBtnStyle(period.kind === 'month' && period.month === thisMonth)}>
+                                Mês atual{period.kind === 'month' && period.month === thisMonth && <span>✓</span>}
+                              </button>
+                              <button onClick={() => { setPeriod({ kind: 'month', month: lastMonth }); setPage(0); closePicker() }}
+                                style={optBtnStyle(period.kind === 'month' && period.month === lastMonth)}>
+                                Mês anterior{period.kind === 'month' && period.month === lastMonth && <span>✓</span>}
+                              </button>
+                              <button onClick={() => { setPeriod({ kind: 'year', year: thisYear }); setPage(0); closePicker() }}
+                                style={optBtnStyle(period.kind === 'year' && period.year === thisYear)}>
+                                Ano atual{period.kind === 'year' && period.year === thisYear && <span>✓</span>}
+                              </button>
+                              <button onClick={() => { setPeriod({ kind: 'all' }); setPage(0); closePicker() }}
+                                style={optBtnStyle(period.kind === 'all')}>
+                                Todos os meses{period.kind === 'all' && <span>✓</span>}
+                              </button>
+                              <button onClick={() => { setShowCustomRange(v => !v) }}
+                                style={optBtnStyle(period.kind === 'range')}>
+                                Personalizado…{period.kind === 'range' && <span>✓</span>}
+                              </button>
+                            </>
+                          )
+                        })()}
+
+                        {showCustomRange && (
+                          <div style={{ padding: '8px 16px 12px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <label style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 600 }}>
+                              De
+                              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                                style={{ display: 'block', width: '100%', marginTop: 2, padding: '4px 6px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, fontFamily: 'var(--ui)' }} />
+                            </label>
+                            <label style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 600 }}>
+                              Até
+                              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                                style={{ display: 'block', width: '100%', marginTop: 2, padding: '4px 6px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, fontFamily: 'var(--ui)' }} />
+                            </label>
+                            <button
+                              disabled={!customFrom || !customTo}
+                              onClick={() => { setPeriod({ kind: 'range', from: customFrom, to: customTo }); setPage(0); closePicker() }}
+                              className="btn btn-primary btn-sm"
+                              style={{ marginTop: 4, opacity: (!customFrom || !customTo) ? 0.5 : 1 }}
+                            >
+                              Aplicar
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
                 </div>
-                <button aria-label="Próximo mês" style={{...btnBase, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default'}}
-                  onClick={() => { if (hasNext) { setFilterMonth(allMonths[monthIdx - 1]); setPage(0) } }}>
+                <button aria-label="Próximo período" style={{...btnBase, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default'}}
+                  onClick={() => {
+                    if (!hasNext) return
+                    if (period.kind === 'month') setPeriod({ kind: 'month', month: allMonths[monthIdx - 1] })
+                    else if (period.kind === 'year') setPeriod({ kind: 'year', year: allYears[yearIdx - 1] })
+                    setPage(0)
+                  }}>
                   <ChevronRight size={14} />
                 </button>
               </div>
@@ -930,14 +1037,14 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
             <div className="empty-state">
               <div className="empty-glyph" />
               <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Nenhum lançamento encontrado</h4>
-              {filterMonth && transactions.length > 0 ? (
+              {period.kind !== 'all' && transactions.length > 0 ? (
                 <>
                   <p style={{ fontSize: 12.5, color: 'var(--faint)', maxWidth: 260, marginBottom: 10 }}>
-                    Não há lançamentos em <strong>{filterMonth}</strong>. Existem {transactions.length} lançamentos em outros meses.
+                    Não há lançamentos em <strong>{fmtPeriodLabel(period)}</strong>. Existem {transactions.length} lançamentos em outros períodos.
                   </p>
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => { setFilterMonth(''); setPage(0) }}
+                    onClick={() => { setPeriod({ kind: 'all' }); setPage(0) }}
                   >
                     Ver todos os meses
                   </button>
