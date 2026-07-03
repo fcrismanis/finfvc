@@ -1,5 +1,6 @@
 import { CATEGORIES, MACRO_CATEGORIES } from '../config/categories'
 import { normalizeText } from './categoryRules.service'
+import { pushCategoryOverrides } from './categoryOverrideSync'
 import type { Category, ClassificationType } from '../types'
 
 const STORAGE_KEY = 'finance_categories_custom'
@@ -15,6 +16,7 @@ export function loadCustomCategories(): Category[] {
 
 function saveCustomCategories(categories: Category[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(categories))
+  pushCategoryOverrides('category', categories)
 }
 
 export function getAllCategories(): Category[] {

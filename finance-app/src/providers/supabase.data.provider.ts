@@ -102,9 +102,9 @@ export class SupabaseDataProvider implements IDataProvider {
     if (patch.transactionDate !== undefined)     dbPatch.transaction_date = patch.transactionDate
     if (patch.competenceDate !== undefined)      dbPatch.competence_date = patch.competenceDate
     if (patch.paymentDate !== undefined)         dbPatch.payment_date = patch.paymentDate ?? null
-    if (patch.categoryId !== undefined)          dbPatch.category_id = patch.categoryId ?? null
-    if (patch.subCategoryId !== undefined)       dbPatch.sub_category_id = patch.subCategoryId ?? null
-    if (patch.macroCategoryId !== undefined)     dbPatch.macro_category_id = patch.macroCategoryId ?? null
+    if ('categoryId' in patch)                   dbPatch.category_id = patch.categoryId ?? null
+    if ('subCategoryId' in patch)                dbPatch.sub_category_id = patch.subCategoryId ?? null
+    if ('macroCategoryId' in patch)              dbPatch.macro_category_id = patch.macroCategoryId ?? null
     if (patch.classificationType !== undefined)  dbPatch.classification_type = patch.classificationType
     if (patch.type !== undefined)                dbPatch.transaction_type = patch.type
     if (patch.status !== undefined)              dbPatch.status = patch.status

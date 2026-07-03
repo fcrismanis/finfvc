@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Lock, Unlock, TrendingUp } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useDashboard } from '../hooks/useDashboard'
 import { DataQualityCard } from '../components/dashboard/DataQualityCard'
 import { IntelligenceCard } from '../components/dashboard/IntelligenceCard'
@@ -8,6 +8,7 @@ import { formatBRL } from '../utils/currency'
 import { formatMonthFull, prevMonth, nextMonth, currentYearMonth } from '../utils/date'
 import { useData } from '../context/DataContext'
 import { getAllMacroCategories } from '../services/financeParentCategories.service'
+import { getFullTrend } from '../engine/calculate'
 import { CHECKLIST_ITEMS, emptyClosing } from '../services/closing.service'
 import type { NavFilter } from '../App'
 import type { BudgetComparison, AlertItem } from '../types'
@@ -19,7 +20,7 @@ interface Props {
 }
 
 export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
-  const { summary, budgetComparison, alerts, expenseBreakdown, trend } = useDashboard(selectedMonth)
+  const { summary, budgetComparison, alerts, expenseBreakdown } = useDashboard(selectedMonth)
   const { transactions, closings, saveClosing } = useData()
 
   const isCurrent = selectedMonth === currentYearMonth()
@@ -81,17 +82,18 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
   const hasWarning = !hasCritical && alerts.some(a => a.level === 'warning')
   const statusLabel = hasCritical ? 'Crítico' : hasWarning ? 'Atenção' : isCurrent ? 'Em andamento' : 'Saudável'
 
-  // ── Trend chart data ──────────────────────────────────────────────────────
-  const trendData = useMemo(() => trend.slice().reverse().map(t => {
-    const [, m] = t.month.split('-').map(Number)
+  // ── Full history: entradas × saídas lado a lado, do primeiro mês com dados até hoje ──
+  const fullTrendData = useMemo(() => {
     const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-    return {
-      label: `${MONTHS[m - 1]}/${t.month.slice(2, 4)}`,
-      Resultado: Math.round(t.operationalResult),
-      Receita: Math.round(t.operationalIncome),
-      Despesa: Math.round(t.totalExpenses),
-    }
-  }), [trend])
+    return getFullTrend(transactions).map(t => {
+      const [, m] = t.month.split('-').map(Number)
+      return {
+        label: `${MONTHS[m - 1]}/${t.month.slice(2, 4)}`,
+        Receita: Math.round(t.operationalIncome),
+        Despesa: Math.round(t.totalExpenses),
+      }
+    })
+  }, [transactions])
 
   return (
     <main className="flex-1 overflow-y-auto" style={{ background: 'var(--paper)' }}>
@@ -153,10 +155,10 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {expenseBreakdown.length === 0 ? (
                 <p style={{ fontSize: 13, color: 'var(--faint)' }}>Sem despesas neste mês</p>
-              ) : expenseBreakdown.slice(0, 8).map((cat, i) => (
+              ) : expenseBreakdown.map((cat, i) => (
                 <div key={cat.macroCategoryId}
                   onClick={() => onNavigate('/lancamentos', { macroCategoryIds: [cat.macroCategoryId], filterLabel: cat.name, sourcePage: 'dashboard', sourceLabel: 'Visão Geral' })}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: i < Math.min(expenseBreakdown.length, 8) - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer', gap: 10 }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: i < expenseBreakdown.length - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer', gap: 10 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color || 'var(--crit)', flexShrink: 0 }} />
@@ -168,11 +170,6 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
                   </div>
                 </div>
               ))}
-              {expenseBreakdown.length > 8 && (
-                <button onClick={() => onNavigate('/lancamentos')} style={{ fontSize: 12, color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '8px 0' }}>
-                  +{expenseBreakdown.length - 8} mais…
-                </button>
-              )}
             </div>
           </div>
 
@@ -254,30 +251,21 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
           </div>
         )}
 
-        {/* ── Evolução do saldo (Pluggy-style area chart) ── */}
-        {trendData.length > 1 && (
+        {/* ── Entradas × saídas: histórico completo ── */}
+        {fullTrendData.length > 1 && (
           <div className="card" style={{ padding: '22px 24px' }}>
-            <div style={{ marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Evolução do resultado</span>
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
-                {summary.operationalResult >= 0 ? '+' : ''}{formatBRL(summary.operationalResult)}
-              </div>
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Entradas × saídas</span>
             </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <AreaChart data={trendData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="resultGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="var(--pos)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={fullTrendData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }} barGap={4}>
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--faint)' }} axisLine={false} tickLine={false} />
                 <YAxis hide />
-                <Tooltip formatter={(v: unknown) => [formatBRL(Number(v)), 'Resultado']} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid var(--line)' }} />
-                <Area type="monotone" dataKey="Resultado" stroke="var(--pos)" strokeWidth={2} fill="url(#resultGradient)" dot={false} />
-              </AreaChart>
+                <Tooltip formatter={(v: unknown) => formatBRL(Number(v))} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid var(--line)' }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Receita" fill="var(--pos)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Despesa" fill="var(--crit)" radius={[3, 3, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         )}

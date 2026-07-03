@@ -1,5 +1,6 @@
 import type { MacroCategory, BudgetClassification, CategoryTabType, ClassificationType } from '../types'
 import { MACRO_CATEGORIES } from '../config/categories'
+import { pushCategoryOverrides } from './categoryOverrideSync'
 
 const STORAGE_KEY = 'finance_parent_categories_custom'
 
@@ -14,6 +15,7 @@ export function loadCustomMacroCategories(): MacroCategory[] {
 
 function saveCustomMacroCategories(items: MacroCategory[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+  pushCategoryOverrides('macro', items)
 }
 
 export function getAllMacroCategories(): MacroCategory[] {

@@ -276,6 +276,30 @@ export function getMonthlyTrend(txns: Transaction[], refMonth: string): MonthlyT
   })
 }
 
+/** Entradas × saídas por mês, cobrindo todo o histórico presente em txns (ordem cronológica ascendente). */
+export function getFullTrend(txns: Transaction[]): MonthlyTrend[] {
+  const months = Array.from(new Set(
+    txns
+      .filter(tx => tx.status !== 'cancelled')
+      .map(tx => getCompetenceMonth(tx.competenceDate)),
+  )).sort()
+
+  return months.map(month => {
+    const income = getOperationalIncome(txns, month)
+    const expenses = getTotalExpenses(txns, month)
+    const avg3m = getAvgIncome(txns, month, 3)
+    const isAtypical = avg3m > 0 && income > avg3m * 1.4
+    return {
+      month,
+      label: formatMonthLabel(month),
+      operationalIncome: income,
+      totalExpenses: expenses,
+      operationalResult: income - expenses,
+      isAtypical,
+    }
+  })
+}
+
 export function getTopExpenses(txns: Transaction[], month: string): TopTransaction[] {
   return txns
     .filter(tx => txInMonth(tx, month) && txActive(tx) && tx.type === 'expense' && tx.includeInOperationalResult)
