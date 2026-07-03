@@ -104,6 +104,17 @@ export interface PluggyPaymentData {
   reason?: string | null
 }
 
+// Presente em transações de cartão de crédito quando a compra foi parcelada.
+// Alguns emissores (ex: Rico) reportam a 1ª entrada com o valor CHEIO da
+// compra e só nos meses seguintes trazem o valor por parcela — sem esse
+// campo não há como distinguir isso de uma duplicata real.
+export interface PluggyCreditCardMetadata {
+  installmentNumber?: number | null
+  totalInstallments?: number | null
+  totalAmount?: number | null
+  payeeMCC?: number | null
+}
+
 export interface PluggyRawTransaction {
   id: string
   accountId: string
@@ -125,6 +136,7 @@ export interface PluggyRawTransaction {
   categoryId: string | null
   operationType?: string | null
   paymentData?: PluggyPaymentData | null
+  creditCardMetadata?: PluggyCreditCardMetadata | null
 }
 
 export async function fetchPluggyTransactions(
@@ -139,20 +151,18 @@ export async function fetchPluggyTransactions(
       body: JSON.stringify(params),
     })
   } catch (e) {
-    // DEBUG TEMP: fetch em si falhou (rede/CORS/DNS)
+    // Falha de rede antes de obter resposta (backend fora, CORS, DNS).
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
-    console.error('[pluggy DEBUG] fetch throw', { url, error: msg })
-    throw new Error(`Fetch failed:\nurl=${url}\nexception=${msg}`)
+    throw new Error(`Falha de conexão com ${url}: ${msg}`)
   }
   const text = await res.text()
-  // DEBUG TEMP: sempre logar resposta crua do backend
-  console.error('[pluggy DEBUG] backend response', { url, status: res.status, ok: res.ok, body: text })
+  // Backend fora / gateway sem upstream.
   if (res.status === 404 || res.status === 502 || res.status === 503 || !text.trim()) {
-    throw new Error(`Backend error:\nurl=${url}\nstatus=${res.status}\nbody=${text.slice(0, 500)}`)
+    throw new Error(`Backend indisponível (status ${res.status}) em ${url}: ${text.slice(0, 300) || '(resposta vazia)'}`)
   }
   let data: { ok: boolean; transactions?: PluggyRawTransaction[]; error?: string }
-  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida (status=${res.status}):\n${text.slice(0, 500)}`) }
-  if (!res.ok || !data.ok) throw new Error(`Backend error:\nurl=${url}\nstatus=${res.status}\nerror=${data.error ?? '(sem campo error)'}\nbody=${text.slice(0, 500)}`)
+  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do servidor (status ${res.status}): ${text.slice(0, 300)}`) }
+  if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ao buscar transações Pluggy (status ${res.status})`)
   return data.transactions ?? []
 }
 
@@ -533,6 +543,8 @@ export function mapPluggyToTransactions(
       origin: 'import_api' as const,
       source: 'pluggy',
       needsReview: true,
+      installmentCurrent: ptx.creditCardMetadata?.installmentNumber ?? undefined,
+      installmentTotal: ptx.creditCardMetadata?.totalInstallments ?? undefined,
       importHash,
       importBatchId: batchId,
       lastImportedAt: now,

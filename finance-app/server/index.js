@@ -430,6 +430,7 @@ app.post('/api/pluggy/transactions', async (req, res) => {
             categoryId:      categoryId,
             operationType:   tx.operationType ?? null,
             paymentData:     tx.paymentData ?? null,
+            creditCardMetadata: tx.creditCardMetadata ?? null,
           })
         }
         if (results.length < pageSize) break

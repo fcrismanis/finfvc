@@ -150,6 +150,12 @@ export function findCrossSourceDuplicate(
       return { existing: tx, confidence: 'strong', reason: 'fingerprint' }
     }
 
+    // Distinct installments of the same purchase (parcela 1/12, 2/12…) share
+    // amount, description and often the same transactionDate (purchase date) —
+    // never treat them as duplicates of each other.
+    const bothInstallments = candidate.installmentCurrent != null && tx.installmentCurrent != null
+    if (bothInstallments && candidate.installmentCurrent !== tx.installmentCurrent) continue
+
     // Level 3: amount + date (≤3 days) + desc similarity ≥60%
     if (Math.abs(candidate.amount - tx.amount) <= 0.02 && candidate.type === tx.type) {
       const dateDiff = closestDateDiff(candidate, tx)

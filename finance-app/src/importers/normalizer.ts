@@ -45,9 +45,13 @@ export function normalizeDescription(raw: string): string {
     .toUpperCase()
 }
 
+/**
+ * Aceita "1/12", "1-12" e o formato por extenso do Rico "1 de 12".
+ * Faturas com "-" (compra à vista, sem parcelamento) não casam — retorna {}.
+ */
 export function parseInstallment(raw: string | undefined): { current?: number; total?: number } {
   if (!raw) return {}
-  const match = String(raw).match(/(\d+)\s*[/-]\s*(\d+)/)
+  const match = String(raw).match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/i)
   if (!match) return {}
   return { current: parseInt(match[1]), total: parseInt(match[2]) }
 }
