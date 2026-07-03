@@ -305,15 +305,25 @@ export class SupabaseAdapter implements IDataAdapter {
   // ── Async methods (Supabase I/O) ───────────────────────────────────────────
 
   async fetchTransactions(): Promise<Transaction[]> {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('family_id', this.familyId)
-      .order('competence_date', { ascending: false })
+    // PostgREST caps a single response at 1000 rows by default — paginar até
+    // esgotar, senão famílias com >1000 lançamentos perdem dados silenciosamente.
+    const PAGE_SIZE = 1000
+    const rows: DbTransaction[] = []
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('family_id', this.familyId)
+        .order('competence_date', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
 
-    if (error) throw new Error(`[SupabaseAdapter] fetchTransactions: ${error.message}`)
+      if (error) throw new Error(`[SupabaseAdapter] fetchTransactions: ${error.message}`)
 
-    this.cache = (data as DbTransaction[]).map(toTransaction)
+      rows.push(...(data as DbTransaction[]))
+      if (!data || data.length < PAGE_SIZE) break
+    }
+
+    this.cache = rows.map(toTransaction)
     this.loaded = true
     return this.cache
   }

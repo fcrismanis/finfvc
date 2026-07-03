@@ -289,6 +289,7 @@ export function PluggyPage() {
   const [recoveryDiag, setRecoveryDiag] = useState<DiagnosticResult | null>(null)
   const [recoveryResult, setRecoveryResult] = useState<RecoveryResult | null>(null)
   const [dailySyncStatus, setDailySyncStatus] = useState<DailySyncStatus | null>(() => loadDailySyncStatus())
+  const [collapsedConns, setCollapsedConns] = useState<Set<string>>(new Set())
   const pendingPersistTraceRef = useRef<string[] | null>(null)
 
   useEffect(() => {
@@ -417,6 +418,15 @@ export function PluggyPage() {
   function handleToggleDailySync(itemId: string, accountId: string, enabled: boolean) {
     toggleAccountDailySync(itemId, accountId, enabled)
     setConnections(getLocalConnections())
+  }
+
+  function toggleConnCollapsed(itemId: string) {
+    setCollapsedConns(prev => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
   }
 
   function handleReclassPreview() {
@@ -670,10 +680,19 @@ export function PluggyPage() {
             </div>
           ) : (
             <div>
-              {connections.map(conn => (
+              {connections.map(conn => {
+                const collapsed = collapsedConns.has(conn.itemId)
+                return (
                 <div key={conn.itemId} style={{ borderBottom: '1px solid var(--line)', padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div
+                    onClick={() => toggleConnCollapsed(conn.itemId)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : 12, cursor: 'pointer' }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ color: 'var(--faint)', flexShrink: 0, transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
                       {conn.connectorImageUrl ? (
                         <img src={conn.connectorImageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
                       ) : (
@@ -688,7 +707,7 @@ export function PluggyPage() {
                             <span style={{ fontSize: 10, color: 'var(--faint)' }}>({conn.connectorName})</span>
                           )}
                           <button
-                            onClick={() => handleRenameConnection(conn.itemId, conn.displayName ?? conn.connectorName)}
+                            onClick={e => { e.stopPropagation(); handleRenameConnection(conn.itemId, conn.displayName ?? conn.connectorName) }}
                             title="Renomear conexão"
                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: 'var(--faint)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--ui)', opacity: 0.6 }}
                           >✏</button>
@@ -699,12 +718,12 @@ export function PluggyPage() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => handleDisconnect(conn.itemId)} style={{ fontSize: 11, fontWeight: 600, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
+                    <button onClick={e => { e.stopPropagation(); handleDisconnect(conn.itemId) }} style={{ fontSize: 11, fontWeight: 600, color: 'var(--crit)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--ui)' }}>
                       Remover
                     </button>
                   </div>
 
-                  {conn.accounts.length === 0 ? (
+                  {!collapsed && (conn.accounts.length === 0 ? (
                     <p style={{ fontSize: 11.5, color: 'var(--faint)', paddingLeft: 4 }}>Nenhuma conta encontrada.</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -790,9 +809,10 @@ export function PluggyPage() {
                         </div>
                       ))}
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
