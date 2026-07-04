@@ -9,8 +9,8 @@ Documentação técnica detalhada de implementação já existe em `finance-app/
 
 ## Por que isso importa para o segundo cérebro
 
-- Dado manual é dado atrasado e sujeito a esquecimento. Dado via Open Finance aproxima o "estado registrado" do "estado real" continuamente — pré-requisito para a Fase 5 (Inteligência) do [roadmap](../soul/ROADMAP_PATRIMONIAL.md).
-- Reduz o atrito de manter `docs/financeiro/` atualizado — idealmente, boa parte da atualização de receitas/despesas passa a ser semi-automática a partir dos dados sincronizados, com a IA CFO consolidando o que mudou.
+- Dado manual é dado atrasado e sujeito a esquecimento. Dado via Open Finance aproxima o "estado registrado" do "estado real" continuamente — pré-requisito para a Fase 5 (Inteligência) do [roadmap](../../finfvc/ROADMAP.md).
+- Reduz o atrito de manter [finfvc/financeiro/](../../finfvc/financeiro/diagnostico-atual.md) atualizado — idealmente, boa parte da atualização de receitas/despesas passa a ser semi-automática a partir dos dados sincronizados, com a IA CFO consolidando o que mudou.
 
 ## Estado conhecido
 

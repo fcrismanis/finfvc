@@ -16,11 +16,11 @@ Para detalhes técnicos de código (providers, adapters, serviços), a fonte de 
 2. **Armazenamento** — Supabase como fonte de verdade multi-dispositivo; fallback local (localStorage) para modo demo/offline.
 3. **Processamento** — categorização (regras + IA), motor financeiro (orçamento, projeção, reconciliação).
 4. **Apresentação** — dashboard, lançamentos, orçamento, relatórios, revisão.
-5. **Camada de decisão (segundo cérebro)** — `docs/soul/`, `docs/financeiro/`, `docs/decisoes/` — a camada conceitual que este conjunto de documentos define, que fica acima do código e orienta como o produto deve evoluir.
+5. **Camada de decisão (Segundo Cérebro)** — [finfvc/](../../finfvc/README.md) (SOUL, PRINCIPIOS, financeiro/, decisoes/, investimentos/ etc.) — a camada conceitual que orienta como o produto deve evoluir, organizada como área raiz do Segundo Cérebro.
 
-## Relação entre código e segundo cérebro
+## Relação entre código e Segundo Cérebro
 
-O código em `finance-app/` implementa a mecânica (como os dados são capturados, processados e exibidos). O segundo cérebro em `docs/` define o propósito (por que o sistema existe, quais princípios governam decisões, o que ainda falta construir). Mudanças de produto relevantes devem, idealmente, referenciar ou atualizar o segundo cérebro correspondente — não só o código.
+O código em `finance-app/` implementa a mecânica (como os dados são capturados, processados e exibidos). A área [finfvc/](../../finfvc/README.md) do Segundo Cérebro define o propósito (por que o sistema existe, quais princípios governam decisões, o que ainda falta construir). Mudanças de produto relevantes devem, idealmente, referenciar ou atualizar o Segundo Cérebro correspondente — não só o código.
 
 ## Ver também
 

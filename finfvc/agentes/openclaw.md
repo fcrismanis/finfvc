@@ -3,7 +3,7 @@
 
 ## Papel
 
-Memória e operação dentro do Segundo Cérebro: mantém o estado do cérebro financeiro (`cerebros/finfvc/`) consistente com a realidade conhecida, e executa rotinas operacionais assistidas.
+Memória e operação dentro do Segundo Cérebro: mantém o estado da área raiz financeira (`finfvc/`) consistente com a realidade conhecida, e executa rotinas operacionais assistidas.
 
 ## Responsabilidades
 

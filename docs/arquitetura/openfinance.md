@@ -14,8 +14,8 @@ Open Finance (antigo Open Banking) é o padrão regulatório brasileiro (Banco C
 
 - Consentimento é do titular da conta, não do sistema — qualquer renovação de autorização deve ser explícita e compreendida por quem está autorizando.
 - Dado sob Open Finance é sensível por natureza — tratamento de segurança e privacidade deve seguir o mesmo padrão de qualquer dado financeiro sensível (não expor, não logar em texto claro, não versionar).
-- O ecossistema de Open Finance no Brasil ainda evolui regulatoriamente — mudanças de regra podem impactar a integração Pluggy; isso é algo a monitorar via [pesquisador-tendencias.md](../prompts/pesquisador-tendencias.md) na área de "fintechs / Open Finance".
+- O ecossistema de Open Finance no Brasil ainda evolui regulatoriamente — mudanças de regra podem impactar a integração Pluggy; isso é algo a monitorar via [finfvc/pesquisas/fintechs-open-finance.md](../../finfvc/pesquisas/fintechs-open-finance.md), seguindo o prompt [finfvc/prompts/pesquisador-tendencias.md](../../finfvc/prompts/pesquisador-tendencias.md).
 
 ## Relação com o roadmap
 
-Open Finance pleno (múltiplas instituições, dados sempre frescos, sem lançamento manual) é pré-requisito prático da Fase 5 — Inteligência do [roadmap patrimonial](../soul/ROADMAP_PATRIMONIAL.md).
+Open Finance pleno (múltiplas instituições, dados sempre frescos, sem lançamento manual) é pré-requisito prático da Fase 5 — Inteligência do [roadmap patrimonial](../../finfvc/ROADMAP.md).

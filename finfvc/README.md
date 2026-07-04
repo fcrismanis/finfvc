@@ -18,17 +18,18 @@ O FinFVC atua simultaneamente como:
 
 ## Escopo
 
-Este diretório (`cerebros/finfvc/`) é a camada de conhecimento, decisão e estratégia. A implementação técnica (código do app) vive em `finance-app/` e é referenciada, não duplicada, aqui.
+Este diretório (`finfvc/`) é uma área raiz do Segundo Cérebro — a camada de conhecimento, decisão e estratégia financeira. A implementação técnica (código do app) vive em `finance-app/` e é referenciada, não duplicada, aqui.
 
 ## Estrutura de pastas
 
 ```
-cerebros/finfvc/
+finfvc/
   README.md                  # este arquivo
   SOUL.md                    # manifesto/alma do FinFVC
   VISAO.md                   # visão de longo prazo
   PRINCIPIOS.md              # princípios financeiros obrigatórios
   ROADMAP.md                 # fases de evolução
+  _entrada-dados/            # questionários e checklist para sair de PENDENTE para dado real
   financeiro/                # estado atual: patrimônio, receitas, despesas, dívidas, metas, etc.
   investimentos/             # política de investimentos, laboratório, classes de ativo
   decisoes/                  # histórico auditável de decisões, uma por arquivo

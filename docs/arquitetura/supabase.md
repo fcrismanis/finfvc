@@ -9,7 +9,7 @@ Documentação técnica de setup e schema já existe em `SETUP_SUPABASE.md`, `SU
 
 ## Por que isso importa para o segundo cérebro
 
-- É a fonte de verdade operacional dos dados financeiros (transações, categorias, orçamento, patrimônio) — o que o segundo cérebro documental em `docs/financeiro/` resume e contextualiza, mas não substitui.
+- É a fonte de verdade operacional dos dados financeiros (transações, categorias, orçamento, patrimônio) — o que a área [finfvc/financeiro/](../../finfvc/financeiro/diagnostico-atual.md) do Segundo Cérebro resume e contextualiza, mas não substitui.
 - Multi-usuário familiar: permite que mais de uma pessoa da família veja e opere sobre o mesmo estado financeiro, com histórico de quem alterou o quê.
 - Sustenta features de médio prazo (Fase 2-5 do roadmap): orçamento colaborativo, alertas, automações, futura leitura por agentes (Hermes/OpenClaw) do estado real do sistema.
 
@@ -17,4 +17,4 @@ Documentação técnica de setup e schema já existe em `SETUP_SUPABASE.md`, `SU
 
 - Nunca versionar credenciais/chaves do Supabase em Git (`.env` fica fora do controle de versão — ver regra de segurança padrão do projeto).
 - Migrações (`supabase/migrations/`) são a fonte de verdade de schema — qualquer mudança estrutural passa por lá, não por alteração manual no dashboard sem registro.
-- Mudança de schema com impacto em dado real da família deve ser tratada com o mesmo cuidado de uma decisão financeira — se afetar como dado é interpretado, considerar registro em `docs/decisoes/`.
+- Mudança de schema com impacto em dado real da família deve ser tratada com o mesmo cuidado de uma decisão financeira — se afetar como dado é interpretado, considerar registro em [finfvc/decisoes/](../../finfvc/decisoes/README.md).

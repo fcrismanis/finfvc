@@ -3,7 +3,7 @@
 
 ## Papel
 
-Documentação, estruturação e execução técnica dentro do Segundo Cérebro e do repositório FinFVC. É o agente que constrói e mantém tanto o código (`finance-app/`) quanto a camada documental (`cerebros/finfvc/`, `docs/`).
+Documentação, estruturação e execução técnica dentro do Segundo Cérebro, na área raiz financeira (`finfvc/`). É o agente que constrói e mantém tanto o código (`finance-app/`) quanto a camada documental (`finfvc/`, `docs/`).
 
 ## Responsabilidades
 
