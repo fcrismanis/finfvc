@@ -160,7 +160,7 @@ export function EconomistaPage({ selectedMonth }: Props) {
               ✦ Economista FIN
             </h1>
             <p style={{ fontSize: 12.5, color: 'var(--faint)' }}>
-              Agente de diagnóstico financeiro · mês {selectedMonth} · modo leitura
+              Agente financeiro · mês {selectedMonth} · diagnóstico e ajustes
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
@@ -189,8 +189,8 @@ export function EconomistaPage({ selectedMonth }: Props) {
             </div>
             <div style={{ marginTop: 8, padding: '12px 16px', borderRadius: 10, background: 'var(--well)', border: '1px solid var(--line)' }}>
               <p style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.7, margin: 0 }}>
-                <strong style={{ color: 'var(--ink-2)' }}>Modo Diagnóstico</strong> — somente leitura.
-                Nenhuma ação será executada. Toda sugestão será apresentada para aprovação antes de qualquer alteração.
+                <strong style={{ color: 'var(--ink-2)' }}>Diagnóstico e ajustes</strong> — analisa seus dados e, quando você pedir explicitamente,
+                executa o ajuste (reclassificar, corrigir orçamento, marcar neutro, etc.). Peça sempre de forma clara o que quer mudar.
               </p>
             </div>
           </div>

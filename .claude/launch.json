@@ -27,6 +27,20 @@
       "runtimeArgs": ["-c", "npx vite preview --port ${PORT:-4173}"],
       "autoPort": true,
       "cwd": "finance-app"
+    },
+    {
+      "name": "finance-app (backend server)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "node index.js"],
+      "cwd": "finance-app/server",
+      "port": 8787
+    },
+    {
+      "name": "finance-app (mcp http)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "MCP_TRANSPORT=http MCP_PORT=3010 npx tsx src/index.ts"],
+      "cwd": "finance-app/mcp",
+      "port": 3010
     }
   ]
 }
