@@ -248,7 +248,7 @@ function buildServer() {
   return server
 }
 
-// ── HTTP mode (Open WebUI / Hermes) ───────────────────────────────────────────
+// ── HTTP mode (Open WebUI / LLM custom) ───────────────────────────────────────
 async function startHttp() {
   const port = Number(process.env.MCP_PORT ?? 3010)
   const app = express()

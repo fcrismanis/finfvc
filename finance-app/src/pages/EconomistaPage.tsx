@@ -166,7 +166,7 @@ export function EconomistaPage({ selectedMonth }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'var(--well)', border: '1px solid var(--line)' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--pos)', display: 'inline-block' }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)' }}>
-              {provider === 'gpt' ? 'GPT' : provider === 'simulated' ? 'Simulado' : 'Hermes'}
+              {provider === 'gpt' ? 'GPT' : provider === 'simulated' ? 'Simulado' : 'LLM Custom'}
             </span>
           </div>
         </div>

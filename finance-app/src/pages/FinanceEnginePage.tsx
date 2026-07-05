@@ -20,7 +20,7 @@ const FLAG_COLS_ALL: { key: FlagName; short: string; label: string; essential?: 
   { key: 'includeInBudget',            short: 'Orçam.',    label: 'Orçamento', essential: true },
   { key: 'includeInPatrimony',         short: 'Patrim.',   label: 'Patrimônio' },
   { key: 'includeInDashboard',         short: 'Dash',      label: 'Dashboard' },
-  { key: 'includeInAI',               short: 'IA',         label: 'IA / Hermes' },
+  { key: 'includeInAI',               short: 'IA',         label: 'IA / Consultor' },
   { key: 'includeInReports',           short: 'Relat.',    label: 'Relatórios' },
   { key: 'hideInDashboard',            short: 'Ocultar',   label: 'Ocultar no Dashboard' },
 ]

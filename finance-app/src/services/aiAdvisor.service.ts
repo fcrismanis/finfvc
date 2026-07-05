@@ -11,25 +11,25 @@
  * See docs/ai-advisor-integration.md for full setup guide.
  */
 
-export type AIProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'hermes'
+export type AIProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'custom'
 
-export interface HermesConfig {
+export interface CustomLLMConfig {
   url: string          // e.g. http://localhost:11434/api/chat ou qualquer endpoint compatível
   apiKey?: string      // opcional
-  model?: string       // opcional, ex: "hermes-3", "llama3", etc.
+  model?: string       // opcional, ex: "llama3", "mixtral", etc.
 }
 
-const HERMES_CONFIG_KEY = 'fin_hermes_config'
+const CUSTOM_LLM_CONFIG_KEY = 'fin_custom_llm_config'
 
-export function loadHermesConfig(): HermesConfig {
+export function loadCustomLLMConfig(): CustomLLMConfig {
   try {
-    const raw = localStorage.getItem(HERMES_CONFIG_KEY)
+    const raw = localStorage.getItem(CUSTOM_LLM_CONFIG_KEY)
     return raw ? JSON.parse(raw) : { url: '', apiKey: '', model: '' }
   } catch { return { url: '', apiKey: '', model: '' } }
 }
 
-export function saveHermesConfig(cfg: HermesConfig) {
-  localStorage.setItem(HERMES_CONFIG_KEY, JSON.stringify(cfg))
+export function saveCustomLLMConfig(cfg: CustomLLMConfig) {
+  localStorage.setItem(CUSTOM_LLM_CONFIG_KEY, JSON.stringify(cfg))
 }
 
 export interface AdvisorContext {
@@ -62,8 +62,8 @@ export async function askAdvisor(
     return simulatedResponse(prompt, context)
   }
 
-  if (provider === 'hermes') {
-    return askHermes(prompt, context)
+  if (provider === 'custom') {
+    return askCustomLLM(prompt, context)
   }
 
   // gpt / claude / openrouter → secure backend; keys never in browser
@@ -95,11 +95,11 @@ export async function askAdvisor(
   return { answer: body.answer ?? '', provider }
 }
 
-// ── Hermes / endpoint personalizado ─────────────────────────────────────────
+// ── Endpoint LLM personalizado ──────────────────────────────────────────────
 function buildSystemPrompt(ctx: AdvisorContext): string {
   const fmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const cats = ctx.topCategories.slice(0, 8).map((c, i) => `${i + 1}. ${c.name}: R$ ${fmt(c.amount)}`).join('\n')
-  return `Você é Hermes, consultor financeiro pessoal da família. Analise os dados abaixo e responda de forma direta, em português do Brasil.
+  return `Você é o Arquiteto do Segundo Cérebro, consultor financeiro pessoal da família. Analise os dados abaixo e responda de forma direta, em português do Brasil.
 
 DADOS DO MÊS ${ctx.month}:
 - Receita operacional: R$ ${fmt(ctx.operationalIncome)}
@@ -114,20 +114,20 @@ ${cats}
 Seja objetivo, use dados reais acima. Formate usando markdown quando útil.`
 }
 
-async function askHermes(prompt: string, context: AdvisorContext): Promise<AdvisorResponse> {
-  const cfg = loadHermesConfig()
+async function askCustomLLM(prompt: string, context: AdvisorContext): Promise<AdvisorResponse> {
+  const cfg = loadCustomLLMConfig()
   if (!cfg.url.trim()) {
-    throw new Error('URL do Hermes não configurada. Configure em Configurações > Consultor IA.')
+    throw new Error('URL do endpoint personalizado não configurada. Configure em Configurações > Consultor IA.')
   }
 
   const systemPrompt = buildSystemPrompt(context)
 
-  // Tenta formato OpenAI-compatible (funciona com Ollama, LM Studio, Hermes, OpenRouter, etc.)
+  // Tenta formato OpenAI-compatible (funciona com Ollama, LM Studio, OpenRouter, etc.)
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`
 
   const body = {
-    model: cfg.model || 'hermes-3',
+    model: cfg.model || 'llama3',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt },
@@ -139,14 +139,14 @@ async function askHermes(prompt: string, context: AdvisorContext): Promise<Advis
   try {
     res = await fetch(cfg.url, { method: 'POST', headers, body: JSON.stringify(body) })
   } catch (e) {
-    throw new Error(`Não foi possível conectar ao Hermes em ${cfg.url}. Verifique se o serviço está rodando.`)
+    throw new Error(`Não foi possível conectar ao endpoint em ${cfg.url}. Verifique se o serviço está rodando.`)
   }
 
   const text = await res.text()
-  if (!text.trim()) throw new Error('Hermes retornou resposta vazia.')
+  if (!text.trim()) throw new Error('Endpoint retornou resposta vazia.')
 
   let data: Record<string, unknown>
-  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do Hermes: ${text.slice(0, 200)}`) }
+  try { data = JSON.parse(text) } catch { throw new Error(`Resposta inválida do endpoint: ${text.slice(0, 200)}`) }
 
   // Suporte a formato OpenAI (choices[0].message.content) e Ollama (message.content)
   const answer =
@@ -155,7 +155,7 @@ async function askHermes(prompt: string, context: AdvisorContext): Promise<Advis
     (data as { response?: string }).response ??
     String(data)
 
-  return { answer, provider: 'hermes' }
+  return { answer, provider: 'custom' }
 }
 
 function simulatedResponse(prompt: string, ctx: AdvisorContext): Promise<AdvisorResponse> {

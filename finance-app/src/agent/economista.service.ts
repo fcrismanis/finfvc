@@ -4,9 +4,9 @@ import { getReconciliationStatus } from './tools/getReconciliationStatus'
 import { getSpendingInsights } from './tools/getSpendingInsights'
 import type { AgentToolResult } from './types'
 import { formatBRL } from '../utils/currency'
-import { loadHermesConfig } from '../services/aiAdvisor.service'
+import { loadCustomLLMConfig } from '../services/aiAdvisor.service'
 
-export type EconomistaProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'hermes'
+export type EconomistaProvider = 'simulated' | 'gpt' | 'claude' | 'openrouter' | 'custom'
 
 export interface EconomistaContext {
   month: string
@@ -172,11 +172,11 @@ Modo atual: Diagnóstico (somente leitura — não execute ações).
 Analise apenas os dados fornecidos. Responda em português do Brasil.
 Separe fatos observados, hipóteses e recomendações práticas.`
 
-  // Hermes: chamada direta ao LLM local (bypass backend)
-  if (provider === 'hermes') {
-    const cfg = loadHermesConfig()
+  // Custom: chamada direta a endpoint LLM local (bypass backend)
+  if (provider === 'custom') {
+    const cfg = loadCustomLLMConfig()
     if (!cfg.url) {
-      return { answer: 'Hermes não configurado. Defina a URL nas configurações do Consultor IA.', toolsUsed, alerts: uniqueAlerts, diagnosticData }
+      return { answer: 'Endpoint personalizado não configurado. Defina a URL nas configurações do Consultor IA.', toolsUsed, alerts: uniqueAlerts, diagnosticData }
     }
     try {
       const res = await fetch(cfg.url, {
@@ -194,12 +194,12 @@ Separe fatos observados, hipóteses e recomendações práticas.`
           stream: false,
         }),
       })
-      if (!res.ok) throw new Error(`Hermes HTTP ${res.status}`)
+      if (!res.ok) throw new Error(`Endpoint HTTP ${res.status}`)
       const json = await res.json() as { choices?: { message?: { content?: string } }[]; message?: { content?: string } }
-      const answer = json.choices?.[0]?.message?.content ?? json.message?.content ?? 'Sem resposta do Hermes.'
+      const answer = json.choices?.[0]?.message?.content ?? json.message?.content ?? 'Sem resposta do endpoint.'
       return { answer, toolsUsed, alerts: uniqueAlerts, diagnosticData }
     } catch (err) {
-      return { answer: `Erro ao chamar Hermes: ${String(err)}`, toolsUsed, alerts: uniqueAlerts, diagnosticData }
+      return { answer: `Erro ao chamar endpoint: ${String(err)}`, toolsUsed, alerts: uniqueAlerts, diagnosticData }
     }
   }
 

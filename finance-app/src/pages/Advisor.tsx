@@ -5,15 +5,15 @@ import { getMonthSummary, getMacroCategoryTotals } from '../engine/calculate'
 import { formatBRL, formatPct } from '../utils/currency'
 import { MACRO_CATEGORIES } from '../config/categories'
 import { currentYearMonth } from '../utils/date'
-import { askAdvisor, SUGGESTED_PROMPTS, loadHermesConfig, saveHermesConfig } from '../services/aiAdvisor.service'
-import type { AIProvider, AdvisorMessage, HermesConfig } from '../services/aiAdvisor.service'
+import { askAdvisor, SUGGESTED_PROMPTS, loadCustomLLMConfig, saveCustomLLMConfig } from '../services/aiAdvisor.service'
+import type { AIProvider, AdvisorMessage, CustomLLMConfig } from '../services/aiAdvisor.service'
 
 interface Props {
   selectedMonth: string
   onNavigate: (route: string) => void
 }
 
-type UiMode = 'gpt' | 'hermes' | 'simulated' | 'copy'
+type UiMode = 'gpt' | 'custom' | 'simulated' | 'copy'
 
 // ── Build clipboard context ──────────────────────────────────────────────────
 function buildCopyContext(
@@ -97,8 +97,8 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [showHermesConfig, setShowHermesConfig] = useState(false)
-  const [hermesConfig, setHermesConfig] = useState<HermesConfig>(() => loadHermesConfig())
+  const [showCustomLLMConfig, setShowCustomLLMConfig] = useState(false)
+  const [customLLMConfig, setCustomLLMConfig] = useState<CustomLLMConfig>(() => loadCustomLLMConfig())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const summary = useMemo(
@@ -149,9 +149,9 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  function saveHermes(cfg: HermesConfig) {
-    setHermesConfig(cfg)
-    saveHermesConfig(cfg)
+  function saveCustom(cfg: CustomLLMConfig) {
+    setCustomLLMConfig(cfg)
+    saveCustomLLMConfig(cfg)
   }
 
   async function sendMessage(text: string) {
@@ -162,7 +162,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
     setError(null)
     setLoading(true)
     try {
-      const activeProvider: AIProvider = uiMode === 'hermes' ? 'hermes' : uiMode === 'gpt' ? 'gpt' : 'simulated'
+      const activeProvider: AIProvider = uiMode === 'custom' ? 'custom' : uiMode === 'gpt' ? 'gpt' : 'simulated'
       const response = await askAdvisor(text.trim(), context, activeProvider)
       const assistantMsg: AdvisorMessage = { role: 'assistant', content: response.answer, timestamp: new Date().toISOString() }
       setMessages(m => [...m, assistantMsg])
@@ -191,7 +191,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
           <div>
             <h1 style={{ fontSize: 29, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--ink)' }}>Consultor IA</h1>
             <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 3 }}>
-              {uiMode === 'gpt' ? `GPT conectado — ${month}` : uiMode === 'hermes' ? `Hermes conectado — ${month}` : `Análise contextual — ${month}`}
+              {uiMode === 'gpt' ? `GPT conectado — ` : uiMode === 'custom' ? `LLM custom conectado — ` : `Análise contextual — ${month}`}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -199,7 +199,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
             <div style={{ display: 'flex', gap: 4, background: 'var(--well)', borderRadius: 10, padding: 4, border: '1px solid var(--line)' }}>
               {([
                 { key: 'gpt',       label: '✦ GPT' },
-                { key: 'hermes',    label: 'Hermes' },
+                { key: 'custom',    label: 'LLM Custom' },
                 { key: 'simulated', label: 'Simulado' },
                 { key: 'copy',      label: 'Copiar contexto' },
               ] as { key: UiMode; label: string }[]).map(m => (
@@ -208,28 +208,28 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                 </button>
               ))}
             </div>
-            {/* Hermes config button */}
-            {uiMode === 'hermes' && (
-              <button onClick={() => setShowHermesConfig(v => !v)} title="Configurar endpoint Hermes" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${showHermesConfig ? 'var(--accent)' : 'var(--line)'}`, background: showHermesConfig ? 'var(--accent-soft)' : 'var(--well)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: showHermesConfig ? 'var(--accent)' : 'var(--ink-2)', fontFamily: 'var(--ui)' }}>
+            {/* Custom LLM config button */}
+            {uiMode === 'custom' && (
+              <button onClick={() => setShowCustomLLMConfig(v => !v)} title="Configurar endpoint personalizado" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${showCustomLLMConfig ? 'var(--accent)' : 'var(--line)'}`, background: showCustomLLMConfig ? 'var(--accent-soft)' : 'var(--well)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: showCustomLLMConfig ? 'var(--accent)' : 'var(--ink-2)', fontFamily: 'var(--ui)' }}>
                 <Settings2 size={13} /> Config
               </button>
             )}
           </div>
         </div>
 
-        {/* ── Hermes config panel ── */}
-        {uiMode === 'hermes' && showHermesConfig && (
+        {/* ── Custom LLM config panel ── */}
+        {uiMode === 'custom' && showCustomLLMConfig && (
           <div className="card" style={{ padding: '16px 20px' }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>✦ Configuração do Hermes</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>✦ Configuração do LLM Custom</p>
             <p style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.6 }}>
-              Conecte qualquer endpoint compatível com a API OpenAI (Ollama, LM Studio, OpenRouter, seu servidor Hermes, etc.)
+              Conecte qualquer endpoint compatível com a API OpenAI (Ollama, LM Studio, OpenRouter, seu servidor LLM, etc.)
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>URL do endpoint *</label>
                 <input
-                  value={hermesConfig.url}
-                  onChange={e => saveHermes({ ...hermesConfig, url: e.target.value })}
+                  value={customLLMConfig.url}
+                  onChange={e => saveCustom({ ...customLLMConfig, url: e.target.value })}
                   placeholder="http://localhost:11434/v1/chat/completions"
                   className="login-field"
                   style={{ fontSize: 12.5, width: '100%' }}
@@ -240,9 +240,9 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Modelo</label>
                   <input
-                    value={hermesConfig.model ?? ''}
-                    onChange={e => saveHermes({ ...hermesConfig, model: e.target.value })}
-                    placeholder="hermes-3, llama3, mixtral…"
+                    value={customLLMConfig.model ?? ''}
+                    onChange={e => saveCustom({ ...customLLMConfig, model: e.target.value })}
+                    placeholder="llama3, mixtral, gpt-oss…"
                     className="login-field"
                     style={{ fontSize: 12.5, width: '100%' }}
                   />
@@ -251,8 +251,8 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>API Key (opcional)</label>
                   <input
                     type="password"
-                    value={hermesConfig.apiKey ?? ''}
-                    onChange={e => saveHermes({ ...hermesConfig, apiKey: e.target.value })}
+                    value={customLLMConfig.apiKey ?? ''}
+                    onChange={e => saveCustom({ ...customLLMConfig, apiKey: e.target.value })}
                     placeholder="sk-… ou deixe vazio"
                     className="login-field"
                     style={{ fontSize: 12.5, width: '100%' }}
@@ -261,7 +261,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--faint)', padding: '8px 12px', background: 'var(--well)', borderRadius: 7, lineHeight: 1.6 }}>
                 <strong style={{ color: 'var(--ink-2)' }}>Status:</strong>{' '}
-                {hermesConfig.url ? <span style={{ color: 'var(--pos)' }}>✓ URL configurada — {hermesConfig.model || 'modelo padrão'}</span> : <span style={{ color: 'var(--warn)' }}>URL não configurada</span>}
+                {customLLMConfig.url ? <span style={{ color: 'var(--pos)' }}>✓ URL configurada — {customLLMConfig.model || 'modelo padrão'}</span> : <span style={{ color: 'var(--warn)' }}>URL não configurada</span>}
               </div>
             </div>
           </div>
@@ -319,7 +319,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
               </div>
             )}
 
-            {/* ── HERMES / SIMULATED CHAT ── */}
+            {/* ── CUSTOM LLM / SIMULATED CHAT ── */}
             {uiMode !== 'copy' && (
               <>
                 {/* Messages */}
@@ -333,13 +333,13 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                         <Bot size={20} color="var(--ink-2)" />
                       </div>
                       <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>
-                        {uiMode === 'hermes' ? '✦ Hermes' : 'Modo Simulado'}
+                        {uiMode === 'custom' ? '✦ LLM Custom' : 'Modo Simulado'}
                       </p>
                       <p style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6, maxWidth: 320 }}>
-                        {uiMode === 'hermes'
-                          ? hermesConfig.url
-                            ? `Conectado a ${hermesConfig.url.replace(/https?:\/\//, '').split('/')[0]} · modelo ${hermesConfig.model || 'padrão'}. Contexto de ${month} carregado.`
-                            : 'Configure o endpoint Hermes clicando em "Config" acima.'
+                        {uiMode === 'custom'
+                          ? customLLMConfig.url
+                            ? `Conectado a ${customLLMConfig.url.replace(/https?:\/\//, '').split('/')[0]} · modelo ${customLLMConfig.model || 'padrão'}. Contexto de ${month} carregado.`
+                            : 'Configure o endpoint personalizado clicando em "Config" acima.'
                           : `Respostas automáticas baseadas nos seus dados de ${month}. Sem API externa.`}
                       </p>
                     </div>
@@ -365,7 +365,7 @@ export function Advisor({ selectedMonth, onNavigate }: Props) {
                   {error && (
                     <div style={{ padding: '10px 12px', background: 'var(--crit-soft)', border: '1px solid var(--crit)', borderRadius: 8, fontSize: 12, color: 'var(--crit)' }}>
                       {error}
-                      {uiMode === 'hermes' && (
+                      {uiMode === 'custom' && (
                         <span style={{ marginLeft: 8, color: 'var(--ink-2)', fontWeight: 400 }}>
                           — tente o <button onClick={() => setUiMode('copy')} style={{ fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--ui)', fontSize: 12 }}>modo Copiar</button> como alternativa.
                         </span>
