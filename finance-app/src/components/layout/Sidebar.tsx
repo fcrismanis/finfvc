@@ -49,7 +49,6 @@ const SISTEMA: NavEntry[] = [
   { route: '/regras', label: 'Regras de categoria', icon: Wand2 },
   { route: '/pluggy', label: 'Importação & Pluggy', icon: Link2 },
   { route: '/economista', label: 'Economista FIN', icon: Bot },
-  { route: '/consultor', label: 'Consultor IA', icon: Bot },
 ]
 
 const GROUPS = [

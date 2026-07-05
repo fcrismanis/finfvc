@@ -949,6 +949,186 @@ const AGENT_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_suggest_category_changes',
+      description: 'Cria um plano de reclassificação de lançamentos. Somente sugestão — não altera dados. Retorna plan_id para usar em fin_apply_category_changes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          target_macro_category_id: { type: 'string', description: 'ID da macro-categoria destino (ex: mac_alimentacao)' },
+          period: { type: 'string', description: 'Filtrar por mês (YYYY-MM)' },
+          period_from: { type: 'string' },
+          period_to: { type: 'string' },
+          text_contains: { type: 'string', description: 'Filtrar por texto na descrição' },
+          current_macro_category_id: { type: 'string', description: 'Filtrar por categoria atual' },
+          reason: { type: 'string', description: 'Motivo da reclassificação' },
+          skip_manual_overrides: { type: 'boolean' },
+        },
+        required: ['target_macro_category_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_apply_category_changes',
+      description: 'ESCRITA — aplica um plano de reclassificação criado por fin_suggest_category_changes. Requer confirmed=true explícito para executar de fato.',
+      parameters: {
+        type: 'object',
+        properties: {
+          plan_id: { type: 'string', description: 'ID do plano retornado por fin_suggest_category_changes' },
+          confirmed: { type: 'boolean', description: 'true para executar de verdade; false apenas simula sem alterar' },
+        },
+        required: ['plan_id', 'confirmed'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_update_transaction',
+      description: 'ESCRITA — atualiza campos de um lançamento existente: categoria, descrição, notas, status, inclusão no resultado/orçamento, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ID do lançamento' },
+          macro_category_id: { type: 'string' },
+          category_id: { type: 'string' },
+          sub_category_id: { type: 'string' },
+          classification_type: { type: 'string' },
+          description: { type: 'string' },
+          notes: { type: 'string' },
+          status: { type: 'string', enum: ['paid', 'pending', 'cancelled'] },
+          include_in_operational_result: { type: 'boolean' },
+          include_in_budget: { type: 'boolean' },
+          needs_review: { type: 'boolean' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_create_transaction',
+      description: 'ESCRITA — cria um lançamento manual.',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: { type: 'string' },
+          amount: { type: 'number', description: 'Valor positivo' },
+          type: { type: 'string', enum: ['income', 'expense'] },
+          competence_date: { type: 'string', description: 'YYYY-MM-DD' },
+          macro_category_id: { type: 'string' },
+          classification_type: { type: 'string' },
+          status: { type: 'string', enum: ['paid', 'pending'] },
+          notes: { type: 'string' },
+          account_id: { type: 'string' },
+          payment_method: { type: 'string' },
+        },
+        required: ['description', 'amount', 'type', 'competence_date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_delete_transaction',
+      description: 'ESCRITA IRREVERSÍVEL — exclui um lançamento permanentemente. Requer confirm=true. Só use quando o usuário pedir explicitamente para excluir.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          confirm: { type: 'boolean', description: 'true para excluir de verdade' },
+        },
+        required: ['id', 'confirm'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_mark_neutral',
+      description: 'ESCRITA — neutraliza lançamentos (transferências internas, pagamento de fatura, etc.), excluindo-os do resultado operacional.',
+      parameters: {
+        type: 'object',
+        properties: {
+          transaction_ids: { type: 'array', items: { type: 'string' } },
+          reason: { type: 'string' },
+        },
+        required: ['transaction_ids'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_budgets',
+      description: 'Lista orçamentos de um mês.',
+      parameters: {
+        type: 'object',
+        properties: { month: { type: 'string' } },
+        required: ['month'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_set_budget',
+      description: 'ESCRITA — define ou atualiza o orçamento de uma categoria para um mês.',
+      parameters: {
+        type: 'object',
+        properties: {
+          month: { type: 'string' },
+          macro_category_id: { type: 'string' },
+          amount: { type: 'number', description: 'Valor planejado em reais' },
+        },
+        required: ['month', 'macro_category_id', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_copy_budget',
+      description: 'ESCRITA — copia o orçamento de um mês para outro.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from_month: { type: 'string' },
+          to_month: { type: 'string' },
+        },
+        required: ['from_month', 'to_month'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_get_categories',
+      description: 'Lista todas as macro-categorias e subcategorias disponíveis.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fin_create_subcategory',
+      description: 'ESCRITA — cria uma nova subcategoria.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          macro_category_id: { type: 'string' },
+          essentiality: { type: 'string', enum: ['essential', 'non_essential', 'inherit'] },
+        },
+        required: ['name', 'macro_category_id'],
+      },
+    },
+  },
 ]
 
 async function executeTool(name, args) {
@@ -968,10 +1148,21 @@ async function executeTool(name, args) {
   return parsed.result?.content?.[0]?.text ?? JSON.stringify(parsed.result)
 }
 
-const AGENT_SYSTEM = `Você é o Economista FIN — assistente financeiro pessoal integrado ao FINFVC.
-Você tem acesso direto aos dados financeiros reais via tools.
+const AGENT_SYSTEM = `Você é o Economista FIN — assistente financeiro pessoal integrado ao FINFVC, operando como parte do Arquiteto do Segundo Cérebro.
+Você tem acesso direto aos dados financeiros reais via tools, tanto de leitura quanto de escrita.
 Responda em português do Brasil. Use os tools para buscar dados reais antes de responder.
-Seja direto: fatos → análise → recomendação. Não invente valores.`
+Seja direto: fatos → análise → recomendação.
+
+## Autonomia para executar ajustes
+
+Quando o usuário pedir explicitamente para ajustar algo (reclassificar lançamento, corrigir categoria, marcar como neutro, atualizar orçamento, criar lançamento manual etc.), execute o ajuste usando as tools de escrita — não se limite a sugerir. Não peça confirmação extra por texto quando o pedido do usuário já é a confirmação.
+
+Regras obrigatórias:
+- Nunca invente valores, IDs ou dados que não vieram de uma tool.
+- Para reclassificação em massa, use fin_suggest_category_changes primeiro para ver o plano, depois fin_apply_category_changes com confirmed=true para executar.
+- fin_delete_transaction é irreversível — só use quando o usuário pedir explicitamente para excluir/apagar, nunca como parte de uma reclassificação.
+- Depois de executar qualquer escrita, confirme ao usuário exatamente o que mudou (quantos registros, de qual valor/categoria para qual).
+- Se o pedido for ambíguo sobre qual lançamento/categoria/mês, pergunte antes de agir — não adivinhe.`
 
 app.post('/api/agent', async (req, res) => {
   const { question, month } = req.body ?? {}
@@ -981,7 +1172,10 @@ app.post('/api/agent', async (req, res) => {
     return res.status(503).json({ error: 'Nenhuma API key configurada' })
   }
 
-  const messages = [{ role: 'user', content: `Mês de referência: ${month}\n\nPergunta: ${question}` }]
+  const messages = [
+    { role: 'system', content: AGENT_SYSTEM },
+    { role: 'user', content: `Mês de referência: ${month}\n\nPergunta: ${question}` },
+  ]
 
   try {
     // Agentic loop: max 5 iterations
