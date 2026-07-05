@@ -17,7 +17,7 @@ Este repositório também contém, historicamente, o código do aplicativo FinFV
 - **projetos/** — projetos pessoais e profissionais em andamento, fora do escopo financeiro. *[ainda não criado]*
 - **legado/** — visão de longo prazo, transmissão de patrimônio e conhecimento às próximas gerações. *[ainda não criado]*
 
-Ver [MAPA_DOS_CEREBROS.md](MAPA_DOS_CEREBROS.md) para o detalhamento de cada área e seu estágio atual, e [SOUL.md](SOUL.md) para a filosofia geral que atravessa todas elas.
+Ver [MAPA_DOS_CEREBROS.md](MAPA_DOS_CEREBROS.md) para o detalhamento de cada área e seu estágio atual, [SOUL.md](SOUL.md) para a filosofia geral que atravessa todas elas, e **[OPERACAO.md](OPERACAO.md) para o índice operacional de como usar o Segundo Cérebro no dia a dia**.
 
 ## Como as áreas se relacionam
 
