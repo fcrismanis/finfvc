@@ -88,6 +88,7 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
     return getFullTrend(transactions).map(t => {
       const [, m] = t.month.split('-').map(Number)
       return {
+        month: t.month,
         label: `${MONTHS[m - 1]}/${t.month.slice(2, 4)}`,
         Receita: Math.round(t.operationalIncome),
         Despesa: Math.round(t.totalExpenses),
@@ -263,8 +264,32 @@ export function Dashboard({ selectedMonth, onNavigate, onMonthChange }: Props) {
                 <YAxis hide />
                 <Tooltip formatter={(v: unknown) => formatBRL(Number(v))} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid var(--line)' }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Receita" fill="var(--pos)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Despesa" fill="var(--crit)" radius={[3, 3, 0, 0]} />
+                <Bar
+                  dataKey="Receita"
+                  fill="var(--pos)"
+                  radius={[3, 3, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data: { month?: string; label?: string }) => data.month && onNavigate('/lancamentos', {
+                    monthOverride: data.month,
+                    typeOverride: 'income',
+                    filterLabel: `Receitas — ${data.label}`,
+                    sourcePage: 'dashboard',
+                    sourceLabel: 'Visão Geral',
+                  })}
+                />
+                <Bar
+                  dataKey="Despesa"
+                  fill="var(--crit)"
+                  radius={[3, 3, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data: { month?: string; label?: string }) => data.month && onNavigate('/lancamentos', {
+                    monthOverride: data.month,
+                    typeOverride: 'expense',
+                    filterLabel: `Despesas — ${data.label}`,
+                    sourcePage: 'dashboard',
+                    sourceLabel: 'Visão Geral',
+                  })}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>

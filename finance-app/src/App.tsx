@@ -7,6 +7,7 @@ export interface NavFilter {
   smartFilter?: string
   quickFilter?: string
   monthOverride?: string
+  typeOverride?: 'income' | 'expense'
   sourcePage?: 'dashboard' | 'budget' | 'closing' | 'review'
   sourceLabel?: string
 }

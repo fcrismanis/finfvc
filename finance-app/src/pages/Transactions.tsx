@@ -229,6 +229,7 @@ export function Transactions({ selectedMonth, onNavigate, navFilter, onClearFilt
       setPeriod(navFilter.monthOverride ? { kind: 'month', month: navFilter.monthOverride } : { kind: 'all' })
     }
     if (navFilter?.quickFilter) setQuickFilter(navFilter.quickFilter as QuickFilterKey)
+    if (navFilter?.typeOverride) setFilterType(navFilter.typeOverride)
   }, [navFilter])
 
   // Persist filter selections (not search/month) across sessions
