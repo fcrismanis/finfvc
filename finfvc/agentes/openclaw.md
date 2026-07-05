@@ -1,19 +1,8 @@
-# OpenClaw
-> Última atualização: 2026-07-04
+# OpenClaw (histórico)
+> Arquivado em 2026-07-05
 
-## Papel
+> **Nota**: "OpenClaw" era um papel separado de memória e operação dentro do modelo antigo de múltiplos agentes. Esse modelo foi descontinuado — hoje um único agente, o [Arquiteto do Segundo Cérebro](arquiteto-segundo-cerebro.md), acumula essa responsabilidade junto com as demais. Este arquivo permanece apenas como nota histórica.
 
-Memória e operação dentro do Segundo Cérebro: mantém o estado da área raiz financeira (`finfvc/`) consistente com a realidade conhecida, e executa rotinas operacionais assistidas.
+## Papel original (para referência)
 
-## Responsabilidades
-
-- Memória local: manter os arquivos em `../financeiro/` e demais pastas sempre refletindo o estado mais recente conhecido.
-- Leitura de arquivos: consultar a documentação existente antes de agir ou responder, evitando contradição com o que já foi registrado.
-- Atualização do segundo cérebro: aplicar as rotinas descritas em `../prompts/segundo-cerebro-financeiro.md`.
-- Execução operacional assistida: rodar tarefas concretas (atualizar arquivo, gerar relatório, consolidar dado) sob supervisão.
-- Busca em documentação: responder rapidamente "isso já foi decidido?" consultando `../decisoes/`.
-- Consistência histórica: sinalizar quando uma ação pedida contradiz algo já registrado, antes de executar.
-
-## Papel no comitê de investimentos
-
-Ver `comite-de-investimentos-ia.md` — OpenClaw contribui com a visão de memória e consistência histórica (o que já foi tentado, decidido ou recusado antes), mas não decide sozinho.
+Memória e operação: mantém o estado da área raiz financeira (`finfvc/`) consistente com a realidade conhecida, e executa rotinas operacionais assistidas. Ver responsabilidades equivalentes em [arquiteto-segundo-cerebro.md](arquiteto-segundo-cerebro.md).

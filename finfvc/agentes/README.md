@@ -1,16 +1,13 @@
 # Agentes — FinFVC
-> Última atualização: 2026-07-04
+> Última atualização: 2026-07-05
 
-## Papéis
+## Agente único
 
-O FinFVC é operado por uma combinação de agentes, cada um com um papel específico. Nenhum agente substitui outro — a divisão existe para manter responsabilidade clara e evitar que uma única camada acumule julgamento demais sem checagem.
+O FinFVC (e o Segundo Cérebro como um todo) é operado por um único agente: o [Arquiteto do Segundo Cérebro](arquiteto-segundo-cerebro.md). Modelo anterior de múltiplos agentes (Hermes, OpenClaw, IA CFO, Claude Code, Comitê de Investimentos IA) foi descontinuado — os arquivos antigos permanecem como stubs históricos apontando para o agente único.
 
-- [cfo-ia.md](cfo-ia.md) — análise financeira, diagnóstico, sugestões.
-- [hermes.md](hermes.md) — estratégia, priorização, visão macro e de carreira.
-- [openclaw.md](openclaw.md) — memória, consistência histórica, execução operacional.
-- [claude-code.md](claude-code.md) — documentação, estruturação e execução técnica deste repositório.
-- [comite-de-investimentos-ia.md](comite-de-investimentos-ia.md) — como os quatro papéis acima colaboram em decisões de investimento, com decisão final sempre humana.
+- [arquiteto-segundo-cerebro.md](arquiteto-segundo-cerebro.md) — papel único vigente.
+- [hermes.md](hermes.md), [openclaw.md](openclaw.md), [cfo-ia.md](cfo-ia.md), [claude-code.md](claude-code.md), [comite-de-investimentos-ia.md](comite-de-investimentos-ia.md) — histórico, não editar.
 
 ## Regra central
 
-Nenhum agente decide sozinho uma questão financeira relevante. A decisão final é sempre de Fábio (e da família, quando aplicável) — os agentes existem para instrumentar essa decisão com análise, memória e execução, não para substituí-la.
+O agente não decide sozinho uma questão financeira relevante. A decisão final é sempre de Fábio (e da família, quando aplicável) — o agente existe para instrumentar essa decisão com análise, memória e execução, não para substituí-la.

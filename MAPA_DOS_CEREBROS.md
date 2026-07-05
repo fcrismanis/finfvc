@@ -11,7 +11,7 @@ Este arquivo é o índice de todas as áreas raiz do Segundo Cérebro — o que 
 
 **Estágio**: implementado e operante.
 
-Cérebro financeiro da família Crismanis: patrimônio, receitas, despesas, dívidas, investimentos, decisões financeiras, pesquisa de tendências, e os agentes/prompts que operam essa área (CFO IA, comitê de investimentos, Hermes, OpenClaw, Claude Code aplicados ao domínio financeiro).
+Cérebro financeiro da família Crismanis: patrimônio, receitas, despesas, dívidas, investimentos, decisões financeiras, pesquisa de tendências, e o agente único (Arquiteto do Segundo Cérebro) que opera essa área com prompts especializados.
 
 - Entrada: [finfvc/README.md](finfvc/README.md)
 - Onde preencher dado real: [finfvc/_entrada-dados/](finfvc/_entrada-dados/plano-primeiros-30-dias.md)

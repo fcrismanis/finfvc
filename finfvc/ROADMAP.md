@@ -30,8 +30,8 @@
 
 ## Fase 5 — Inteligência
 
-- IA CFO operando continuamente (`agentes/cfo-ia.md`).
-- Comitê de investimentos IA + decisão humana ativo (`agentes/comite-de-investimentos-ia.md`).
+- Arquiteto do Segundo Cérebro operando continuamente a análise financeira (`agentes/arquiteto-segundo-cerebro.md`).
+- Checklist de investimento relevante + decisão humana ativo (`agentes/comite-de-investimentos-ia.md`, histórico; conteúdo vigente em `arquiteto-segundo-cerebro.md`).
 - Automações de rotina (categorização, alertas, relatórios).
 - Integração plena com Pluggy (Open Finance) — dados sempre atualizados.
 - Dashboards vivos e monitoramento de tendências estruturado (`pesquisas/`).

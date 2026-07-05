@@ -13,7 +13,7 @@ O FinFVC atua simultaneamente como:
 - **Sistema de decisões financeiras** — todo movimento relevante registrado e auditável.
 - **Laboratório de investimentos** — nenhuma oportunidade vira decisão real sem antes ser simulada (ver [investimentos/laboratorio-de-investimentos.md](investimentos/laboratorio-de-investimentos.md)).
 - **Wiki patrimonial** — a história financeira e patrimonial da família, não só o snapshot atual (ver [wiki-patrimonial/](wiki-patrimonial/README.md)).
-- **Base de integração** — com Pluggy, Supabase, Hermes, OpenClaw e Claude.
+- **Base de integração** — com Pluggy, Supabase e o Arquiteto do Segundo Cérebro.
 - **Componente do futuro Family Office digital** da família Crismanis.
 
 ## Escopo
@@ -35,7 +35,7 @@ finfvc/
   decisoes/                  # histórico auditável de decisões, uma por arquivo
   relatorios/                # snapshots mensais e fechamento anual
   pesquisas/                 # tendências e leitura de mercado/tecnologia
-  agentes/                   # papéis de IA CFO, Hermes, OpenClaw, Claude Code, comitê
+  agentes/                   # Arquiteto do Segundo Cérebro (agente único) + stubs históricos
   prompts/                   # prompts operacionais para cada papel/tarefa
   wiki-patrimonial/          # história patrimonial e familiar
   playbooks/                 # passo a passo de rotinas recorrentes
@@ -50,13 +50,10 @@ finfvc/
 5. **Pesquisar tendência ou tema externo** → `pesquisas/` com os prompts de `prompts/pesquisador-tendencias.md`.
 6. **Entender quem faz o quê** → `agentes/README.md`.
 
-## Relação com Hermes, OpenClaw, Claude e IA CFO
+## Relação com o Arquiteto do Segundo Cérebro
 
-- **IA CFO** analisa dados financeiros e produz diagnóstico (ver `agentes/cfo-ia.md`).
-- **Hermes** conecta esse diagnóstico à estratégia e prioridades mais amplas de Fábio (ver `agentes/hermes.md`).
-- **OpenClaw** mantém a memória e consistência histórica deste segundo cérebro (ver `agentes/openclaw.md`).
-- **Claude Code** documenta, organiza e executa mudanças estruturais neste repositório (ver `agentes/claude-code.md`).
-- Para decisões de investimento relevantes, os quatro papéis (+ Fábio como decisor final) atuam como comitê — ver `agentes/comite-de-investimentos-ia.md`.
+- Um único agente — o **Arquiteto do Segundo Cérebro** (ver `agentes/arquiteto-segundo-cerebro.md`) — analisa dados financeiros, conecta diagnóstico à estratégia, mantém memória e consistência histórica, e documenta/executa mudanças estruturais neste repositório.
+- Para decisões de investimento relevantes, o agente cobre internamente as mesmas perspectivas antes divididas em papéis separados, e Fábio segue como decisor final — ver `agentes/comite-de-investimentos-ia.md` (histórico).
 
 ## Relação com Pluggy/Supabase
 

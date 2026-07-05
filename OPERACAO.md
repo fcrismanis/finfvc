@@ -23,7 +23,7 @@ O projeto principal é o **Segundo Cérebro** — memória, decisão e execuçã
 | Abrir ou fechar um ciclo de 90 dias | [finfvc/playbooks/plano-de-acao-90-dias.md](finfvc/playbooks/plano-de-acao-90-dias.md) |
 | Pesquisar uma tendência (mercado, IA, carreira) | [finfvc/prompts/pesquisador-tendencias.md](finfvc/prompts/pesquisador-tendencias.md) |
 | Sair de `[PENDENTE DE PREENCHIMENTO]` para dado real | [finfvc/_entrada-dados/plano-primeiros-30-dias.md](finfvc/_entrada-dados/plano-primeiros-30-dias.md) |
-| Entender quem faz o quê (IA CFO, Hermes, OpenClaw, Claude Code) | [finfvc/agentes/README.md](finfvc/agentes/README.md) |
+| Entender quem faz o quê (agente único: Arquiteto do Segundo Cérebro) | [finfvc/agentes/README.md](finfvc/agentes/README.md) |
 | Entender como o código do app se conecta a tudo isso | [docs/arquitetura/](docs/arquitetura/finfvc-visao.md) |
 
 ## Estrutura de alto nível
@@ -42,7 +42,7 @@ O projeto principal é o **Segundo Cérebro** — memória, decisão e execuçã
 │   ├── decisoes/                # histórico auditável de decisões
 │   ├── relatorios/              # snapshots mensais e fechamento anual
 │   ├── pesquisas/                # tendências de mercado/tecnologia/carreira
-│   ├── agentes/                   # papéis: CFO IA, Hermes, OpenClaw, Claude Code, comitê
+│   ├── agentes/                   # Arquiteto do Segundo Cérebro (agente único) + stubs históricos
 │   ├── prompts/                    # prompts operacionais
 │   ├── wiki-patrimonial/            # história patrimonial e familiar
 │   ├── playbooks/                    # passo a passo de rotinas recorrentes
@@ -61,7 +61,7 @@ O projeto principal é o **Segundo Cérebro** — memória, decisão e execuçã
 1. **`finfvc/` é a fonte de verdade de conhecimento e decisão financeira.** Não editar os stubs em `docs/soul/`, `docs/financeiro/`, `docs/prompts/`, `docs/decisoes/` e `docs/relatorios/` — eles só apontam para `finfvc/`.
 2. **`docs/arquitetura/` é a fonte de verdade da ponte código ↔ conhecimento.** Editar ali quando mudar como o produto técnico se conecta ao Segundo Cérebro.
 3. **`finance-app/` é o código.** Mudanças de produto relevantes devem, quando fizer sentido, referenciar ou atualizar `finfvc/` — não só o código.
-4. **Nenhum agente decide sozinho** uma questão financeira relevante — ver [finfvc/agentes/comite-de-investimentos-ia.md](finfvc/agentes/comite-de-investimentos-ia.md). Decisão final é sempre humana.
+4. **O agente não decide sozinho** uma questão financeira relevante — ver [finfvc/agentes/arquiteto-segundo-cerebro.md](finfvc/agentes/arquiteto-segundo-cerebro.md). Decisão final é sempre humana.
 5. **Nunca inventar dado.** Onde não existir informação real, usar `[PENDENTE DE PREENCHIMENTO]`.
 
 ## Próximos cérebros (áreas raiz futuras)

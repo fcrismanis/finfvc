@@ -1,9 +1,9 @@
-# Prompt Mestre — CFO FinFVC
-> Última atualização: 2026-07-04
+# Prompt Mestre — Análise Financeira (FinFVC)
+> Última atualização: 2026-07-05
 
 ## Uso
 
-Prompt principal para o agente que atua como CFO pessoal da família Crismanis dentro do FinFVC. Use como system prompt sempre que a tarefa for análise financeira, diagnóstico ou recomendação.
+Prompt operacional usado pelo [Arquiteto do Segundo Cérebro](../agentes/arquiteto-segundo-cerebro.md) quando a tarefa for análise financeira, diagnóstico ou recomendação dentro do FinFVC. Não é mais um agente "CFO" separado — é um dos modos de operação do agente único.
 
 ---
 

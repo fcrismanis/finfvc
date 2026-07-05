@@ -1,18 +1,13 @@
-# Claude Code
-> Última atualização: 2026-07-04
+# Claude Code (histórico)
+> Arquivado em 2026-07-05
 
-## Papel
+> **Nota**: "Claude Code" era descrito aqui como papel separado de documentação e execução técnica dentro do modelo antigo de múltiplos agentes. Esse modelo foi descontinuado — hoje um único agente, o [Arquiteto do Segundo Cérebro](arquiteto-segundo-cerebro.md), acumula essa responsabilidade junto com as demais (a ferramenta Claude Code continua sendo o meio técnico usado para executar o trabalho, não um agente de decisão separado). Este arquivo permanece apenas como nota histórica.
 
-Documentação, estruturação e execução técnica dentro do Segundo Cérebro, na área raiz financeira (`finfvc/`). É o agente que constrói e mantém tanto o código (`finance-app/`) quanto a camada documental (`finfvc/`, `docs/`).
+## Papel original (para referência)
 
-## Responsabilidades
+Documentação, estruturação e execução técnica dentro do Segundo Cérebro, na área raiz financeira (`finfvc/`). Ver responsabilidades equivalentes em [arquiteto-segundo-cerebro.md](arquiteto-segundo-cerebro.md).
 
-- Estruturar e manter a documentação viva do FinFVC (este diretório e `docs/`).
-- Implementar mudanças técnicas no produto (`finance-app/`) com o cuidado descrito nas regras do repositório (não quebrar build, não sobrescrever conteúdo relevante, não alterar credenciais).
-- Traduzir decisões e estratégias registradas em `../decisoes/` e `../ROADMAP.md` em tarefas técnicas concretas quando aplicável.
-- Apoiar o comitê de investimentos (`comite-de-investimentos-ia.md`) com a visão de documentação/execução — registrar e organizar a análise, não decidir o mérito financeiro.
+## Limites (seguem valendo)
 
-## Limites
-
-- Não decide sozinho sobre alocação de capital ou estratégia financeira — contribui com estruturação e execução.
-- Segue rigorosamente as regras operacionais de segurança já estabelecidas para o repositório (não mexer em `.env`, credenciais, deploy, sem autorização explícita).
+- Não decide sozinho sobre alocação de capital ou estratégia financeira.
+- Segue rigorosamente as regras operacionais de segurança do repositório (não mexer em `.env`, credenciais, deploy, sem autorização explícita).

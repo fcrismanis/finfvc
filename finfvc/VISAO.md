@@ -20,13 +20,13 @@ Otimizar para o próximo trimestre frequentemente significa assumir risco que, e
 ## Como a tecnologia serve essa visão
 
 - **Dados em tempo real (Pluggy)** eliminam o atraso entre "o que acontece" e "o que sabemos".
-- **IA CFO** processa volume de informação que ninguém sustentaria revisar manualmente todo mês, sem substituir o julgamento humano final.
+- **Arquiteto do Segundo Cérebro** processa volume de informação que ninguém sustentaria revisar manualmente todo mês, sem substituir o julgamento humano final.
 - **Registro versionado em Git** cria memória institucional que sobrevive a qualquer pessoa específica administrando as finanças em um dado momento.
-- **Comitê de IA + decisão humana** (ver `agentes/comite-de-investimentos-ia.md`) garante que nenhuma decisão relevante seja tomada por um único ponto de vista, seja humano ou de máquina.
+- **Agente + decisão humana** (ver `agentes/arquiteto-segundo-cerebro.md`) garante que nenhuma decisão relevante seja tomada sem checklist e sem revisão humana final.
 
 ## Family Office digital
 
-A ambição de longo prazo do FinFVC é operar como um Family Office digital: patrimônio consolidado, decisões documentadas, estratégia revisada periodicamente, e um comitê (humano + IA) cuidando ativamente do crescimento e da proteção do patrimônio da família Crismanis — sem depender de terceiros externos para ter essa visão.
+A ambição de longo prazo do FinFVC é operar como um Family Office digital: patrimônio consolidado, decisões documentadas, estratégia revisada periodicamente, e um agente (+ decisão humana) cuidando ativamente do crescimento e da proteção do patrimônio da família Crismanis — sem depender de terceiros externos para ter essa visão.
 
 ## Relação com o Roadmap
 
