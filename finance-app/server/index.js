@@ -39,13 +39,39 @@ Não trate suas respostas como aconselhamento financeiro profissional formal.`
 
 const MAX_TRANSACTIONS = 50
 
+// ── OpenRouter: chave atual + fallback automático ─────────────────────────────
+function getOpenRouterKeys() {
+  return [process.env.OPENROUTER_API_KEY, process.env.OPENROUTER_API_KEY_FALLBACK].filter(Boolean)
+}
+
+// Tenta cada key do OpenRouter em ordem; só cai pra próxima se o erro for
+// de autenticação/cota/indisponibilidade (401/429/5xx), nunca em erro de request.
+async function openRouterFetch(payload, extraHeaders = {}) {
+  const keys = getOpenRouterKeys()
+  if (keys.length === 0) return { ok: false, status: 0, missingKey: true }
+
+  let last = null
+  for (let i = 0; i < keys.length; i++) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${keys[i]}`, 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) return { ok: true, res, usedFallback: i > 0 }
+    last = res
+    const retryable = res.status === 401 || res.status === 429 || res.status >= 500
+    if (!retryable || i === keys.length - 1) return { ok: false, res: last, usedFallback: i > 0 }
+  }
+  return { ok: false, res: last }
+}
+
 // ── Provider availability ─────────────────────────────────────────────────────
 function getProviderStatus() {
   return {
     mock: true,
     gpt: !!(process.env.OPENAI_API_KEY),
     claude: !!(process.env.ANTHROPIC_API_KEY),
-    openrouter: !!(process.env.OPENROUTER_API_KEY),
+    openrouter: getOpenRouterKeys().length > 0,
   }
 }
 
@@ -178,38 +204,31 @@ async function handleClaude(question, month, ctx) {
 }
 
 async function handleOpenRouter(question, month, ctx) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return { provider: 'openrouter', answer: '', error: 'OPENROUTER_API_KEY não configurada no backend.' }
-  }
-
   const model = process.env.ADVISOR_OPENROUTER_MODEL ?? 'anthropic/claude-haiku-4-5'
   const content = buildContent(question, month, ctx)
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'http://localhost:5173',
-      'X-Title': 'FIN Consultor Financeiro',
-    },
-    body: JSON.stringify({
+  const { ok, res, missingKey } = await openRouterFetch(
+    {
       model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content },
       ],
-    }),
-  })
+    },
+    { 'HTTP-Referer': 'http://localhost:5173', 'X-Title': 'FIN Consultor Financeiro' },
+  )
 
-  if (!res.ok) {
+  if (missingKey) {
+    return { provider: 'openrouter', answer: '', error: 'OPENROUTER_API_KEY não configurada no backend.' }
+  }
+
+  if (!ok) {
     const text = await res.text()
     if (res.status === 429) {
-      return { provider: 'openrouter', answer: '', error: 'Cota OpenRouter excedida. Verifique créditos em openrouter.ai.' }
+      return { provider: 'openrouter', answer: '', error: 'Cota OpenRouter excedida (chave principal e fallback). Verifique créditos em openrouter.ai.' }
     }
     if (res.status === 401) {
-      return { provider: 'openrouter', answer: '', error: 'OPENROUTER_API_KEY inválida.' }
+      return { provider: 'openrouter', answer: '', error: 'Nenhuma OPENROUTER_API_KEY configurada é válida (principal e fallback).' }
     }
     throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 200)}`)
   }
@@ -698,27 +717,20 @@ async function categorizeOllama(transactions, categories, subCategories, rules) 
 }
 
 async function categorizeOpenRouter(transactions, categories, subCategories, rules) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) return null
+  if (getOpenRouterKeys().length === 0) return null
 
   const model = process.env.CATEGORIZE_OPENROUTER_MODEL ?? 'anthropic/claude-haiku-4-5'
   const content = buildCategorizationPrompt(transactions, categories, subCategories, rules)
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'http://localhost:5173',
-      'X-Title': 'FIN Categorizador',
-    },
-    body: JSON.stringify({
+  const { ok, res } = await openRouterFetch(
+    {
       model,
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content }],
-    }),
-  })
-  if (!res.ok) {
+    },
+    { 'HTTP-Referer': 'http://localhost:5173', 'X-Title': 'FIN Categorizador' },
+  )
+  if (!ok) {
     const txt = await res.text().catch(() => '')
     throw new Error(`OpenRouter ${res.status}: ${txt.slice(0, 200)}`)
   }
@@ -730,7 +742,7 @@ async function categorizeOpenRouter(transactions, categories, subCategories, rul
 app.post('/api/ai/categorize-transactions', async (req, res) => {
   const hasClaude      = !!(process.env.ANTHROPIC_API_KEY)
   const hasGPT         = !!(process.env.OPENAI_API_KEY)
-  const hasOpenRouter  = !!(process.env.OPENROUTER_API_KEY)
+  const hasOpenRouter  = getOpenRouterKeys().length > 0
 
   const { transactions, categories, subCategories, rules } = req.body ?? {}
 
@@ -1168,7 +1180,8 @@ app.post('/api/agent', async (req, res) => {
   const { question, month } = req.body ?? {}
   if (!question) return res.status(400).json({ error: 'question obrigatória' })
   if (!month) return res.status(400).json({ error: 'month obrigatório (YYYY-MM)' })
-  if (!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY) {
+  const openRouterKeys = getOpenRouterKeys()
+  if (openRouterKeys.length === 0 && !process.env.OPENAI_API_KEY) {
     return res.status(503).json({ error: 'Nenhuma API key configurada' })
   }
 
@@ -1177,20 +1190,40 @@ app.post('/api/agent', async (req, res) => {
     { role: 'user', content: `Mês de referência: ${month}\n\nPergunta: ${question}` },
   ]
 
+  // Usa OpenAI se configurado; senão OpenRouter, com a mesma chave (principal
+  // ou fallback) reaproveitada em todas as iterações do loop deste request.
+  const useOpenAI = !!process.env.OPENAI_API_KEY
+  let openRouterKeyIndex = 0
+
+  async function callChatCompletions() {
+    if (useOpenAI) {
+      const model = process.env.ADVISOR_OPENAI_MODEL || 'gpt-4o-mini'
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, tool_choice: 'auto', max_tokens: 2000 }),
+      })
+      return r
+    }
+
+    const model = process.env.ADVISOR_OPENROUTER_MODEL || 'anthropic/claude-haiku-4-5'
+    for (; openRouterKeyIndex < openRouterKeys.length; openRouterKeyIndex++) {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openRouterKeys[openRouterKeyIndex]}` },
+        body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, tool_choice: 'auto', max_tokens: 2000 }),
+      })
+      if (r.ok) return r
+      const retryable = r.status === 401 || r.status === 429 || r.status >= 500
+      if (!retryable || openRouterKeyIndex === openRouterKeys.length - 1) return r
+      // key atual falhou de forma recuperável — tenta a próxima no próximo giro do for
+    }
+  }
+
   try {
     // Agentic loop: max 5 iterations
     for (let i = 0; i < 5; i++) {
-      const apiKey = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY
-      const baseUrl = process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1' : 'https://openrouter.ai/api/v1'
-      const model = process.env.OPENAI_API_KEY
-        ? (process.env.ADVISOR_OPENAI_MODEL || 'gpt-4o-mini')
-        : (process.env.ADVISOR_OPENROUTER_MODEL || 'anthropic/claude-haiku-4-5')
-
-      const r = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, tool_choice: 'auto', max_tokens: 2000 }),
-      })
+      const r = await callChatCompletions()
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
         return res.status(503).json({ error: err.error?.message ?? `API error ${r.status}` })
