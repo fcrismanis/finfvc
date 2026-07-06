@@ -30,6 +30,7 @@ finfvc/
   PRINCIPIOS.md              # princípios financeiros obrigatórios
   ROADMAP.md                 # fases de evolução
   _entrada-dados/            # questionários e checklist para sair de PENDENTE para dado real
+  vencimentos/                # gestão completa de vencimentos financeiros — o que vence e quando
   financeiro/                # estado atual: patrimônio, receitas, despesas, dívidas, metas, etc.
   investimentos/             # política de investimentos, laboratório, classes de ativo
   decisoes/                  # histórico auditável de decisões, uma por arquivo
@@ -43,12 +44,13 @@ finfvc/
 
 ## Como usar
 
-1. **Consultar estado atual** → `financeiro/` (dado real, ou `[PENDENTE DE PREENCHIMENTO]` onde ainda não coletado).
-2. **Avaliar uma oportunidade** → seguir `playbooks/analise-de-oportunidade.md` e `investimentos/laboratorio-de-investimentos.md`.
-3. **Fechar o mês** → seguir `playbooks/fechamento-mensal.md`.
-4. **Tomar e registrar uma decisão** → `decisoes/template-decisao.md`.
-5. **Pesquisar tendência ou tema externo** → `pesquisas/` com os prompts de `prompts/pesquisador-tendencias.md`.
-6. **Entender quem faz o quê** → `agentes/README.md`.
+1. **Saber o que vence e quando** → `vencimentos/` e a revisão diária em `playbooks/revisao-diaria-vencimentos.md`.
+2. **Consultar estado atual** → `financeiro/` (dado real, ou `[PENDENTE DE PREENCHIMENTO]` onde ainda não coletado).
+3. **Avaliar uma oportunidade** → seguir `playbooks/analise-de-oportunidade.md` e `investimentos/laboratorio-de-investimentos.md`.
+4. **Fechar o mês** → seguir `playbooks/fechamento-mensal.md`.
+5. **Tomar e registrar uma decisão** → `decisoes/template-decisao.md`.
+6. **Pesquisar tendência ou tema externo** → `pesquisas/` com os prompts de `prompts/pesquisador-tendencias.md`.
+7. **Entender quem faz o quê** → `agentes/README.md`.
 
 ## Relação com o Arquiteto do Segundo Cérebro
 

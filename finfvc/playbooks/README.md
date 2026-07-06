@@ -7,6 +7,7 @@ Passo a passo operacional para as rotinas recorrentes do FinFVC — para que cad
 
 ## Playbooks disponíveis
 
+- [revisao-diaria-vencimentos.md](revisao-diaria-vencimentos.md) — revisão diária do que vence hoje, amanhã, na semana e no mês.
 - [fechamento-mensal.md](fechamento-mensal.md) — rotina de fim de mês.
 - [analise-de-oportunidade.md](analise-de-oportunidade.md) — como avaliar uma nova oportunidade (financeira ou de investimento).
 - [revisao-de-carteira.md](revisao-de-carteira.md) — revisão periódica da carteira de investimentos.
