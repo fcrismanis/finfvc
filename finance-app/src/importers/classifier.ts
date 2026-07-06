@@ -21,12 +21,12 @@ const RULES: ClassificationRule[] = [
     type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit',
     includeInOperationalResult: true, includeInCashflow: true, includeInBudget: true, isInternalTransfer: false,
   },
-  // FIT PIX transfers received from own account (PIX TRANSF FABIO V = FIT revenue transfer)
-  // These come in as "PIX TRANSF FABIO V" on the Itaú checking account
+  // Self PIX transfer between own accounts (PIX TRANSF FABIO V / PIX RECEBIDO FABIO VOLFE)
+  // Confirmed 2026-07-06: not FIT revenue, just money moving between own accounts — must not count as income.
   {
     keywords: ['PIX TRANSF FABIO V', 'PIX RECEBIDO FABIO VOLFE'],
-    type: 'income', classificationType: 'operational_income', macroCategoryId: 'mac_receita_op', categoryId: 'cat_fit',
-    includeInOperationalResult: true, includeInCashflow: true, includeInBudget: true, isInternalTransfer: false,
+    type: 'income', classificationType: 'neutral', macroCategoryId: 'mac_movfin', categoryId: 'cat_aporte',
+    includeInOperationalResult: false, includeInCashflow: true, includeInBudget: false, isInternalTransfer: true,
   },
   // Salary credit
   {
@@ -56,6 +56,13 @@ const RULES: ClassificationRule[] = [
   {
     keywords: ['TRANSFERENCIA', 'TRANSFERÊNCIA', 'TRANSF.', 'TED ', ' DOC ', 'PAGAMENTO DE FATURA', 'PAGAMENTO FAT', 'PAG FAT', 'FAT. CARTAO', 'FATURA CARTAO', 'PAG FATURA', 'PAG. FATURA', 'DOCTO:'],
     type: 'expense', classificationType: 'transfer', macroCategoryId: 'mac_movfin', categoryId: 'cat_aporte',
+    includeInOperationalResult: false, includeInCashflow: true, includeInBudget: false, isInternalTransfer: true,
+  },
+  // Card statement payment credit (mirror of "PAGAMENTO DE FATURA" on the card side) —
+  // shows as income on the card account when the bill gets paid, not real external money.
+  {
+    keywords: ['PAGAMENTOS VALIDOS NORMAIS', 'PAGAMENTO RECEBIDO'],
+    type: 'income', classificationType: 'neutral', macroCategoryId: 'mac_movfin', categoryId: 'cat_aporte',
     includeInOperationalResult: false, includeInCashflow: true, includeInBudget: false, isInternalTransfer: true,
   },
   // Adjustment / control entries
