@@ -147,7 +147,8 @@ async function buildPlan(month: string, batchId: string) {
       date,
       macro: cls.macroCategoryId,
       cls: cls.classificationType,
-      neutral: cls.classificationType === 'transfer' || cls.classificationType === 'neutral' || cls.isInternalTransfer,
+      // fora do resultado real: tudo que o app não inclui no resultado operacional (transferência, neutro, investimento, resgate, reembolso, ajuste)
+      neutral: !cls.includeInOperationalResult || cls.isInternalTransfer,
       possibleDuplicate: false,
       rawCategory,
       row: {
