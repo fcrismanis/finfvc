@@ -1,0 +1,12 @@
+services:
+  finfvc-mcp:
+    build: .
+    container_name: finfvc-mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MCP_TRANSPORT: http
+      MCP_PORT: "3010"
+    # Só localhost: quem expõe ao mundo é o nginx (HTTPS), nunca a porta direta.
+    ports:
+      - "127.0.0.1:3010:3010"
