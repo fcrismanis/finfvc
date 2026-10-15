@@ -18,6 +18,7 @@ import {
   tool_pluggyStatus, tool_pluggyGetItems, tool_pluggyGetAccounts,
   tool_pluggyGetTransactions, tool_pluggyGetInvestments,
 } from './tools/pluggy.js'
+import { tool_arthaListExports, tool_arthaGetTransactions } from './tools/artha.js'
 import { timingSafeEqual } from 'node:crypto'
 
 const asText = (result: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] })
@@ -296,6 +297,26 @@ function buildServer() {
     'Investimentos vindos do Open Finance, com saldo total. Sem item_id, consulta todas as conexões conhecidas.',
     { item_id: z.string().optional().describe('ID do item Pluggy (opcional)') },
     async (input) => { try { return asText(await tool_pluggyGetInvestments(input)) } catch (e) { return asError(e) } },
+  )
+
+  // ── Artha (planilhas exportadas pelo robô; somente leitura) ───────────────
+
+  server.tool(
+    'artha_list_exports',
+    'Lista as planilhas do Artha já exportadas (mês e data da exportação).',
+    {},
+    async () => { try { return asText(await tool_arthaListExports()) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'artha_get_transactions',
+    'Lê os lançamentos do Artha (planilha exportada). month = AAAA-MM, "atual" ou "anterior". Dado cru do Artha, antes de qualquer neutralização do FINFVC.',
+    {
+      month: z.string().optional().describe('AAAA-MM, "atual" (padrão) ou "anterior"'),
+      text: z.string().optional().describe('Filtra linhas que contenham este texto em qualquer coluna'),
+      limit: z.number().optional().describe('Máximo de linhas (padrão 200, máx 1000)'),
+    },
+    async (input) => { try { return asText(await tool_arthaGetTransactions(input)) } catch (e) { return asError(e) } },
   )
 
   return server

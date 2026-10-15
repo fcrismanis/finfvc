@@ -7,6 +7,9 @@ services:
     environment:
       MCP_TRANSPORT: http
       MCP_PORT: "3010"
+      ARTHA_DIR: /data/artha
+    volumes:
+      - /opt/finfvc-data/artha:/data/artha:ro
     # Só localhost: quem expõe ao mundo é o nginx (HTTPS), nunca a porta direta.
     ports:
       - "127.0.0.1:3010:3010"
