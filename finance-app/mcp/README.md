@@ -6,6 +6,8 @@ Servidor MCP que dá ao Claude acesso ao FINFVC (ledger no Supabase) e à Pluggy
 
 - `fin_*`: ledger, orçamento, categorias, reconciliação (já existiam).
 - `pluggy_status`, `pluggy_get_items`, `pluggy_get_accounts`, `pluggy_get_transactions`, `pluggy_get_investments`: leitura direta do banco via Open Finance. **Não gravam** no ledger.
+- `artha_list_exports`, `artha_get_transactions`: leitura das planilhas exportadas do Artha (robô em `finance-app/artha-robot`).
+- `artha_import_month`: importa uma planilha do Artha para o ledger (classifica e neutraliza como o app, deduplica por hash). **Simulação por padrão**; grava só com `confirmed=true`. `artha_import_rollback` desfaz um lote.
 
 Regra de arquitetura: credenciais Pluggy vivem só no ambiente do servidor. Nunca viram parâmetro de tool nem voltam ao modelo.
 

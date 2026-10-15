@@ -19,6 +19,7 @@ import {
   tool_pluggyGetTransactions, tool_pluggyGetInvestments,
 } from './tools/pluggy.js'
 import { tool_arthaListExports, tool_arthaGetTransactions } from './tools/artha.js'
+import { tool_arthaImportMonth, tool_arthaImportRollback } from './tools/arthaImport.js'
 import { timingSafeEqual } from 'node:crypto'
 
 const asText = (result: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] })
@@ -317,6 +318,27 @@ function buildServer() {
       limit: z.number().optional().describe('Máximo de linhas (padrão 200, máx 1000)'),
     },
     async (input) => { try { return asText(await tool_arthaGetTransactions(input)) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'artha_import_month',
+    'Importa a planilha do Artha de um mês para o ledger do FINFVC (Supabase), com classificação/neutralização do app e deduplicação. PADRÃO = SIMULAÇÃO (nada é gravado). ⚠️ ESCRITA só com confirmed=true; mostre a simulação ao usuário e peça confirmação antes. Retorna batch_id para desfazer.',
+    {
+      month: z.string().describe('AAAA-MM'),
+      confirmed: z.boolean().optional().describe('true para gravar. Omitido/false = simulação'),
+      include_possible_duplicates: z.boolean().optional().describe('Incluir linhas que parecem já existir no ledger (padrão: não)'),
+    },
+    async (input) => { try { return asText(await tool_arthaImportMonth(input)) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'artha_import_rollback',
+    '⚠️ Desfaz uma importação do Artha (exclui os lançamentos do batch_id). Sem confirmed=true só simula.',
+    {
+      batch_id: z.string().describe('batch_id retornado por artha_import_month (começa com artha_)'),
+      confirmed: z.boolean().describe('true para excluir'),
+    },
+    async (input) => { try { return asText(await tool_arthaImportRollback(input)) } catch (e) { return asError(e) } },
   )
 
   return server
