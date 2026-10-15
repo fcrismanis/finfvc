@@ -14,6 +14,14 @@ import { tool_updateTransaction } from './tools/updateTransaction.js'
 import { tool_createTransaction } from './tools/createTransaction.js'
 import { tool_getBudgets, tool_setBudget, tool_copyBudget } from './tools/manageBudget.js'
 import { tool_getCategories, tool_createSubCategory, tool_markTransactionsNeutral, tool_deleteTransaction } from './tools/manageCategories.js'
+import {
+  tool_pluggyStatus, tool_pluggyGetItems, tool_pluggyGetAccounts,
+  tool_pluggyGetTransactions, tool_pluggyGetInvestments,
+} from './tools/pluggy.js'
+import { timingSafeEqual } from 'node:crypto'
+
+const asText = (result: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] })
+const asError = (e: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: (e as Error).message }] })
 
 function buildServer() {
   const server = new McpServer({
@@ -245,43 +253,103 @@ function buildServer() {
     },
   )
 
+  // ── Pluggy / Open Finance (somente leitura) ───────────────────────────────
+
+  server.tool(
+    'pluggy_status',
+    'Verifica se a integração Pluggy (Open Finance) está configurada neste servidor.',
+    {},
+    async () => { try { return asText(await tool_pluggyStatus()) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'pluggy_get_items',
+    'Lista as conexões bancárias (items) da Pluggy e o status de cada uma. needs_attention=true indica LOGIN_ERROR/OUTDATED/WAITING_USER_INPUT: reconectar pelo widget no FINFVC.',
+    {},
+    async () => { try { return asText(await tool_pluggyGetItems()) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'pluggy_get_accounts',
+    'Contas e cartões vindos do Open Finance: saldo, limite, fechamento e vencimento de fatura. Sem item_id, consulta todas as conexões conhecidas.',
+    { item_id: z.string().optional().describe('ID do item Pluggy (opcional)') },
+    async (input) => { try { return asText(await tool_pluggyGetAccounts(input)) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'pluggy_get_transactions',
+    'Extrato/fatura direto da Pluggy num período (dado bruto do banco, NÃO é o ledger do FINFVC). Informe account_id ou item_id. Somente leitura; não grava no FINFVC.',
+    {
+      account_id: z.string().optional().describe('ID da conta Pluggy'),
+      item_id: z.string().optional().describe('ID do item (busca todas as contas dele)'),
+      from: z.string().describe('Data inicial YYYY-MM-DD'),
+      to: z.string().describe('Data final YYYY-MM-DD'),
+      text: z.string().optional().describe('Filtro por texto na descrição'),
+      type: z.enum(['DEBIT', 'CREDIT', 'any']).optional(),
+      limit: z.number().optional().describe('Máximo de linhas devolvidas (padrão 200, máx 1000)'),
+    },
+    async (input) => { try { return asText(await tool_pluggyGetTransactions(input)) } catch (e) { return asError(e) } },
+  )
+
+  server.tool(
+    'pluggy_get_investments',
+    'Investimentos vindos do Open Finance, com saldo total. Sem item_id, consulta todas as conexões conhecidas.',
+    { item_id: z.string().optional().describe('ID do item Pluggy (opcional)') },
+    async (input) => { try { return asText(await tool_pluggyGetInvestments(input)) } catch (e) { return asError(e) } },
+  )
+
   return server
 }
 
-// ── HTTP mode (Open WebUI / LLM custom) ───────────────────────────────────────
+// ── Autenticação do endpoint HTTP ─────────────────────────────────────────────
+// O endpoint expõe dados financeiros. Com MCP_AUTH_TOKEN definido, exige o token
+// via "Authorization: Bearer <token>" OU via caminho /mcp/<token> (para clientes
+// que só aceitam uma URL, como conectores customizados).
+function tokenMatches(given: string | undefined, expected: string): boolean {
+  if (!given) return false
+  const a = Buffer.from(given)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+// ── HTTP mode (conector remoto / Open WebUI / LLM custom) ─────────────────────
 async function startHttp() {
   const port = Number(process.env.MCP_PORT ?? 3010)
+  const authToken = process.env.MCP_AUTH_TOKEN
+  // Sem token: só aceita conexões locais (compatível com o loop do server/index.js).
+  const host = authToken ? '0.0.0.0' : '127.0.0.1'
   const app = express()
   app.use(express.json())
 
-  // Health check
+  // Health check (sem dados)
   app.get('/health', (_req, res) => {
-    res.json({ ok: true, service: 'Economista FIN MCP', version: '1.0.0' })
+    res.json({ ok: true, service: 'Economista FIN MCP', version: '1.1.0' })
   })
 
-  // MCP endpoint — cada requisição recebe seu próprio servidor (stateless)
-  app.post('/mcp', async (req, res) => {
+  const handle = async (req: express.Request, res: express.Response) => {
+    if (authToken) {
+      const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, '')
+      const given = bearer ?? (req.params.token as string | undefined)
+      if (!tokenMatches(given, authToken)) {
+        res.status(401).json({ error: 'unauthorized' })
+        return
+      }
+    }
+    // cada requisição recebe seu próprio servidor (stateless)
     const server = buildServer()
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // stateless
-    })
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
     res.on('close', () => { server.close().catch(() => {}) })
     await server.connect(transport)
-    await transport.handleRequest(req, res, req.body)
-  })
+    await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined)
+  }
 
-  app.get('/mcp', async (req, res) => {
-    const server = buildServer()
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    })
-    res.on('close', () => { server.close().catch(() => {}) })
-    await server.connect(transport)
-    await transport.handleRequest(req, res)
-  })
+  app.post('/mcp', handle)
+  app.get('/mcp', handle)
+  app.post('/mcp/:token', handle)
+  app.get('/mcp/:token', handle)
 
-  app.listen(port, () => {
-    process.stderr.write(`[Economista FIN] HTTP MCP server em :${port}/mcp\n`)
+  app.listen(port, host, () => {
+    process.stderr.write(`[Economista FIN] HTTP MCP em ${host}:${port}/mcp ${authToken ? '(com token)' : '(SEM token: apenas localhost)'}\n`)
   })
 }
 
