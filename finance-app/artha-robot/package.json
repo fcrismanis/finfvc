@@ -1,0 +1,8 @@
+{
+  "name": "finfvc-artha-robot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Robô que entra no Artha, exporta os lançamentos e salva a planilha numa pasta",
+  "dependencies": { "playwright": "1.49.1" }
+}
