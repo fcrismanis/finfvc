@@ -300,9 +300,33 @@ const NORM_CATEGORY_MAP: Record<string, Partial<ClassificationResult>> = Object.
   ]),
 )
 
+const stripKey = (v: string) => v.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+/**
+ * Categorias do Artha vêm como "Macro / Sub" (ex.: "Casa / Manutenção").
+ * Ordem: chave inteira → categoria principal → subcategoria. A principal vence para não
+ * mandar "Transporte / Manutenção" para Casa; o categoryId da sub só vale se for da mesma macro.
+ */
+function lookupRawCategory(rawCategory: string): Partial<ClassificationResult> | undefined {
+  const full = NORM_CATEGORY_MAP[stripKey(rawCategory)]
+  if (full) return full
+  const parts = rawCategory.split('/').map(stripKey).filter(Boolean)
+  if (parts.length < 2) return undefined
+  const macro = NORM_CATEGORY_MAP[parts[0]]
+  const sub = NORM_CATEGORY_MAP[parts[parts.length - 1]]
+  if (macro) {
+    if (sub && sub.macroCategoryId === macro.macroCategoryId && sub.categoryId) return { ...macro, categoryId: sub.categoryId }
+    return macro
+  }
+  return sub
+}
+
+export function isRawCategoryMapped(rawCategory: string): boolean {
+  return !rawCategory.trim() || lookupRawCategory(rawCategory) !== undefined
+}
+
 function classifyByRawCategory(rawCategory: string, rawType: string): ClassificationResult | null {
-  const key = rawCategory.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const override = NORM_CATEGORY_MAP[key]
+  const override = lookupRawCategory(rawCategory)
   if (!override) return null
 
   const isIncome = ['operational_income', 'extraordinary_income', 'redemption'].includes(override.classificationType ?? '')

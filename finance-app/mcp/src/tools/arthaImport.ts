@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import * as XLSX from 'xlsx'
 import { createClient } from '@supabase/supabase-js'
-import { classifyByDescription } from '../importers/classifier.js'
+import { classifyByDescription, isRawCategoryMapped } from '../importers/classifier.js'
 import { fetchTransactions } from '../data/supabase.js'
 
 /**
@@ -102,6 +102,7 @@ interface Planned {
   cls: string
   neutral: boolean
   possibleDuplicate: boolean
+  rawCategory: string
 }
 
 // ── plano ────────────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ async function buildPlan(month: string, batchId: string) {
       cls: cls.classificationType,
       neutral: cls.classificationType === 'transfer' || cls.classificationType === 'neutral' || cls.isInternalTransfer,
       possibleDuplicate: false,
+      rawCategory,
       row: {
         id: `imp_${batchId}_${idx}`,
         family_id: familyId(),
@@ -230,6 +232,14 @@ export async function tool_arthaImportMonth(input: {
   const incomeReal = sum(real.filter(p => p.row.transaction_type === 'income').map(p => p.amount))
   const expenseReal = sum(real.filter(p => p.row.transaction_type === 'expense').map(p => p.amount))
 
+  const unmapped: Record<string, { n: number; total: number }> = {}
+  for (const p of toInsert) {
+    if (isRawCategoryMapped(p.rawCategory)) continue
+    unmapped[p.rawCategory] ??= { n: 0, total: 0 }
+    unmapped[p.rawCategory].n++
+    unmapped[p.rawCategory].total = sum([unmapped[p.rawCategory].total, p.amount])
+  }
+
   const summary = {
     month: input.month,
     file: plan.file,
@@ -243,6 +253,7 @@ export async function tool_arthaImportMonth(input: {
     expense_real: expenseReal,
     result_real: sum([incomeReal, -expenseReal]),
     by_classification: byClass,
+    categories_without_mapping_fell_back_to_compras_or_keywords: Object.fromEntries(Object.entries(unmapped).sort((a, b) => b[1].total - a[1].total)),
     expense_by_macro_category: Object.fromEntries(Object.entries(byMacro).sort((a, b) => b[1] - a[1])),
     sample: toInsert.slice(0, 8).map(p => ({ description: p.desc, amount: p.amount, date: p.date, macro: p.macro, class: p.cls })),
     possible_duplicate_sample: dups.slice(0, 5).map(p => ({ description: p.desc, amount: p.amount, date: p.date })),
