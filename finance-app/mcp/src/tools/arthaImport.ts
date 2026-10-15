@@ -129,7 +129,11 @@ async function buildPlan(month: string, batchId: string) {
     const installmentRaw = get(r, 'Parcela')
     const inst = parseInstallment(installmentRaw)
     const description = sameText(original)
-    const cls = classifyByDescription(description, rawType, rawCategory)
+    let cls = classifyByDescription(description, rawType, rawCategory)
+    // Financiamento imobiliário vem como "Compras" no Artha; no FINFVC é prestação da casa.
+    if (/CREDITO IMOBILIARIO/.test(strip(description).toUpperCase())) {
+      cls = { ...cls, macroCategoryId: 'mac_casa', categoryId: 'cat_prestacao' }
+    }
 
     // hash estável: mesma linha reexportada gera o mesmo hash; linhas idênticas no mesmo dia
     // recebem sufixo de ocorrência (#1, #2…), independente da ordem da planilha.

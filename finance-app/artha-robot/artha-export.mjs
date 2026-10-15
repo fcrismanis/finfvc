@@ -1,7 +1,7 @@
 // Entra no Artha, exporta os lançamentos (mês atual + N meses anteriores) e salva em OUT_DIR.
 // Credenciais SOMENTE por variável de ambiente (ARTHA_EMAIL / ARTHA_PASSWORD).
 import { chromium } from 'playwright'
-import { mkdirSync, writeFileSync, copyFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, copyFileSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
 
 const { ARTHA_EMAIL, ARTHA_PASSWORD } = process.env
@@ -64,16 +64,25 @@ for (let i = 0; i <= MONTHS_BACK; i++) {
       await page.waitForTimeout(1500)
     }
     label = monthLabel(await period.first().innerText()) ?? label
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 45_000 }),
-      page.getByRole('button', { name: 'Exportar' }).click(),
-    ])
-    const ext = extname(download.suggestedFilename()) || '.xlsx'
-    const dest = join(OUT_DIR, `artha-${label}${ext}`)
-    await download.saveAs(dest)
-    copyFileSync(dest, join(OUT_DIR, i === 0 ? `artha-atual${ext}` : `artha-anterior${ext}`))
+    // espera a lista do mês carregar antes de exportar (senão sai planilha vazia)
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
+    await page.waitForFunction(() => /Mostrando\s+\d/.test(document.body.innerText) || /Nenhum lançamento/i.test(document.body.innerText), null, { timeout: 20_000 }).catch(() => {})
+    let dest = ''
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 45_000 }),
+        page.getByRole('button', { name: 'Exportar' }).click(),
+      ])
+      const ext = extname(download.suggestedFilename()) || '.xlsx'
+      dest = join(OUT_DIR, `artha-${label}${ext}`)
+      await download.saveAs(dest)
+      const kb = statSync(dest).size / 1024
+      if (kb >= 20 || attempt === 2) { console.log(`OK ${label} -> ${dest} (${Math.round(kb)} KB, tentativa ${attempt})`); break }
+      console.log(`AVISO ${label}: arquivo pequeno (${Math.round(kb)} KB), tentando de novo`)
+      await page.waitForTimeout(5000)
+    }
+    copyFileSync(dest, join(OUT_DIR, i === 0 ? 'artha-atual.xlsx' : 'artha-anterior.xlsx'))
     saved.push(dest)
-    console.log(`OK ${label} -> ${dest} (original: ${download.suggestedFilename()})`)
   } catch (e) { await fail(`exportar-${label}`, e) }
 }
 
