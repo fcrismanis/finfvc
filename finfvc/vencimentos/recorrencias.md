@@ -1,5 +1,5 @@
 # Recorrências
-> Última atualização: 2026-07-06
+> Última atualização: 2026-10-16
 
 ## Objetivo
 
@@ -27,16 +27,24 @@ Ser o registro consolidado de toda recorrência financeira da família que não 
 
 ## Estado atual
 
-[PENDENTE DE PREENCHIMENTO]
+Validado em 2026-10-16 contra o extrato real (Artha, lançamentos de jul-out/2026, via conector Economista_FVC). Confirmado com o usuário no chat.
+
+| Nome | Categoria | Valor | Data de vencimento | Recorrência | Conta de pagamento | Forma de pagamento | Status | Prioridade | Observações |
+|---|---|---|---|---|---|---|---|---|---|
+| Bethel School — mensalidade Filha 1 | Escola | R$ 1.679,00 | Dia 10 | Mensal (desde jul/2026) | Itaú | Boleto | Pago | Essencial/crítico | Única filha matriculada em jul/2026. Data real de pagamento oscila alguns dias (ex.: 06/07, 09-10/09, 09/10) sem correlação clara com fim de semana/feriado — acompanhar. |
+| Bethel School — mensalidade Filha 2 | Escola | R$ 1.679,00 | Dia 15 | Mensal (desde ago/2026) | Itaú | Boleto | Pago | Essencial/crítico | Segunda filha matriculada a partir de ago/2026. Em ago/26 as duas mensalidades saíram juntas num boleto único de R$ 3.358,00 (dia 17). Em out/26 há dois lançamentos idênticos de R$ 1.679,00 no mesmo dia (09/10) no extrato Artha — possível duplicidade de importação, **não confirmado ainda, revisar antes de usar para conciliação**. |
+| Lilian da Cruz Nascimento das Neves — diária avulsa | Recorrência diversa (serviço doméstico avulso) | R$ 220,00/semana (R$ 440,00 quando duas semanas são pagas juntas) | Toda terça-feira (atraso até sexta-feira da mesma semana é normal, confirmado pelo usuário) | Semanal | Itaú | Pix | Pago | Importante | Em set/26 houve um pagamento de R$ 350,00 fora do padrão de valor — motivo ainda não confirmado, perguntar na próxima revisão. |
 
 ## Dados pendentes
 
-- Mensalidades escolares e recorrências de educação: valor, dia de vencimento, conta de pagamento.
-- Aportes programados ativos: valor, dia do aporte, ativo/classe de destino.
+- Confirmar se os dois lançamentos idênticos de Bethel School em 09/10/2026 (R$ 1.679,00 cada) são as duas mensalidades do mês ou duplicidade de importação do Artha.
+- Confirmar motivo do pagamento de R$ 350,00 a Lilian em set/26 (diária extra? ajuste?).
+- Aportes programados ativos: valor, dia do aporte, ativo/classe de destino (ainda não levantado).
 - Índice cruzado completo com todas as recorrências dos demais arquivos deste módulo.
 
 ## Próximas ações
 
-1. Levantar mensalidades escolares e aportes automáticos programados ativos.
-2. Preencher este arquivo com a lista consolidada e o índice cruzado.
-3. Cruzar aportes programados com `../investimentos/alocacao-alvo.md` para garantir aderência à política vigente.
+1. Resolver as duas pendências acima (duplicidade de Bethel em out/26, origem do valor de R$ 350,00 de Lilian em set/26).
+2. Levantar aportes automáticos programados ativos.
+3. Preencher o índice cruzado com todas as recorrências dos demais arquivos deste módulo.
+4. Cruzar aportes programados com `../investimentos/alocacao-alvo.md` para garantir aderência à política vigente.
