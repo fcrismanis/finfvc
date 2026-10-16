@@ -9,6 +9,7 @@
 
 ## Fase 2 — Controle
 
+- Gestão completa de vencimentos financeiros (`vencimentos/`), com revisão diária (`playbooks/revisao-diaria-vencimentos.md`) — pré-requisito para qualquer evolução de IA, investimentos ou patrimônio.
 - Orçamento familiar mensal (`financeiro/orcamento-familiar.md`), planejado vs. realizado.
 - Fluxo de caixa projetado (`financeiro/fluxo-de-caixa.md`).
 - Metas explícitas e acompanhadas (`financeiro/metas.md`).
